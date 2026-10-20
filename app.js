@@ -107,7 +107,7 @@ function route(pathname, method, response) {
 async function serveFrontend(request, response, pathname) {
   if (!['GET', 'HEAD'].includes(request.method)) {
     response.setHeader('Allow', 'GET, HEAD');
-    throw new HttpError(405, 'This methods is not supported.');
+    throw new HttpError(405, 'This method is not supported.');
   }
   let file;
   let type;
