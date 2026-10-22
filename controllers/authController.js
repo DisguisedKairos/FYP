@@ -61,7 +61,7 @@ async function register(context) {
     if (db.prepare('SELECT id FROM users WHERE email = ?').get(email)) throw new HttpError(409, 'An account with this email already exists.');
     const inserted = db.prepare('INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)')
       .run(name, email, passwordHash, new Date().toISOString());
-    const user = { id: Number(inserted.lastInsertRowid), name, email };
+    const user = { id: Number(inserted.lastInsertRowid), name, email, role: 'customer' };
     const account = createAccount(db, user.id, 'Main savings');
     return { user, account };
   });

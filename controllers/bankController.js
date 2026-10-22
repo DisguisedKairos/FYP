@@ -1,6 +1,7 @@
 'use strict';
 
 const bank = require('../models/banking');
+const money = require('../models/money');
 const { publicUser } = require('../models/security');
 
 function dashboard(context) {
@@ -19,12 +20,12 @@ function closeAccount(context) {
   return { account: bank.closeAccount(context.db, context.user.id, context.accountId) };
 }
 
-function transfer(context) {
-  return { transaction: bank.transfer(context.db, context.user, context.body) };
+async function transfer(context) {
+  return { transaction: await money.submit(context.db, context.user, 'transfer', context.body, context) };
 }
 
-function payment(context) {
-  return { transaction: bank.payment(context.db, context.user, context.body) };
+async function payment(context) {
+  return { transaction: await money.submit(context.db, context.user, 'bill', context.body, context) };
 }
 
 module.exports = { dashboard, createAccount, renameAccount, closeAccount, transfer, payment };

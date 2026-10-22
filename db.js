@@ -31,6 +31,7 @@ function openDatabase(dbPath, { seed = true } = {}) {
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE COLLATE NOCASE,
       password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'customer',
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS accounts (
@@ -79,7 +80,41 @@ function openDatabase(dbPath, { seed = true } = {}) {
       created_at TEXT NOT NULL,
       PRIMARY KEY (user_id, request_id)
     );
+    CREATE TABLE IF NOT EXISTS notification_outbox (
+      id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), payload_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
+      available_at INTEGER NOT NULL DEFAULT 0, locked_until INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL, delivered_at TEXT, last_error TEXT
+    );
+    CREATE INDEX IF NOT EXISTS outbox_delivery ON notification_outbox(status, available_at, locked_until);
+    CREATE TABLE IF NOT EXISTS scheduled_payments (
+      id TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id), type TEXT NOT NULL,
+      payload_json TEXT NOT NULL, amount_cents INTEGER NOT NULL, frequency TEXT NOT NULL,
+      scheduled_at TEXT NOT NULL, next_run_at TEXT, status TEXT NOT NULL DEFAULT 'active',
+      authorization_json TEXT NOT NULL, created_at TEXT NOT NULL, last_run_at TEXT,
+      last_status TEXT, last_error TEXT, lease_owner TEXT, lease_until INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS scheduled_due ON scheduled_payments(status, next_run_at, lease_until);
+    CREATE TABLE IF NOT EXISTS scheduled_payment_runs (
+      id TEXT PRIMARY KEY, schedule_id TEXT NOT NULL REFERENCES scheduled_payments(id),
+      due_at TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'processing', transaction_id TEXT REFERENCES transactions(id),
+      error TEXT, created_at TEXT NOT NULL, completed_at TEXT,
+      UNIQUE (schedule_id, due_at)
+    );
   `);
+
+  // Additive migrations preserve an existing project's accounts and history.
+  const ensureColumn = (table, name, definition) => {
+    if (!db.prepare(`PRAGMA table_info(${table})`).all().some(column => column.name === name)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    }
+  };
+  ensureColumn('users', 'role', "TEXT NOT NULL DEFAULT 'customer'");
+  for (const [name, definition] of Object.entries({
+    risk_json: 'TEXT', authorization_json: 'TEXT', review_json: 'TEXT',
+    to_account_id: 'INTEGER REFERENCES accounts(id)', biller_id: 'TEXT', payee: 'TEXT',
+    requested_at: 'TEXT', completed_at: 'TEXT'
+  })) ensureColumn('transactions', name, definition);
 
   const addBiller = db.prepare('INSERT OR IGNORE INTO billers (id, name, category, initials, color) VALUES (?, ?, ?, ?, ?)');
   addBiller.run('sp-services', 'SP Services', 'Utilities', 'SP', '#dceae3');
@@ -87,7 +122,32 @@ function openDatabase(dbPath, { seed = true } = {}) {
   addBiller.run('pub', 'PUB', 'Water', 'P', '#dfeaf6');
 
   if (seed && db.prepare('SELECT COUNT(*) AS count FROM users').get().count === 0) seedDemo(db);
+  if (seed) ensureDemoReviewer(db);
+  db.exec(`
+    UPDATE transactions SET payee = CASE counterparty
+      WHEN 'SP Services' THEN 'sp-services' WHEN 'Singtel' THEN 'singtel' WHEN 'PUB' THEN 'pub' END
+      WHERE type = 'bill' AND payee IS NULL AND counterparty IN ('SP Services', 'Singtel', 'PUB');
+    UPDATE transactions SET payee = CASE WHEN amount_cents < 0 THEN '1020002001' ELSE '1020001001' END
+      WHERE reference = 'DEMO-DINNER' AND payee IS NULL;
+    UPDATE transactions SET payee = CASE WHEN amount_cents < 0 THEN '1020001002' ELSE '1020001001' END
+      WHERE reference = 'DEMO-SAVINGS' AND payee IS NULL;
+  `);
   return db;
+}
+
+function ensureDemoReviewer(db) {
+  const alex = db.prepare("SELECT u.id FROM users u JOIN accounts a ON a.user_id = u.id WHERE u.email = 'alex@evergreen.demo' AND a.number = '1020001001'").get();
+  if (!alex) return;
+  transaction(db, () => {
+    db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(alex.id);
+    let reviewer = db.prepare("SELECT id FROM users WHERE email = 'reviewer@evergreen.demo'").get();
+    if (!reviewer) {
+      const result = db.prepare("INSERT INTO users (name, email, password_hash, role, created_at) VALUES (?, ?, ?, 'admin', ?)")
+        .run('Sam Rivera', 'reviewer@evergreen.demo', hashPasswordSync('Evergreen123!'), new Date().toISOString());
+      reviewer = { id: Number(result.lastInsertRowid) };
+      db.prepare("INSERT INTO accounts (user_id, name, number, balance_cents, created_at) VALUES (?, 'Main savings', '1020009001', 0, ?)").run(reviewer.id, new Date().toISOString());
+    }
+  });
 }
 
 function seedDemo(db) {

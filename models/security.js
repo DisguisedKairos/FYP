@@ -68,7 +68,7 @@ function createSession(db, request, response, userId = null) {
 }
 
 function publicUser(user) {
-  return user ? { id: user.id, name: user.name, email: user.email } : null;
+  return user ? { id: user.id, name: user.name, email: user.email, role: user.role || 'customer' } : null;
 }
 
 function csrfMatches(received, expected) {

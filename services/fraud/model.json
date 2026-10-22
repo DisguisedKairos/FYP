@@ -1,0 +1,43 @@
+{
+  "version": "logistic-v1-4ef00fb92afb",
+  "algorithm": "Regularized logistic regression",
+  "features": [
+    "amountLog",
+    "amountDeviation",
+    "velocity",
+    "newPayee",
+    "balanceUtilization",
+    "unusualHour",
+    "recentValue"
+  ],
+  "intercept": -3.905,
+  "weights": [
+    0.079,
+    2.1751,
+    1.0593,
+    1.4667,
+    0.598,
+    0.578,
+    2.269
+  ],
+  "training": {
+    "dataset": "fraud-history.csv",
+    "synthetic": true,
+    "datasetSha256": "4ef00fb92afb0073f021da0ea04d1a6f27012acf06869529e6791cd16d6666cf",
+    "rows": 1400,
+    "trainRows": 1120,
+    "testRows": 280,
+    "seed": 98245,
+    "epochs": 1800
+  },
+  "metrics": {
+    "accuracy": 0.9107,
+    "precision": 0.9538,
+    "recall": 0.7381,
+    "truePositive": 62,
+    "falsePositive": 3,
+    "trueNegative": 193,
+    "falseNegative": 22
+  },
+  "policy": "Model scores flag transactions for human review. Only explicit financial-control rules automatically block a transaction."
+}

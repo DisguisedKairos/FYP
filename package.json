@@ -2,12 +2,16 @@
   "name": "evergreen-banking",
   "version": "1.0.0",
   "private": true,
-  "description": "A local banking demonstration built with Node.js, JavaScript, HTML and CSS.",
+  "description": "An event-driven banking platform with explainable fraud scoring, scheduling, and containerized services.",
   "main": "app.js",
   "scripts": {
-    "start": "node --env-file-if-exists=.env app.js",
-    "dev": "node --env-file-if-exists=.env --watch app.js",
-    "test": "node --test tests/*.test.js"
+    "start": "node --env-file-if-exists=.env scripts/start-platform.js",
+    "start:banking": "node --env-file-if-exists=.env app.js",
+    "dev": "node --env-file-if-exists=.env scripts/start-platform.js",
+    "setup": "node scripts/setup.js",
+    "test": "node --test tests/*.test.js",
+    "test:browser": "node tests/browser.e2e.js",
+    "train:fraud": "node scripts/train-fraud.js"
   },
   "engines": {
     "node": ">=22.13.0"

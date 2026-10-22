@@ -1,91 +1,193 @@
-(() => {
-  'use strict';
-  const app = document.querySelector('#app');
-  const modal = document.querySelector('#modal');
-  let csrf = '', data = null, page = 'overview', hidden = false, authMode = location.pathname === '/register' ? 'register' : 'login';
-  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-  const brand = () => `<div class="brand"><svg class="brand-mark" aria-hidden="true"><use href="#i-leaf"/></svg>evergreen<span>.</span></div>`;
-  const money = cents => new Intl.NumberFormat('en-SG',{style:'currency',currency:'SGD'}).format(cents / 100);
-  const balance = cents => hidden ? '••••••' : money(cents);
-  const date = value => new Date(value).toLocaleDateString('en-SG',{day:'numeric',month:'short'});
-  const accountOptions = () => data.accounts.map(a => `<option value="${esc(a.id)}">${esc(a.name)} · ${money(a.balanceCents)}</option>`).join('');
-  async function api(path, body, method = 'POST') {
-    const response = await fetch('/api' + path, {method:body === undefined ? 'GET' : method,credentials:'same-origin',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},...(body === undefined ? {} : {body:JSON.stringify(body)})});
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.error || 'Something went wrong. Please try again.');
-    if (result.csrfToken) csrf = result.csrfToken;
-    return result;
+﻿import { app, modal, state, ui, pages, api, esc, icon, money, sameId, accountById, transactionById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
+import { auth, render, connectionError, extraViews, updateMobileNavigation, historyResults } from './js/views.js';
+import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, reviewMoney, transactionDetails, confirmMoney, updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './js/workflows.js';
+import { loadExtras, loadNotifications, stopBackgroundReads, notificationsPage, schedulesPage, markNotification, scheduleDialog, changeScheduleType, reviewSchedule, confirmSchedule, scheduleDetails, cancelScheduleDialog, cancelSchedule } from './js/services.js';
+import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview } from './js/admin.js';
+
+Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications });
+Object.assign(extraViews,{ schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage });
+let searchTimer;
+
+function switchAuth() {
+  state.authMode = state.authMode === 'login' ? 'register' : 'login';
+  state.authNotice = '';
+  history.pushState({},'',state.authMode === 'register' ? '/register' : '/login');
+  auth({focus:true});
+}
+async function signOut(control) {
+  control.disabled = true;
+  state.signingOut = true;
+  stopBackgroundReads();
+  try {
+    await api('/auth/logout',{});
+    clearBankingState();
+    state.intendedRoute = null; state.authMode = 'login'; state.authNotice = 'You have signed out.';
+    history.pushState({},'','/login');
+    auth({focus:true});
+  } finally {
+    state.signingOut = false;
+    if (state.user) loadExtras(state.route.page,{force:true});
   }
-  function toast(message) { const el = document.querySelector('#toast'); el.textContent = message; el.classList.add('visible'); setTimeout(() => el.classList.remove('visible'),4000); }
-  function auth() {
-    const register = authMode === 'register';
-    app.innerHTML = `<main class="auth-page"><section class="auth-left">${brand()}<div class="auth-form-wrap"><div class="auth-kicker eyebrow">${icon('leaf')} YOUR NEXT CHAPTER STARTS HERE</div><h1>${register ? 'A fresh start for your money.' : 'Welcome back.'}</h1><p class="auth-subtitle">${register ? 'Open your Evergreen account and make room to grow.' : 'A little clarity. A little confidence. Your money, all here.'}</p><form id="auth-form"><div class="error-message" id="auth-error" role="alert"></div>${register ? '<div class="field"><label for="name">Full name</label><input id="name" name="name" autocomplete="name" placeholder="Alex Morgan" minlength="2" maxlength="80" required></div>' : ''}<div class="field"><label for="email">Email address</label><input id="email" type="email" name="email" autocomplete="email" placeholder="you@example.com" required></div><div class="field"><label for="password">Password</label><div class="password-wrap"><input id="password" type="password" name="password" autocomplete="${register ? 'new-password' : 'current-password'}" placeholder="Enter your password" minlength="8" required><button type="button" class="password-toggle" data-action="password" aria-label="Show password">${icon('eye')}</button></div>${register ? '<small>Use at least 8 characters, with uppercase, lowercase and a number.</small>' : ''}</div><button class="button full auth-submit" type="submit">${register ? 'Create account' : 'Sign in'} ${icon('arrow')}</button></form><p class="auth-switch">${register ? 'Already growing with us?' : 'New to Evergreen?'} <button data-action="auth-switch">${register ? 'Sign in' : 'Create an account'}</button></p><div class="divider">JUST EXPLORING?</div><button class="button secondary full" data-action="demo">Explore the demo ${icon('up-right')}</button><p class="demo-note">A banking demo with sample funds. No real money.</p></div><footer class="auth-foot"><span>© ${new Date().getFullYear()} Evergreen</span><span>${icon('shield')} A space for your money to grow</span></footer></section><aside class="auth-art"><div class="art-top"><span class="small-dot"></span> A LITTLE MORE POSSIBLE, EVERY DAY</div><div class="art-copy"><h2>Good things<br>take root.<br><em>So can your money.</em></h2><p>Less time managing money.<br>More time for what matters to you.</p></div><div class="art-card"><div class="card-top">${brand()}<span class="chip"></span></div><div class="card-balance">Your future, in focus.</div><div class="card-bottom"><span>EVERGREEN SAVINGS</span><span>SGD</span></div></div><p class="art-caption">Small steps. A brighter tomorrow.</p><div class="art-bottom"><span>Thoughtfully simple banking.</span>${icon('leaf')}</div></aside></main>`;
-  }
-  async function refresh() { data = await api('/dashboard'); render(); }
-  function heading(title, sub) { return `<div class="page-heading"><div><h1>${title}</h1><p>${sub}</p></div><div class="heading-actions"><button class="button secondary" data-action="export">${icon('down')}<span>Export activity</span></button><button class="button" data-nav="transfers">${icon('plus')}<span>Move money</span></button></div></div>`; }
-  function accountCard(a) { return `<button class="account-card" data-account="${esc(a.id)}"><div class="account-card-header"><span class="account-icon">${icon('wallet')}</span>${esc(a.name)}${icon('chevron')}</div><div class="account-number">${esc(a.number)} · SGD</div><div class="account-card-footer"><strong>${balance(a.balanceCents)}</strong><span class="tag">Savings</span></div></button>`; }
-  function transactions(all = false) {
-    const items = all ? data.transactions : data.transactions.slice(0,5);
-    return `<section class="panel transactions-panel"><div class="section-heading"><h2>${all ? 'All transactions' : 'Recent activity'}</h2>${all ? `<span class="tag">${data.transactions.length} transactions</span>` : '<button class="text-button" data-nav="activity">View all '+icon('arrow')+'</button>'}</div>${items.length ? `<div class="table-controls"><label class="table-search">${icon('search')}<input id="transaction-search" aria-label="Search transactions" placeholder="Search transactions"></label></div><table class="transaction-table"><thead><tr><th>TRANSACTION</th><th>DATE</th><th>STATUS</th><th>AMOUNT</th></tr></thead><tbody>${items.map(t => `<tr data-transaction-row="${esc((t.description+' '+t.counterparty).toLowerCase())}"><td><div class="transaction-name"><span class="transaction-icon ${t.amountCents>0 ? 'incoming' : ''}">${icon(t.amountCents>0?'down-left':t.type==='bill'?'bill':'up-right')}</span><div class="transaction-description"><strong>${esc(t.description)}</strong><span>${esc(t.counterparty || t.reference || 'Savings account')}</span></div></div></td><td>${date(t.createdAt)}</td><td><span class="status-pill">Completed</span></td><td><span class="transaction-amount ${t.amountCents>0?'incoming':''}">${t.amountCents>0?'+':''}${money(t.amountCents)}</span></td></tr>`).join('')}</tbody></table><div class="table-footer"><span>Showing ${items.length} transactions</span><span>All amounts in SGD</span></div>` : `<div class="empty-state">${icon('transfer')}<h3>Your story starts here.</h3><p>Transfers and bill payments will appear here.</p></div>`}</section>`;
-  }
-  function overview() {
-    const total = data.accounts.reduce((s,a)=>s+a.balanceCents,0);
-    const summary = data.summary || {incomeCents:0,outgoingCents:0};
-    const months = Array.from({length:6},(_,i)=> {const d=new Date(); d.setDate(1);d.setMonth(d.getMonth()-5+i);return d;});
-    const points=months.map(m=>data.transactions.filter(t=>new Date(t.createdAt).getMonth()===m.getMonth()&&new Date(t.createdAt).getFullYear()===m.getFullYear()).reduce((s,t)=>{s[t.amountCents>0?0:1]+=Math.abs(t.amountCents);return s;},[0,0]));
-    const max=Math.max(1,...points.flat());
-    return heading(`A little greener, ${esc(data.user.name.split(' ')[0])}.`, 'Here’s where you stand. And where you can go next.')+`<div class="overview-top"><section class="balance-card"><div class="balance-top"><span>Your total balance <button data-action="balance" aria-label="Toggle balance visibility">${icon('eye')}</button></span><span class="currency-tag"><span class="currency-flag"></span> SGD</span></div><div><div class="balance-amount">${balance(total)}</div><p class="balance-caption">Across ${data.accounts.length} savings account${data.accounts.length===1?'':'s'}</p></div><div class="balance-bottom"><span>${icon('shield')} A little peace of mind.</span><button class="button light" data-nav="transfers">Transfer money ${icon('arrow')}</button></div></section><section class="panel insights-card"><div class="section-heading"><h2>Money in, money out</h2><span class="period-label">This month</span></div><div class="insight-values"><div class="insight-value"><label><span class="legend-dot"></span>Money in</label><strong>${money(summary.incomeCents)}</strong></div><div class="insight-value"><label><span class="legend-dot light"></span>Money out</label><strong>${money(summary.outgoingCents)}</strong></div></div><div class="chart" role="img" aria-label="Incoming and outgoing transactions over the last six months">${points.map(p=>`<div class="bar-group"><span class="bar" style="height:${Math.max(3,p[0]/max*100)}%"></span><span class="bar light" style="height:${Math.max(3,p[1]/max*100)}%"></span></div>`).join('')}</div><div class="chart-labels">${months.map(m=>`<span>${m.toLocaleDateString('en-SG',{month:'short'})}</span>`).join('')}</div></section></div><div class="content-grid"><div><section class="accounts-section"><div class="section-heading"><h2>Your accounts</h2><button class="text-button" data-nav="accounts">Manage accounts ${icon('arrow')}</button></div><div class="account-grid">${data.accounts.slice(0,2).map(accountCard).join('')}</div></section>${transactions()}</div><aside class="overview-side"><section class="panel quick-actions"><div class="section-heading"><h2>A little less admin.</h2></div>${[['transfers','transfer','Transfer money','Move it where you need it'],['payments','bill','Pay a bill','Everyday essentials, sorted'],['new-account','plus','Open a savings account','Make room for something good']].map(([action,i,title,sub])=>`<button class="quick-action" ${action==='new-account'?'data-action="new-account"':`data-nav="${action}"`}><span class="quick-action-icon">${icon(i)}</span><div><h3>${title}</h3><p>${sub}</p></div>${icon('chevron')}</button>`).join('')}</section><section class="panel bills-panel"><div class="section-heading"><h2>Your everyday bills</h2>${icon('bill')}</div>${data.billers.map((b,i)=>`<button class="biller-row" data-biller="${esc(b.id)}"><span class="biller-logo ${['','red','blue'][i%3]}">${esc(b.initials||b.name.slice(0,2))}</span><div><h3>${esc(b.name)}</h3><p>${esc(b.category)}</p></div>${icon('chevron')}</button>`).join('')}<p class="bills-caption">One less thing on your list.<br>Pay your bills in a few simple steps.</p></section></aside></div>`;
-  }
-  function service(type) {
-    const bill = type === 'payments';
-    return heading(bill?'Everyday bills, sorted.':'A little movement. A lot of possibility.',bill?'Keep the essentials taken care of, all in one place.':'Transfer between your savings or to another Evergreen account.')+`<div class="service-layout"><form class="panel service-form" id="money-form" data-type="${type}"><h2>${bill?'Make a bill payment':'Transfer money'}</h2><p>${bill?'Choose a biller and enter your payment details.':'Choose where your money goes. Transfers are instant in this demo.'}</p><div class="error-message" id="form-error" role="alert"></div><div class="field"><label for="fromAccountId">From account</label><select id="fromAccountId" name="fromAccountId" required>${accountOptions()}</select></div>${bill?`<div class="field"><label for="billerId">Pay to</label><select id="billerId" name="billerId" required>${data.billers.map(b=>`<option value="${esc(b.id)}">${esc(b.name)} · ${esc(b.category)}</option>`).join('')}</select></div><div class="field"><label for="reference">Customer / bill reference</label><input id="reference" name="reference" placeholder="Your customer reference number" maxlength="80" required></div>`:`<div class="field"><label for="toAccountNumber">To account number</label><input id="toAccountNumber" name="toAccountNumber" placeholder="Enter an Evergreen account number" list="own-accounts" required><datalist id="own-accounts">${data.accounts.map(a=>`<option value="${esc(a.number)}">${esc(a.name)}</option>`).join('')}</datalist><small>Choose one of your accounts, or enter another account number.</small></div>`}<div class="field"><label for="amount">Amount</label><div class="money-input"><span>SGD</span><input id="amount" name="amount" type="number" step="0.01" min="0.01" placeholder="0.00" required></div></div>${bill?'':`<div class="field"><label for="description">Description <span class="muted">(optional)</span></label><input id="description" name="description" maxlength="140" placeholder="What’s this for?"></div>`}<button type="submit" class="button full">Review ${bill?'payment':'transfer'} ${icon('arrow')}</button></form><aside class="service-aside">${icon(bill?'bill':'leaf')}<h2>${bill?'More time for your day.':'Good things start small.'}</h2><p>${bill?'Utilities, water, and mobile bills. Take care of your everyday essentials without leaving your account.':'Move money between your savings, or send it to another registered Evergreen account.'}</p><div class="detail">${icon('check')} No transfer fees in this demo</div><div class="detail">${icon('shield')} Review every payment before sending</div><div class="notice">Demo funds only. ${bill?'Bill payments are recorded locally and do not reach real providers.':'Try a transfer to Jamie Lee: account 1020002001.'}</div></aside></div>`;
-  }
-  function render() {
-    if(!data) return auth();
-    const names={overview:'Overview',accounts:'My accounts',transfers:'Transfers',payments:'Bill payments',activity:'Activity'};
-    let content=page==='overview'?overview():page==='accounts'?heading('A home for every goal.','Your savings, thoughtfully organised.')+`<div class="account-grid accounts-full">${data.accounts.map(accountCard).join('')}<button class="account-add" data-action="new-account">${icon('plus')} Open a savings account</button></div>`:page==='activity'?heading('Your money, in motion.','A clear view of every transfer and payment.')+transactions(true):service(page);
-    app.innerHTML=`<div class="app-shell"><div class="sidebar-overlay" data-action="menu"></div><aside class="sidebar">${brand()}<div class="nav-label">YOUR BANKING</div><nav class="nav-items" aria-label="Main navigation">${[['overview','grid'],['accounts','wallet'],['transfers','transfer'],['payments','bill']].map(([p,i])=>`<button class="nav-item ${page===p?'active':''}" data-nav="${p}" ${page===p?'aria-current="page"':''}>${icon(i)}${names[p]}${p==='accounts'?`<span class="nav-count">${data.accounts.length}</span>`:''}</button>`).join('')}</nav><div class="sidebar-bottom"><div class="help-card">${icon('help')}<h3>A little guidance?</h3><p>We’re here to help you<br>find your way around.</p><button class="text-button" data-action="help">Explore the essentials ${icon('arrow')}</button></div><button class="nav-item" data-action="logout">${icon('logout')} Sign out</button><div class="sidebar-rule"></div><div class="demo-mode"><span class="small-dot"></span> BANKING DEMO · SAMPLE FUNDS</div></div></aside><div class="workspace"><header class="topbar"><div class="breadcrumb"><button class="icon-button mobile-menu" data-action="menu" aria-label="Open navigation">${icon('menu')}</button><span>Personal banking</span>${icon('chevron')}<span>${names[page]}</span></div><div class="header-right"><span class="header-date">${new Date().toLocaleDateString('en-SG',{weekday:'short',day:'numeric',month:'long',year:'numeric'})}</span><button class="icon-button notification-button" data-nav="activity" aria-label="Recent account activity">${icon('bell')}</button><button class="profile-button" data-action="profile"><span class="avatar">${esc(data.user.name.split(' ').map(x=>x[0]).slice(0,2).join(''))}</span><span class="profile-details"><span class="profile-name">${esc(data.user.name)}</span><span class="profile-caption">Personal account</span></span>${icon('chevron')}</button></div></header><main class="main-content">${content}<footer class="bottom-note"><span>© ${new Date().getFullYear()} Evergreen. Made for your everyday.</span><span>${icon('lock')} Educational demo · No real banking services</span></footer></main></div></div>`;
-  }
-  function dialog(title,html) { modal.innerHTML=`<div class="modal-heading"><h2 id="modal-title">${title}</h2><button class="icon-button" data-action="close" aria-label="Close dialog">${icon('close')}</button></div>${html}`; if(!modal.open)modal.showModal(); }
-  function accountDialog(id) {
-    const a=data.accounts.find(a=>String(a.id)===String(id)); if(!a)return;
-    dialog('Your savings account',`<p class="modal-intro">Account ${esc(a.number)} · SGD</p><div class="review-list"><div><dt>Available balance</dt><dd class="review-amount">${money(a.balanceCents)}</dd></div></div><form id="account-form" data-id="${esc(a.id)}"><div class="field"><label for="account-name">Account name</label><input id="account-name" name="name" value="${esc(a.name)}" maxlength="40" minlength="2" required></div><div class="error-message" id="modal-error" role="alert"></div><button class="button full">Save account name</button></form>${a.balanceCents===0&&data.accounts.length>1?`<button class="text-button" data-close-account="${esc(a.id)}">Close this empty account</button>`:'<p class="demo-note">Transfer the balance before closing this account.</p>'}`);
-  }
-  document.addEventListener('click', async event => {
-    const el=event.target.closest('button,[data-action]');if(!el)return;
-    if(el.dataset.nav){page=el.dataset.nav;render();window.scrollTo(0,0);return;}
-    if(el.dataset.account){accountDialog(el.dataset.account);return;}
-    if(el.dataset.biller){page='payments';render();document.querySelector('#billerId').value=el.dataset.biller;return;}
-    if(el.dataset.closeAccount){try{await api('/accounts/'+encodeURIComponent(el.dataset.closeAccount),{},'DELETE');modal.close();await refresh();toast('Savings account closed.');}catch(e){toast(e.message);}return;}
-    try { switch(el.dataset.action){
-      case 'auth-switch':authMode=authMode==='login'?'register':'login';auth();break;
-      case 'password':{const p=document.querySelector('#password');p.type=p.type==='password'?'text':'password';el.setAttribute('aria-label',p.type==='password'?'Show password':'Hide password');break;}
-      case 'demo':el.disabled=true;await api('/auth/login',{email:'alex@evergreen.demo',password:'Evergreen123!'});await refresh();break;
-      case 'logout':await api('/auth/logout',{});data=null;page='overview';authMode='login';auth();break;
-      case 'balance':hidden=!hidden;render();break;
-      case 'menu':document.querySelector('.sidebar').classList.toggle('open');document.querySelector('.sidebar-overlay').classList.toggle('open');break;
-      case 'close':modal.close();break;
-      case 'new-account':dialog('Room for something good.',`<p class="modal-intro">Give your new savings account a name. It starts with a zero balance.</p><form id="account-form"><div class="field"><label for="account-name">Account name</label><input id="account-name" name="name" placeholder="A little adventure" maxlength="40" minlength="2" required></div><div class="error-message" id="modal-error" role="alert"></div><button class="button full">Open savings account ${icon('plus')}</button></form>`);break;
-      case 'profile':dialog('Your profile',`<div class="profile-card"><span class="avatar">${esc(data.user.name[0])}</span><div><h3>${esc(data.user.name)}</h3><p>${esc(data.user.email)}</p></div></div><div class="notice">Personal banking demo. Your accounts and activity are saved in the application database.</div><button class="button full" data-action="close">Back to banking</button>`);break;
-      case 'help':dialog('A little guidance.',`<div class="detail-section"><h3>Your accounts</h3><p>Open a savings account, check your balance, and rename accounts to match your goals.</p></div><div class="detail-section"><h3>Move money</h3><p>Transfer between your accounts or to another registered Evergreen account. Demo recipient: Jamie Lee, 1020002001.</p></div><div class="detail-section"><h3>Pay bills</h3><p>Choose a provider, add your reference, and review the payment before confirming.</p></div><div class="notice">This is an educational project using sample funds. No real transfers or bill payments are made.</div>`);break;
-      case 'export':{const rows=[['Date','Description','Counterparty','Amount SGD','Reference'],...data.transactions.map(t=>[t.createdAt,t.description,t.counterparty,(t.amountCents/100).toFixed(2),t.reference])];const csv=rows.map(row=>row.map(v=>'"'+String(v??'').replace(/^[=+\-@]/,"'").replace(/"/g,'""')+'"').join(',')).join('\r\n');const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));const a=document.createElement('a');a.href=url;a.download='evergreen-activity.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('Your activity has been exported.');break;}
-    }}catch(e){toast(e.message);el.disabled=false;}
-  });
-  document.addEventListener('input',event=>{if(event.target.id==='transaction-search'){const query=event.target.value.toLowerCase();document.querySelectorAll('[data-transaction-row]').forEach(row=>row.hidden=!row.dataset.transactionRow.includes(query));}});
-  document.addEventListener('submit',async event=>{
-    event.preventDefault();const form=event.target;const values=Object.fromEntries(new FormData(form));const button=form.querySelector('button[type="submit"],button:not([type])');if(button)button.disabled=true;
-    try{
-      if(form.id==='auth-form'){await api('/auth/'+authMode,values);page='overview';await refresh();}
-      if(form.id==='account-form'){await api('/accounts'+(form.dataset.id?'/'+encodeURIComponent(form.dataset.id):''),values,form.dataset.id?'PATCH':'POST');modal.close();await refresh();toast(form.dataset.id?'Account name updated.':'Your new savings account is ready.');}
-      if(form.id==='money-form'){
-        const bill=form.dataset.type==='payments';const source=data.accounts.find(a=>String(a.id)===values.fromAccountId);values.requestId=crypto.randomUUID();
-        if(Number(values.amount)<=0||Number(values.amount)*100>source.balanceCents)throw new Error('Enter an amount within your available balance.');
-        dialog('Take a moment to review.',`<p class="modal-intro">${bill?'Bill payment':'Internal transfer'} · Demo funds</p><dl class="review-list"><div><dt>From</dt><dd>${esc(source.name)}</dd></div><div><dt>To</dt><dd>${esc(bill?data.billers.find(b=>String(b.id)===values.billerId)?.name:values.toAccountNumber)}</dd></div>${bill?`<div><dt>Reference</dt><dd>${esc(values.reference)}</dd></div>`:''}<div><dt>Amount</dt><dd class="review-amount">${money(Math.round(Number(values.amount)*100))}</dd></div><div><dt>Fee</dt><dd>S$0.00</dd></div></dl><div class="error-message" id="confirm-error" role="alert"></div><div class="notice">This action updates your demo balance and activity.</div><button id="confirm-money" class="button full">Confirm ${bill?'payment':'transfer'} ${icon('arrow')}</button>`);
-        document.querySelector('#confirm-money').addEventListener('click',async e=>{e.currentTarget.disabled=true;try{await api(bill?'/payments':'/transfers',values);modal.close();page='overview';await refresh();toast(bill?'Bill payment complete.':'Your transfer is complete.');}catch(err){document.querySelector('#confirm-error').textContent=err.message;e.target.disabled=false;}});
+}
+function helpDialog() {
+  dialog('A little guidance.', `<div class="detail-section"><h3>Your savings</h3><p>Open an account, check its balance and history, or rename it to match a goal. Empty accounts can be closed while one stays open.</p></div><div class="detail-section"><h3>Move money and pay bills</h3><p>Review the recipient, amount and reference, then authorize with your current password. Fraud checks can complete, hold or reject a request. Only completed requests change balances.</p></div><div class="detail-section"><h3>Plan ahead</h3><p>Schedule a future transfer or bill. No money is reserved now. Due payments run while the local Node.js server is running and catch up when it restarts.</p></div><div class="detail-section"><h3>Keep a record</h3><p>Search activity by payee, account, status or date. Export matching transactions as CSV or print an account statement to PDF.</p></div><div class="notice">This is an educational project using sample funds. No real transfers or bill payments are made.</div>`);
+}
+
+// One delegated listener per event keeps rendered views free of inline handlers.
+document.addEventListener('submit',async event => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  event.preventDefault();
+  if (form.id === 'history-filters') return updateHistoryFilters(form);
+  if (!form.reportValidity()) return;
+  try {
+    switch (form.id) {
+      case 'auth-form': {
+        const values = Object.fromEntries(new FormData(form));
+        if (state.authMode === 'register') {
+          if (values.password !== values.confirmPassword) throw new Error('The passwords do not match.');
+          if (!/[A-Z]/.test(values.password) || !/[a-z]/.test(values.password) || !/\d/.test(values.password)) throw new Error('Use uppercase, lowercase and a number in your password.');
+        }
+        await authenticate(values); break;
       }
-    }catch(e){const error=form.querySelector('.error-message');if(error)error.textContent=e.message;else toast(e.message);}finally{if(button)button.disabled=false;}
-  });
-  modal.addEventListener('click',event=>{if(event.target===modal){const r=modal.getBoundingClientRect();if(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom)modal.close();}});
-  (async()=>{try{const session=await api('/session');if(session.user)await refresh();else auth();}catch(e){app.innerHTML=`<main class="initial-loading"><div><h1>Evergreen</h1><p>Unable to connect. Please start the Node.js server and refresh.</p><p>${esc(e.message)}</p><button class="button" data-action="reload">Refresh</button></div></main>`;document.querySelector('[data-action="reload"]').onclick=()=>location.reload();}})();
-})();
+      case 'account-form': await submitAccount(form); break;
+      case 'close-account-form': await submitAccount(form,true); break;
+      case 'money-form': reviewMoney(form); break;
+      case 'confirm-money-form': await confirmMoney(form); break;
+      case 'statement-form': generateStatement(form); break;
+      case 'schedule-form': reviewSchedule(form); break;
+      case 'confirm-schedule-form': await confirmSchedule(form); break;
+      case 'cancel-schedule-form': await cancelSchedule(form); break;
+      case 'rule-form': await saveRule(form); break;
+      case 'review-form': await submitReview(form); break;
+    }
+  } catch (error) { if (!await recoverSession(error)) formError(form,error.message); }
+});
+
+document.addEventListener('click',async event => {
+  const control = event.target.closest('button, a[data-nav], a[data-account], [data-action]');
+  if (!control || control.disabled) return;
+  if (control.tagName === 'A' && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
+  if (control.dataset.nav) { event.preventDefault(); return navigate(control.dataset.nav,{account:control.dataset.filterAccount || ''}); }
+  if (control.dataset.account) { event.preventDefault(); return navigate('accounts',{account:control.dataset.account}); }
+  if (control.dataset.transaction) { const transaction = transactionById(control.dataset.transaction); return transaction ? transactionDetails(transaction) : toast('This transaction is not in your account history.'); }
+  if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
+  try {
+    if (control.dataset.readNotification) { control.disabled = true; await markNotification(control.dataset.readNotification); return; }
+    if (control.dataset.notificationTransaction) {
+      const id = control.dataset.notificationTransaction;
+      await loadDashboard({render:false});
+      const transaction = transactionById(id);
+      if (transaction) transactionDetails(transaction);
+      else if (state.user?.role === 'admin') navigate('fraud');
+      else toast('This transaction is unavailable. Refresh account activity to try again.');
+      return;
+    }
+    if (control.dataset.scheduleDetail) return scheduleDetails(control.dataset.scheduleDetail);
+    if (control.dataset.cancelSchedule) return cancelScheduleDialog(control.dataset.cancelSchedule);
+    if (control.dataset.editRule) return ruleDialog(control.dataset.editRule);
+    if (control.dataset.reviewTransaction) return reviewDialog(control.dataset.reviewTransaction);
+    switch (control.dataset.action) {
+      case 'auth-switch': switchAuth(); break;
+      case 'password': {
+        const input = document.getElementById(control.dataset.input), show = input.type === 'password';
+        input.type = show ? 'text' : 'password';
+        control.setAttribute('aria-label',`${show ? 'Hide' : 'Show'} ${control.dataset.input === 'confirm-password' ? 'confirmation password' : 'password'}`);
+        control.setAttribute('aria-pressed',String(show)); break;
+      }
+      case 'demo': await authenticate({email:'alex@evergreen.demo',password:'Evergreen123!'},true); break;
+      case 'logout': await signOut(control); break;
+      case 'balance': state.hiddenBalance = !state.hiddenBalance; render(); app.querySelector('[data-action="balance"]').focus(); break;
+      case 'menu-open': state.menuOpen = true; updateMobileNavigation({focus:true}); break;
+      case 'menu-close': state.menuOpen = false; updateMobileNavigation({focus:true}); break;
+      case 'close-dialog': closeDialog(); break;
+      case 'new-account': accountNameDialog(); break;
+      case 'rename-account': accountNameDialog(control.dataset.id); break;
+      case 'close-account-review': closeAccountDialog(control.dataset.id); break;
+      case 'account-transfer': state.moneyDraft.transfers.fromAccountId = control.dataset.id; navigate('transfers'); break;
+      case 'history-prev': state.historyPage = Math.max(1,state.historyPage-1); document.querySelector('#history-results').innerHTML = historyResults(); document.querySelector('[data-action="history-next"]')?.focus(); break;
+      case 'history-next': state.historyPage += 1; document.querySelector('#history-results').innerHTML = historyResults(); document.querySelector('[data-action="history-prev"]')?.focus(); break;
+      case 'clear-filters': state.filters = emptyFilters(); state.historyPage = 1; state.route.account = ''; history.replaceState({},'','/activity'); render(); document.querySelector('#transaction-search').focus(); break;
+      case 'export': exportActivity(); break;
+      case 'statement': statementDialog(); break;
+      case 'print-statement': window.print(); break;
+      case 'new-schedule': scheduleDialog(); break;
+      case 'edit-schedule': scheduleDialog({reset:false}); break;
+      case 'notifications-read-all': control.disabled = true; await markNotification('all'); break;
+      case 'reload-page': control.disabled = true; await loadExtras(state.route.page,{force:true}); break;
+      case 'refresh': if (!state.refreshing) { state.refreshing = true; control.disabled = true; await loadDashboard(); state.refreshing = false; } break;
+      case 'reload': location.reload(); break;
+      case 'profile': dialog('Your profile', `<div class="profile-card"><span class="avatar">${esc(state.user.name[0])}</span><div><h3>${esc(state.user.name)}</h3><p>${esc(state.user.email)}</p></div></div><dl class="review-list"><div><dt>Access</dt><dd>${state.user.role === 'admin' ? 'Banking administrator' : 'Personal banking customer'}</dd></div></dl><div class="notice">Accounts, payment requests and activity are saved in the application database.</div><button type="button" class="button full" data-action="close-dialog">Back to banking</button>`); break;
+      case 'help': helpDialog(); break;
+    }
+  } catch (error) { if (!await recoverSession(error)) toast(error.message); if (control.isConnected) control.disabled = false; }
+});
+
+document.addEventListener('input',event => {
+  const form = event.target.closest('form');
+  if (form?.id === 'history-filters') {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { if (form.isConnected) updateHistoryFilters(form); },event.target.type === 'search' ? 120 : 0);
+  }
+  if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
+});
+document.addEventListener('change',event => {
+  const form = event.target.closest('form');
+  if (form?.id === 'history-filters') { clearTimeout(searchTimer); return updateHistoryFilters(form); }
+  if (form?.id === 'schedule-form' && event.target.name === 'type') return changeScheduleType(form);
+  if (form?.id !== 'money-form') return;
+  state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
+  if (event.target.name === 'recipientType' || (event.target.name === 'fromAccountId' && form.dataset.type === 'transfers')) {
+    const name = event.target.name;
+    render();
+    if (name === 'recipientType') app.querySelector('input[name="recipientType"]:checked')?.focus();
+    else app.querySelector('#fromAccountId')?.focus();
+  } else if (event.target.name === 'fromAccountId') document.querySelector('#available-balance').textContent = `Available balance: ${money(accountById(event.target.value).balanceCents)}`;
+});
+document.addEventListener('keydown',event => {
+  if (!state.menuOpen || !mobileQuery.matches) return;
+  if (event.key === 'Escape') { event.preventDefault(); state.menuOpen = false; updateMobileNavigation({focus:true}); }
+  if (event.key === 'Tab') {
+    const controls = [...app.querySelectorAll('.sidebar a, .sidebar button')].filter(element => !element.disabled && element.getClientRects().length);
+    const first = controls[0], last = controls.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  }
+});
+modal.addEventListener('cancel',event => { if (state.modalBusy) event.preventDefault(); });
+modal.addEventListener('close',() => { if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
+modal.addEventListener('click',event => {
+  if (event.target !== modal || state.modalBusy) return;
+  const bounds = modal.getBoundingClientRect();
+  if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeDialog();
+});
+mobileQuery.addEventListener('change',() => { state.menuOpen = false; updateMobileNavigation(); });
+window.addEventListener('popstate',() => {
+  if (state.modalBusy) { history.replaceState({},'',routeUrl(state.route)); return; }
+  closeDialog(); state.route = routeFromLocation(); state.menuOpen = false;
+  if (state.data) {
+    if (['/login','/register','/'].includes(location.pathname)) history.replaceState({},'','/dashboard');
+    if (state.route.page === 'activity') state.filters.account = state.route.account;
+    render({focus:true}); loadExtras(state.route.page);
+  } else { state.authMode = location.pathname === '/register' ? 'register' : 'login'; auth({focus:true}); }
+});
+async function start() {
+  try {
+    const session = await api('/session'); state.user = session.user;
+    if (session.user) {
+      if (['/','/login','/register'].includes(location.pathname)) history.replaceState({},'','/dashboard');
+      state.route = routeFromLocation();
+      if (state.route.page === 'activity') state.filters.account = state.route.account;
+      if (await loadDashboard()) loadExtras(state.route.page);
+    } else { if (!['/','/login','/register'].includes(location.pathname)) state.intendedRoute = {...state.route}; auth(); }
+  } catch (error) { connectionError(error.message); }
+}
+// Refresh operational updates while the browser is open, without interrupting forms.
+setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !state.modalBusy) loadNotifications({ renderPage: state.route.page === 'notifications' }); }, 30000);
+window.addEventListener('focus', async () => {
+  if (!state.user || state.modalBusy || state.signingOut) return;
+  await loadDashboard({ render: false });
+  if (state.data && ['overview', 'accounts', 'activity'].includes(state.route.page) && !modal.open && !document.activeElement?.matches('input,select,textarea')) render();
+  if (state.user) loadExtras(state.route.page);
+});
+start();

@@ -1,0 +1,12 @@
+.git
+.env
+data
+**/node_modules
+evergreen-site
+tests
+test-results
+docs
+datasets
+coverage
+*.sqlite*
+*.log

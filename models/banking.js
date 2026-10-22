@@ -17,7 +17,13 @@ function transactionView(row) {
   return {
     id: row.id, type: row.type, description: row.description, amountCents: row.amount_cents,
     counterparty: row.counterparty, status: row.status, createdAt: row.created_at,
-    accountId: row.account_id, reference: row.reference
+    accountId: row.account_id, accountName: row.account_name || '', accountNumber: row.account_number || '',
+    reference: row.reference, isInternal: Boolean(row.internal), payee: row.payee || row.counterparty,
+    risk: row.risk_json ? JSON.parse(row.risk_json) : null,
+    authorization: row.authorization_json ? JSON.parse(row.authorization_json) : null,
+    review: row.review_json ? JSON.parse(row.review_json) : null,
+    requestedAt: row.requested_at || row.created_at,
+    completedAt: row.completed_at || (row.status === 'completed' ? row.created_at : null)
   };
 }
 
@@ -66,16 +72,19 @@ function createAccount(db, userId, name) {
     number = `102${String(randomInt(0, 10000000)).padStart(7, '0')}`;
   } while (db.prepare('SELECT id FROM accounts WHERE number = ?').get(number));
   const createdAt = new Date().toISOString();
-  const inserted = db.prepare('INSERT INTO accounts (user_id, name, number, created_at) VALUES (?, ?, ?, ?)')
-    .run(userId, normalizedName, number, createdAt);
+  const inserted = db.prepare("INSERT INTO accounts (user_id, name, number, created_at) SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM accounts WHERE user_id = ? AND status = 'active') < 8")
+    .run(userId, normalizedName, number, createdAt, userId);
+  if (!inserted.changes) throw new HttpError(409, 'You can have up to 8 active savings accounts.');
   return accountView(db.prepare('SELECT * FROM accounts WHERE id = ?').get(Number(inserted.lastInsertRowid)));
 }
 
 function renameAccount(db, userId, id, name) {
-  const account = ownedAccount(db, userId, id);
-  const normalizedName = accountName(name);
-  db.prepare('UPDATE accounts SET name = ? WHERE id = ?').run(normalizedName, account.id);
-  return accountView({ ...account, name: normalizedName });
+  return transaction(db, () => {
+    const account = ownedAccount(db, userId, id);
+    const normalizedName = accountName(name);
+    db.prepare('UPDATE accounts SET name = ? WHERE id = ?').run(normalizedName, account.id);
+    return accountView({ ...account, name: normalizedName });
+  });
 }
 
 function closeAccount(db, userId, id) {
@@ -91,16 +100,17 @@ function closeAccount(db, userId, id) {
 
 function dashboard(db, userId) {
   const accounts = db.prepare("SELECT * FROM accounts WHERE user_id = ? AND status = 'active' ORDER BY id").all(userId).map(accountView);
-  const transactions = db.prepare(`SELECT t.* FROM transactions t JOIN accounts a ON a.id = t.account_id
-    WHERE a.user_id = ? ORDER BY t.created_at DESC, t.rowid DESC LIMIT 100`).all(userId).map(transactionView);
+  const closedAccounts = db.prepare("SELECT * FROM accounts WHERE user_id = ? AND status = 'closed' ORDER BY id").all(userId).map(accountView);
+  const transactions = db.prepare(`SELECT t.*, a.name AS account_name, a.number AS account_number FROM transactions t JOIN accounts a ON a.id = t.account_id
+    WHERE a.user_id = ? ORDER BY t.created_at DESC, t.rowid DESC`).all(userId).map(transactionView);
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const totals = db.prepare(`SELECT
     COALESCE(SUM(CASE WHEN t.amount_cents > 0 THEN t.amount_cents ELSE 0 END), 0) AS income,
     COALESCE(SUM(CASE WHEN t.amount_cents < 0 THEN -t.amount_cents ELSE 0 END), 0) AS outgoing
     FROM transactions t JOIN accounts a ON a.id = t.account_id
-    WHERE a.user_id = ? AND t.internal = 0 AND t.created_at >= ?`).get(userId, since);
+    WHERE a.user_id = ? AND t.internal = 0 AND t.status = 'completed' AND t.created_at >= ?`).get(userId, since);
   const billers = db.prepare('SELECT id, name, category, initials, color FROM billers ORDER BY rowid').all();
-  return { accounts, transactions, billers, summary: { incomeCents: totals.income, outgoingCents: totals.outgoing } };
+  return { accounts, closedAccounts, transactions, billers, summary: { incomeCents: totals.income, outgoingCents: totals.outgoing } };
 }
 
 function requestKey(value) {
@@ -128,74 +138,7 @@ function once(db, userId, key, kind, payload, operation) {
   });
 }
 
-function addEntry(db, { accountId: id, type, description, amountCents, counterparty, reference, internal = 0, createdAt }) {
-  const txnId = randomUUID();
-  db.prepare(`INSERT INTO transactions
-    (id, account_id, type, description, amount_cents, counterparty, reference, internal, created_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(txnId, id, type, description, amountCents, counterparty, reference, internal, createdAt);
-  return transactionView(db.prepare('SELECT * FROM transactions WHERE id = ?').get(txnId));
-}
-
-function transfer(db, user, body) {
-  const fromId = accountId(body.fromAccountId);
-  const amountCents = parseAmount(body.amount);
-  if (typeof body.toAccountNumber !== 'string') throw new HttpError(400, 'Enter the recipient’s account number.');
-  const number = body.toAccountNumber.replace(/[\s-]/g, '');
-  if (!/^\d{10}$/.test(number)) throw new HttpError(400, 'Enter a 10-digit Evergreen account number.');
-  const description = body.description === undefined ? '' : body.description;
-  if (typeof description !== 'string' || description.trim().length > 100) throw new HttpError(400, 'Use a transfer note of 100 characters or fewer.');
-  const note = description.trim() || 'Savings transfer';
-  const key = requestKey(body.requestId);
-  return once(db, user.id, key, 'transfer', { fromId, number, amountCents, note }, () => {
-    const source = ownedAccount(db, user.id, fromId);
-    const target = db.prepare(`SELECT a.*, u.name AS owner_name FROM accounts a JOIN users u ON u.id = a.user_id
-      WHERE a.number = ?`).get(number);
-    if (!target) throw new HttpError(404, 'Recipient account not found. Check the account number.');
-    if (target.status !== 'active') throw new HttpError(409, 'The recipient savings account is closed.');
-    if (source.id === target.id) throw new HttpError(409, 'Choose a different account for this transfer.');
-    if (source.balance_cents < amountCents) throw new HttpError(409, 'Insufficient funds in the selected account.');
-    if (target.balance_cents + amountCents > MAX_CENTS) throw new HttpError(409, 'The recipient account cannot receive this amount.');
-    db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(amountCents, source.id);
-    db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(amountCents, target.id);
-    const createdAt = new Date().toISOString();
-    const reference = `EVG-${randomUUID().replace(/-/g, '').slice(0, 12).toUpperCase()}`;
-    const internal = source.user_id === target.user_id ? 1 : 0;
-    const outgoing = addEntry(db, {
-      accountId: source.id, type: 'transfer', description: note, amountCents: -amountCents,
-      counterparty: internal ? target.name : target.owner_name, reference, internal, createdAt
-    });
-    addEntry(db, {
-      accountId: target.id, type: 'transfer', description: note, amountCents,
-      counterparty: internal ? source.name : user.name, reference, internal, createdAt
-    });
-    return outgoing;
-  });
-}
-
-function payment(db, user, body) {
-  const fromId = accountId(body.fromAccountId);
-  const amountCents = parseAmount(body.amount);
-  if (typeof body.billerId !== 'string' || body.billerId.length > 80) throw new HttpError(400, 'Choose a biller.');
-  if (typeof body.reference !== 'string' || body.reference.trim().length < 3 || body.reference.trim().length > 64) {
-    throw new HttpError(400, 'Enter a bill reference of 3–64 characters.');
-  }
-  const reference = body.reference.trim();
-  const key = requestKey(body.requestId);
-  return once(db, user.id, key, 'payment', { fromId, amountCents, billerId: body.billerId, reference }, () => {
-    const source = ownedAccount(db, user.id, fromId);
-    const biller = db.prepare('SELECT * FROM billers WHERE id = ?').get(body.billerId);
-    if (!biller) throw new HttpError(400, 'Choose a valid biller.');
-    if (source.balance_cents < amountCents) throw new HttpError(409, 'Insufficient funds in the selected account.');
-    db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(amountCents, source.id);
-    return addEntry(db, {
-      accountId: source.id, type: 'bill', description: `${biller.name} bill`, amountCents: -amountCents,
-      counterparty: biller.name, reference, createdAt: new Date().toISOString()
-    });
-  });
-}
-
 module.exports = {
   accountView, transactionView, accountName, parseAmount, createAccount, renameAccount,
-  closeAccount, dashboard, transfer, payment
+  closeAccount, dashboard, accountId, ownedAccount, requestKey, once
 };

@@ -8,9 +8,13 @@ const { HttpError } = require('./models/errors');
 const { loadSession, csrfMatches } = require('./models/security');
 const auth = require('./controllers/authController');
 const bank = require('./controllers/bankController');
+const services = require('./controllers/servicesController');
+const schedules = require('./models/schedules');
+const events = require('./models/events');
+const { createRiskClient, createNotificationClient } = require('./services/clients');
 
 const BODY_LIMIT = 16 * 1024;
-const FRONTEND_ROUTES = new Set(['/', '/login', '/register', '/dashboard', '/accounts', '/transfers', '/payments', '/activity']);
+const FRONTEND_ROUTES = new Set(['/', '/login', '/register', '/dashboard', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements']);
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -84,12 +88,22 @@ function route(pathname, method, response) {
   let available;
   let protectedRoute = false;
   let accountId;
+  let resourceId;
   if (pathname === '/api/session') available = { GET: auth.session };
   else if (pathname === '/api/auth/register') available = { POST: auth.register };
   else if (pathname === '/api/auth/login') available = { POST: auth.login };
   else if (pathname === '/api/auth/logout') available = { POST: auth.logout };
   else if (pathname === '/api/dashboard') { available = { GET: bank.dashboard }; protectedRoute = true; }
   else if (pathname === '/api/accounts') { available = { POST: bank.createAccount }; protectedRoute = true; }
+  else if (pathname === '/api/scheduled-payments') { available = { GET: services.listSchedules, POST: services.createSchedule }; protectedRoute = true; }
+  else if (/^\/api\/scheduled-payments\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { DELETE: services.cancelSchedule }; protectedRoute = true; }
+  else if (pathname === '/api/notifications') { available = { GET: services.notifications }; protectedRoute = true; }
+  else if (/^\/api\/notifications\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { PATCH: services.markRead }; protectedRoute = true; }
+  else if (pathname === '/api/fraud/rules') { available = { GET: services.rules }; protectedRoute = true; }
+  else if (/^\/api\/fraud\/rules\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { PATCH: services.updateRule }; protectedRoute = true; }
+  else if (pathname === '/api/fraud/model') { available = { GET: services.model }; protectedRoute = true; }
+  else if (pathname === '/api/fraud/reviews') { available = { GET: services.reviews }; protectedRoute = true; }
+  else if (/^\/api\/fraud\/reviews\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { POST: services.review }; protectedRoute = true; }
   else if (/^\/api\/accounts\/\d+$/.test(pathname)) {
     accountId = pathname.split('/').pop();
     available = { PATCH: bank.renameAccount, DELETE: bank.closeAccount };
@@ -101,7 +115,10 @@ function route(pathname, method, response) {
     response.setHeader('Allow', Object.keys(available).join(', '));
     throw new HttpError(405, 'This method is not supported.');
   }
-  return { handler: available[method], protectedRoute, accountId };
+  if (resourceId) {
+    try { resourceId = decodeURIComponent(resourceId); } catch { throw new HttpError(400, 'Invalid resource identifier.'); }
+  }
+  return { handler: available[method], protectedRoute, accountId, resourceId };
 }
 
 async function serveFrontend(request, response, pathname) {
@@ -136,20 +153,48 @@ async function serveFrontend(request, response, pathname) {
   response.end(request.method === 'HEAD' ? undefined : bytes);
 }
 
-function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'banking.sqlite'), seed = process.env.SEED_DEMO !== 'false' } = {}) {
+function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'banking.sqlite'), seed = process.env.SEED_DEMO !== 'false', riskClient: suppliedRisk = null, notificationClient: suppliedNotifications = null, now = Date.now } = {}) {
   const db = openDatabase(dbPath, { seed });
+  const servicePath = name => dbPath === ':memory:' ? ':memory:' : path.join(path.dirname(path.resolve(dbPath)), `${name}.sqlite`);
+  const riskClient = suppliedRisk || createRiskClient({ dbPath: servicePath('fraud') });
+  const notificationClient = suppliedNotifications || createNotificationClient({ dbPath: servicePath('notifications') });
   const limitLogin = auth.createLoginLimiter();
+  let jobsPromise = null;
+  const deliverNotifications = () => events.dispatch(db, notificationClient, now);
+  // Only the explicitly synchronous embedded client participates in HTTP writes.
+  // Networked and unknown clients are delivered by the durable worker instead.
+  const deliverImmediateNotifications = () => notificationClient.isRemote === false
+    ? events.dispatch(db, notificationClient, now, { timeBudgetMs: 50 })
+    : Promise.resolve({ notificationsDelivered: 0, notificationsFailed: 0 });
+  const runJobs = () => {
+    if (!jobsPromise) jobsPromise = (async () => ({ ...await schedules.runDue(db, { riskClient, now }), ...await deliverNotifications() }))().finally(() => { jobsPromise = null; });
+    return jobsPromise;
+  };
   const server = http.createServer(async (request, response) => {
     securityHeaders(response);
     try {
       let target;
       try { target = new URL(request.url, 'http://localhost'); } catch { throw new HttpError(400, 'Invalid request URL.'); }
       const pathname = target.pathname;
+      if (pathname === '/health') {
+        if (request.method !== 'GET') { response.setHeader('Allow', 'GET'); throw new HttpError(405, 'This method is not supported.'); }
+        db.prepare('SELECT 1').get();
+        return sendJson(response, 200, { ok: true, service: 'banking', database: 'ready' });
+      }
+      if (pathname === '/internal/jobs/tick') {
+        const token = process.env.SERVICE_TOKEN;
+        if (!token) throw new HttpError(404, 'Endpoint not found.');
+        if (request.method !== 'POST') { response.setHeader('Allow', 'POST'); throw new HttpError(405, 'This method is not supported.'); }
+        if (!csrfMatches(request.headers.authorization, `Bearer ${token}`)) throw new HttpError(401, 'Service authorization is required.');
+        const input = await readJson(request);
+        if (Object.keys(input).length) throw new HttpError(400, 'Job ticks do not accept clock or payment inputs.');
+        return sendJson(response, 200, { ok: true, ...await runJobs() });
+      }
       if (!pathname.startsWith('/api/')) return await serveFrontend(request, response, pathname);
       const selected = route(pathname, request.method, response);
       const currentSession = loadSession(db, request);
       const user = currentSession?.user_id
-        ? db.prepare('SELECT id, name, email FROM users WHERE id = ?').get(currentSession.user_id)
+        ? db.prepare('SELECT id, name, email, role FROM users WHERE id = ?').get(currentSession.user_id)
         : null;
       if (selected.protectedRoute && !user) throw new HttpError(401, 'Sign in to continue.');
       const write = !['GET', 'HEAD'].includes(request.method);
@@ -163,10 +208,12 @@ function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.joi
       const body = write ? await readJson(request) : {};
       const context = {
         db, request, response, body, session: currentSession, user,
-        accountId: selected.accountId, limitLogin
+        accountId: selected.accountId, resourceId: selected.resourceId, limitLogin, url: target,
+        riskClient, notificationClient, now, deliverNotifications: deliverImmediateNotifications
       };
       const result = await selected.handler(context);
-      sendJson(response, pathname === '/api/auth/register' || (pathname === '/api/accounts' && write) ? 201 : 200, { ok: true, ...result });
+      if (write) await deliverImmediateNotifications();
+      sendJson(response, pathname === '/api/auth/register' || (['/api/accounts', '/api/scheduled-payments'].includes(pathname) && request.method === 'POST') ? 201 : 200, { ok: true, ...result });
     } catch (error) {
       if (response.headersSent || response.destroyed) return;
       const status = error instanceof HttpError ? error.status : 500;
@@ -179,7 +226,8 @@ function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.joi
   server.headersTimeout = 15000;
   server.keepAliveTimeout = 5000;
   server.maxRequestsPerSocket = 1000;
-  server.once('close', () => db.close());
+  server.runJobs = runJobs;
+  server.once('close', () => { riskClient.close?.(); notificationClient.close?.(); db.close(); });
   return server;
 }
 
