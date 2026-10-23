@@ -36,4 +36,4 @@ An outbox event commits in the same transaction as its banking operation. The di
 
 Only Express interprets explicitly trusted proxy addresses; auth uses `req.ip`. Browser writes require the correct origin and session CSRF, with same-origin entry guards for login/register. Opaque cookies hold no customer records; PostgreSQL stores only token hashes. Authenticator secrets are encrypted and recovery codes hashed. Python rejects unauthorized requests, invalid schemas and response bindings. Model failure never silently switches to an unapproved JavaScript scorer.
 
-Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. This repository supplies the application boundaries and configuration contract without implementing those systems. Historical implementations remain excluded reference material.
+Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. This repository supplies the application boundaries and configuration contract without implementing those systems. Retired implementations have been removed from the checkout.

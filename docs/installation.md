@@ -4,19 +4,15 @@ Required: Node.js 22.13+, PostgreSQL 16+ and Python 3.11+ with a virtual environ
 
 Run `npm run setup` once. It preserves existing configuration and generates missing private service/encryption keys. Follow the [database guide](database.md): start PostgreSQL, copy `database/admin.env.example` to ignored `.env.database-admin`, set the administrator maintenance URL, then run `npm run db:setup` and `npm run db:check`. Setup preserves existing Green Link Digital Bank data and saves a restricted `DATABASE_URL` in `.env`; do not place real values in examples. `PUBLIC_ORIGIN` is the exact browser origin, including scheme and port. An HTTPS origin enables Secure cookies. Local HTTP uses ordinary HttpOnly/SameSite cookies. Direct use does not require proxy trust.
 
-Optionally seed a new empty demo database with `npm run db:seed`, then `npm start`. Existing data needs no seed. Future migrations use `npm run db:migrate`, which loads migration credentials only for that command. There is no SQLite runtime fallback. Startup requires the configured PostgreSQL server, usable secrets and a healthy authenticated Python scorer. The scorer binds to loopback by default and receives no database or MFA encryption credentials. Scheduled payments and outbox delivery run inside the banking process with persistent PostgreSQL leases and records. An external email/SMS sender is not included; notifications are in-app.
+Optionally seed a new empty demo database with `npm run db:seed`, then `npm start`. Existing data needs no seed. Future migrations use `npm run db:migrate`, which loads migration credentials only for that command. Startup requires the configured PostgreSQL server, usable secrets and a healthy authenticated Python scorer. The scorer binds to loopback by default and receives no database or MFA encryption credentials. Scheduled payments and outbox delivery run inside the banking process with persistent PostgreSQL leases and records. An external email/SMS sender is not included; notifications are in-app.
 
-## Migration from the previous SQLite application
+## Existing PostgreSQL records
 
-Stop the previous application before importing its store. Leave the source and its WAL/SHM files together so SQLite can read a consistent view. Select an empty PostgreSQL database in `.env`, run migrations, then:
+The previous database import is complete. The old stores, importer, retired services and prototype source have been removed. Import provenance remains in PostgreSQL for auditability, and applied SQL migrations remain checksum-protected. A verified pre-cleanup PostgreSQL dump is retained privately under `data/backups/`; this is separate from the active `data/postgresql` cluster.
 
-```sh
-npm run db:import-sqlite -- --source data/banking.sqlite --confirm-empty-target
-```
+Migration 006 corrects the old domain only for known project demo identities whose names and account numbers match. It refuses an email collision, preserves credential hashes and financial records, records the change and revokes affected sessions. Existing operators use their current passwords with the `@greenlink.demo` email. A new empty seeded database uses the documented sample credentials; cleanup never resets an existing password or assigns staff access.
 
-Optional `--with-adjacent-stores` imports compatible notification and historical fraud information found beside the source. Historical model responses are archives, never current reusable authorization assessments. The importer opens SQLite read-only, validates all records before commit, and preserves IDs, balances, password hashes and valid historical requests. It records an explicit verified opening balance; it rejects a negative baseline, invalid money chronology or unexplained drift. All writes are one PostgreSQL transaction. An unrelated populated target is refused. Repeating the same completed import is a no-op. Sessions are intentionally discarded and users sign in again.
-
-Do not run demo seeding before an import. Imported identities, passwords and roles are preserved; demo credentials are available only in a separately seeded empty database. The sign-in page advertises the sample login only when its original seeded identity is available. If the imported database has no administrator, use the explicit local operator command below for the intended existing user. Never substitute a customer database for test fixtures. The old store remains available as reference; the new application accesses only PostgreSQL.
+Use `npm run db:check` for restricted-role and balance reconciliation checks. Do not seed an already populated database. The sign-in page advertises a sample login only when its original seeded identity is available. Never substitute customer data for test fixtures.
 
 ## Administration and secrets
 

@@ -23,4 +23,4 @@ The official identity appears on the loading screen, sign-in/registration, navig
 
 The implemented scope stays with business savings, balances, internal transfers, simulated business bills, schedules, history/statements, authorization and fraud controls. The real bank also advertises financing products; those are not presented as working features in this prototype.
 
-Existing demo email addresses/passwords, PostgreSQL database/role names, application URLs, request keys and encryption bindings remain stable. Existing authenticator codes keep working; only newly generated enrolment labels use the corrected bank name. Earlier historical source snapshots retain their original identity text for migration reference.
+Project demo emails use `@greenlink.demo`; migration 006 corrects the known historical demo aliases. Existing passwords, PostgreSQL database/role names, application URLs, request keys and encryption bindings are preserved. Existing authenticator codes keep working; newly generated enrolment labels use the corrected bank name. Retired prototype source has been removed. The old identity appears only where required by the migration and audit history.

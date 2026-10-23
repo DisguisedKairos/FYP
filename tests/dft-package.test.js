@@ -57,7 +57,7 @@ function fixture(t) {
     'compose.cloud.yaml': 'DO_NOT_PACKAGE_COMPOSE_CLOUD',
     '.github/workflows/ci.yml': 'DO_NOT_PACKAGE_CICD',
     'cloud/README.md': 'DO_NOT_PACKAGE_CLOUD',
-    'evergreen-site/app/route.ts': 'DO_NOT_PACKAGE_HOSTED_PROTOTYPE',
+    'retired-site/app/route.ts': 'DO_NOT_PACKAGE_HOSTED_PROTOTYPE',
     'services/gateway.js': 'DO_NOT_PACKAGE_OLD_GATEWAY',
     'services/fraud/engine.js': 'DO_NOT_PACKAGE_JS_RUNTIME',
     'models/assistant.js': 'DO_NOT_PACKAGE_OLD_MODEL',

@@ -4,12 +4,12 @@ Verified locally on 24 October 2026 (Asia/Singapore), using Node.js 22.14, Postg
 
 | Check | Result |
 | --- | --- |
-| Active Node DFT functional/security suite | 91 passed, 0 failed, 0 skipped against real PostgreSQL |
+| Active Node DFT functional/security suite | 90 passed, 0 failed, 0 skipped against real PostgreSQL |
 | Python FastAPI/model suite | 15 passed, including 63 JavaScript parity vectors and independent held-out metric verification |
 | Browser workflows | 5 passed: business registration/onboarding and banking, mobile banking, standalone bank operations workspace, administrator fraud review, password/MFA/recovery/session controls |
 | Actual process integration | Express + PostgreSQL + FastAPI smoke passed with authenticated scoring, payment lifecycle, history, statements, notifications and policy audit |
 | Packaged source | Archive integrity verified; fresh offline `npm ci` installed 79 locked packages; extracted application passed the actual two-process smoke |
-| Existing local data | Read-only SQLite import into separate PostgreSQL database preserved 2 users, 3 accounts and 11 transactions and password hashes; no sessions imported |
+| Existing local data | PostgreSQL cleanup retained 3 users, 3 accounts and 11 transactions; credential hashes and financial records match the pre-cleanup snapshot; known demo login email changes were audited |
 | PostgreSQL provisioning and runtime permissions | Fresh/repeat setup, restricted SQL denials, pending-migration guard, ledger drift detection, unrelated-target refusal and banking through the application role passed; local database check ready with 3 users (including subsequently created bank staff), 3 accounts, 11 transactions and no discrepancies |
 | Executable fraud demonstration | 42 assertions passed with real Python inference, 11 payment submissions, 7 audited rule changes, independent review, model outage and ledger reconciliation; original financial-data fingerprints unchanged |
 
@@ -21,6 +21,8 @@ The GLDB branding revision (2.2.1) uses the official full-colour/white logos, or
 
 The 2.3.0 demonstration adds `demo:fraud` and `demo:fraud:serve`, printable HTML/JSON evidence and a separate interactive application. It was run with both automatic cleanup and retained-demo modes. Cancellation cleanup was checked for leaked databases/roles. A live browser confirmed the AI-only score-88 case, the velocity hold and seven persisted policy audit entries. The normal application and its Python scorer remained running throughout. See [fraud simulation](fraud-simulation.md).
 
-Use the commands in the root README to reproduce these checks. PostgreSQL tests require a separate `TEST_DATABASE_URL`, Python tests require the test requirements, and browser tests require Chrome/Edge. Older SQLite/native-service tests are reference files, not part of these counts. No infrastructure pipeline or hosted deployment is claimed by this verification.
+The 2.4.0 cleanup removes retired database files, the old hosting prototype, inactive controllers/models/services, the completed import command and obsolete tests. A verified PostgreSQL dump was taken before deletion. Migration 006 preserves hashes and money while correcting only recognized demo emails, revoking affected sessions and refusing collisions. The revised suite has 90 Node tests, including three identity migration cases; five browser flows and 15 Python tests also passed. The previous name is retained only in historical identity migration data and its regression test.
+
+Use the commands in the root README to reproduce these checks. PostgreSQL tests require a separate `TEST_DATABASE_URL`, Python tests require the test requirements, and browser tests require Chrome/Edge. Retired implementation tests are removed. No infrastructure pipeline or hosted deployment is claimed by this verification.
 
 The scorer's synthetic evaluation is a model demonstration, not real-world fraud detection validation. Live bill settlement, email/SMS, KYC and account-recovery delivery remain outside the implemented project flows; see `requirements.md`.

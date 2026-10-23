@@ -13,9 +13,9 @@ The active application uses PostgreSQL exclusively through [`db.js`](../db.js) a
 | Migration login | `greenlink_owner` |
 | Native server files | `.local/postgresql/` (ignored, not shipped) |
 | Persistent data / server log | `data/postgresql/` / `data/postgresql.log` (ignored) |
-| Schema | 23 tables, five checksum-verified migrations |
+| Schema | 23 tables, six checksum-verified migrations |
 
-At setup verification on 24 October 2026, the existing three users, three accounts and 11 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The original SQLite store and the previous stopped PostgreSQL data directory remain untouched reference copies; only `data/postgresql` is active. Imported business operators still need their own business profile and independent approval before financial writes.
+At verification on 24 October 2026, the existing three users, three accounts and 11 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The retired non-PostgreSQL stores have been removed after verifying a PostgreSQL backup in `data/backups/`. Only `data/postgresql` is active; the earlier stopped PostgreSQL cluster is an inactive reference copy. Existing business operators still need their own business profile and independent approval before financial writes.
 
 ```sh
 npm run db:status
@@ -57,14 +57,14 @@ npm run db:check
 
 Setup saves randomly generated passwords privately; rerunning it reuses the saved credentials and preserves banking records. It does not seed, reset or overwrite users. Do not change the generated URLs to perform password rotation; coordinate a deliberate PostgreSQL role password change and matching configuration update instead. Database/role creation is not one PostgreSQL transaction; an interrupted setup may leave provisioned objects and saved credentials, which a retry can reuse.
 
-For an empty sample database only, run `npm run db:seed`. For existing SQLite records, run the documented explicit import before seeding. Neither command is necessary on this machine's already populated database.
+For an empty sample database only, run `npm run db:seed`. Seeding is unnecessary on this machine's already populated database. The former import command has been retired.
 
 ## Credentials and SQL permissions
 
 | File / role | Purpose |
 | --- | --- |
 | `.env`: `DATABASE_URL` / `greenlink_app` | Used by the web process; no superuser, database creation, role creation, replication or RLS-bypass privileges |
-| `.env.database-admin`: `MIGRATION_DATABASE_URL` / `greenlink_owner` | Owns this database/schema; used only by migration/import/seed/staff administration commands |
+| `.env.database-admin`: `MIGRATION_DATABASE_URL` / `greenlink_owner` | Owns this database/schema; used only by migration/seed/staff administration commands |
 | `.env.database-admin`: `ADMIN_DATABASE_URL` | Local bootstrap administrator, used only by `db:setup` |
 | `.env.test`: `TEST_DATABASE_URL` | Separate test/maintenance database; never loaded by `npm start` |
 
@@ -73,6 +73,8 @@ The application can read banking tables and make the specific writes needed by i
 SQL restrictions complement Express ownership/RBAC checks; this is a shared service login, not per-customer PostgreSQL row-level security. Financial writes require authorization, eligibility checks, deterministic idempotency, locks and an atomic ledger/outbox transaction in the banking service.
 
 For future schema changes, add a new numbered file under `database/migrations/`; never edit an applied file. Run `npm run db:migrate` before restarting the app. This command uses the migration role and refreshes runtime grants. Startup verifies migration checksums using the restricted login and reports a missing migration rather than requiring DDL rights.
+
+Migration 006 corrects known historical demo login emails to the current project domain while preserving password hashes, customer IDs, roles and money. It revokes affected sessions and appends an audit event. It leaves unrelated identities unchanged and refuses a conflicting destination email. Historical SQL and audit metadata intentionally retain the previous identity values as provenance.
 
 ## Data model
 

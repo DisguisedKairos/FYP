@@ -17,7 +17,7 @@
 | Private banking assistant | Owned reads and form drafts, no chat execution or external provider | HTTP and desktop/mobile browser |
 | Authenticator and recovery | Encrypted TOTP secrets, atomic counter/recovery consumption | `dft-totp.test.js`, security browser |
 | PostgreSQL data connection | Migrations, bounded pool and transaction helper | All database integration tests |
-| Previous data migration | Explicit read-only SQLite importer, empty-target gate, reconciliation | `dft-import.test.js` |
+| Existing-data and identity maintenance | PostgreSQL provenance, credential-preserving demo identity migration, collision refusal and reconciliation | `dft-identity.test.js`, `dft-postgres.test.js` |
 | Reviewable application package | Locked dependencies, source allowlist and integrity checks | `dft-package.test.js` |
 
 Tests against PostgreSQL require `TEST_DATABASE_URL`; skipped cases are not acceptance evidence. Browser tests need a local Chrome-compatible browser. Python tests use the provided pinned test requirements.

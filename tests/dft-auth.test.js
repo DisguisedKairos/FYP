@@ -15,7 +15,7 @@ test('DFT security uses salted scrypt, rejects malformed hashes and has no legac
   const first = await security.hashPassword(PASSWORD), second = await security.hashPassword(PASSWORD);
   assert.notEqual(first, second);
   assert.equal(await security.verifyPassword(PASSWORD, first), true);
-  assert.equal(await security.verifyPassword('Evergreen123!', first), false);
+  assert.equal(await security.verifyPassword('UnrelatedPass456!', first), false);
   const olderHash = await security.hashPassword('oldpass1');
   assert.equal(await security.verifyPassword('oldpass1', olderHash), true, 'the stronger new-password policy does not invalidate an existing hash');
   for (const [value, hash] of [[PASSWORD, null], [PASSWORD, 'broken'], [null, first], ['x'.repeat(129), first], [PASSWORD, '00:bad']]) {

@@ -1,6 +1,6 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "Republic Polytechnic C300 business banking prototype based on Green Link Digital Bank, using Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
@@ -18,7 +18,6 @@
     "admin:create": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/create-staff.js",
     "db:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin database/migrate.js",
     "db:seed": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/seed-demo.js",
-    "db:import-sqlite": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/import-sqlite.js",
     "start:fraud": "python -m uvicorn main:app --host 127.0.0.1 --port 4011",
     "test:python": "python -m unittest discover -s tests_python -v",
     "db:setup": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin database/setup.js",

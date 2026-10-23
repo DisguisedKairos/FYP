@@ -109,9 +109,9 @@ test('desktop registration, savings management, authorized money movement and ac
     assert.match(await ask(page, 'What is my balance?'), /30,050\.50/);
     const privateReply = await ask(page, 'What is the balance of account 1020002001?');
     assert.match(privateReply, /only accounts linked to your signed-in business/i); assert.doesNotMatch(privateReply, /1,200\.00/);
-    await page.fill('#assistant-message', 'My password is Greenlink123!'); await submit(page, '#assistant-form');
+    await page.fill('#assistant-message', 'PrivateDemo123!'); await submit(page, '#assistant-form');
     await page.waitFor('document.querySelector("#assistant-error").textContent.includes("keep passwords")', 'sensitive chat input redacted');
-    assert.equal((await text(page, '#assistant-thread')).includes('Greenlink123!'), false);
+    assert.equal((await text(page, '#assistant-thread')).includes('PrivateDemo123!'), false);
     assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'), '');
     await ask(page, 'Transfer 10 to 1020002001');
     await page.click('#assistant-thread .from-assistant:last-child [data-assistant-action]');

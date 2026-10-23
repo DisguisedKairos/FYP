@@ -56,13 +56,11 @@ Every new payment is screened by the Python model and current deterministic rule
 
 ## Existing data
 
-The original `data/banking.sqlite` is retained. It is **not** the runtime database. Existing imported identities, passwords, balances and history stay intact. Operators without a business profile must submit one and obtain bank approval before financial writes resume. Import into an empty PostgreSQL target before seeding:
+All retained banking records are in PostgreSQL. Retired application sources, non-PostgreSQL database files and their import command have been removed. A verified PostgreSQL backup taken before cleanup is stored privately under `data/backups/`.
 
-```sh
-npm run db:import-sqlite -- --source data/banking.sqlite --confirm-empty-target
-```
+Migration 006 renames only the known project demo logins to `alex@greenlink.demo`, `jamie@greenlink.demo` and, if present, `reviewer@greenlink.demo`. It preserves passwords, customer IDs, roles, balances and transaction history, records an audit event and revokes affected sessions. Existing operators sign in again using their current passwords and the corrected email. Freshly seeded demo passwords in the table above apply only to newly seeded data.
 
-The importer reads the source without modifying it, validates balances and chronology, preserves valid customer IDs/password hashes/history, and discards old sessions. It refuses an unrelated populated target. See [installation and migration](docs/installation.md).
+Operators without a business profile must submit one and obtain bank approval before financial writes resume. See [installation and data maintenance](docs/installation.md).
 
 ## Verification and package
 
@@ -100,4 +98,4 @@ docs/                   Requirements, API, controls and scope evidence
 
 [Wholesale scope](docs/wholesale-banking.md) · [DFT security](docs/dft-scope.md) · [Requirements](docs/requirements.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Financial controls](docs/financial-controls.md) · [Verification record](docs/verification.md)
 
-Earlier implementations under `legacy/` and `evergreen-site/` remain reference material only and are excluded from the release. DIT owns infrastructure delivery, TLS termination, networks and cloud database operations. DFT supplies environment-variable, health and private scoring contracts for that integration; shared secrets must be injected privately by the operator.
+The checkout contains the active Express/PostgreSQL/FastAPI application and its tests. DIT owns infrastructure delivery, TLS termination, networks and cloud database operations. DFT supplies environment-variable, health and private scoring contracts for that integration; shared secrets must be injected privately by the operator.

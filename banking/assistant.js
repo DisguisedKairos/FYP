@@ -7,7 +7,7 @@ const history = require('./history');
 const schedules = require('./workflows');
 const { HttpError } = require('../models/errors');
 
-const SENSITIVE = /\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|(?:greenlink|evergreen)123!|\bsk-[A-Za-z0-9_-]{8,}/i;
+const SENSITIVE = /\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i;
 const SUGGESTIONS = ['What is my balance?', 'Show recent transactions', 'Show scheduled payments', 'Explain my latest flagged transaction'];
 const navigate = (page, label, filters) => ({ type: 'navigate', page, label, ...(filters ? { filters } : {}) });
 const result = (intent, reply, extra = {}) => ({ ok: true, intent, reply, actions: [], suggestions: SUGGESTIONS,
