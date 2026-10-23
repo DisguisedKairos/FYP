@@ -22,7 +22,7 @@ export function routeFromLocation() {
   return { page: entry?.[0] ?? 'overview', account: url.searchParams.get('account') ?? '' };
 }
 export const state = {
-  data: null, user: null, csrf: '', route: routeFromLocation(), intendedRoute: null,
+  data: null, user: null, csrf: '', demoAvailable: false, route: routeFromLocation(), intendedRoute: null,
   authMode: location.pathname === '/register' ? 'register' : 'login', authNotice: '', authBusy: false, signingOut: false,
   hiddenBalance: false, refreshError: '', refreshing: false, filters: emptyFilters(), historyPage: 1, pageSize: 10,
   history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null,
@@ -72,7 +72,12 @@ export async function api(path, body, method = 'POST', options = {}) {
     let result;
     try { result = await response.json(); }
     catch { if (options.signal?.aborted) throw new ApiError('Request cancelled.', -1); throw new ApiError('The server returned an unexpected response. Please try again.', response.status); }
-    if (!response.ok) throw new ApiError(result.error || 'We could not complete the request.', response.status);
+    if (!response.ok) {
+      const error = new ApiError(result.error || 'We could not complete the request.', response.status);
+      error.code = result.code;
+      error.mfaRequired = Boolean(result.mfaRequired || result.code === 'MFA_REQUIRED' || result.code === 'MFA_INVALID');
+      throw error;
+    }
     if (result.csrfToken) state.csrf = result.csrfToken;
     return result;
   } catch (error) {
@@ -109,7 +114,12 @@ export function dialog(title, content, { wide = false } = {}) {
   if (!modal.open) modal.showModal();
   modal.querySelector('h2').focus();
 }
-export function closeDialog(force = false) { if ((!state.modalBusy || force) && modal.open) modal.close(); }
+export function closeDialog(force = false) {
+  if ((!state.modalBusy || force) && modal.open) {
+    modal.close();
+    if (modal.dataset.securitySecret === 'true') { delete modal.dataset.securitySecret; modal.replaceChildren(); }
+  }
+}
 export function clearBankingState() {
   ui.cancelReads?.();
   closeDialog(true);

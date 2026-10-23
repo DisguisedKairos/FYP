@@ -5,9 +5,10 @@ const path = require('node:path');
 const { inflateRawSync } = require('node:zlib');
 const { createHash } = require('node:crypto');
 
-const ROOT_FILES = new Set(['package.json', 'app.js', 'db.js', '.env.example', '.gitignore', '.dockerignore', 'Dockerfile', 'compose.yaml', 'compose.cloud.yaml', 'README.md']);
-const ROOT_DIRECTORIES = new Set(['controllers', 'models', 'public', 'views', 'services', 'scripts', 'datasets', 'tests', 'docs', 'cloud', '.github']);
-const EXCLUDED_DIRECTORIES = new Set(['.git', '.terraform', '.terraform.d', 'node_modules', 'data', 'prototype', 'evergreen-site', 'releases', 'release', 'releaseoutputs', 'test-results', 'coverage', 'dist', '.wrangler', '.sites-runtime', '.openai', '.aws', '.ssh', '.codex', '.agents', 'secrets', 'tmp', '.tmp']);
+const ROOT_FILES = new Set(['package.json', 'package-lock.json', 'app.js', 'main.py', 'requirements.txt', '.env.example', '.gitignore', 'README.md', 'models/errors.js', 'services/fraud/features.js', 'services/fraud/model.json']);
+const ROOT_DIRECTORIES = new Set(['banking', 'database', 'fraud_service', 'public', 'views', 'scripts', 'datasets', 'tests', 'tests_python', 'docs']);
+const EXCLUDED_DIRECTORIES = new Set(['legacy', 'cloud', '.github', '.venv', 'venv', 'env', '__pycache__', '.pytest_cache', 'site-packages', '.git', '.terraform', '.terraform.d', 'node_modules', 'data', 'prototype', 'evergreen-site', 'releases', 'release', 'releaseoutputs', 'test-results', 'coverage', 'dist', '.wrangler', '.sites-runtime', '.openai', '.aws', '.ssh', '.codex', '.agents', 'secrets', 'tmp', '.tmp']);
+const REQUIRED_FILES = new Set(['package.json', 'package-lock.json', 'app.js', 'main.py', 'requirements.txt', 'README.md', '.env.example', 'banking/auth.js', 'banking/security.js', 'banking/totp.js', 'banking/ledger.js', 'banking/risk.js', 'database/index.js', 'database/migrations/001_initial.sql', 'fraud_service/__init__.py', 'fraud_service/application.py', 'fraud_service/model.py', 'fraud_service/schemas.py', 'fraud_service/model.sha256', 'models/errors.js', 'services/fraud/features.js', 'services/fraud/model.json', 'public/app.js', 'public/styles.css', 'views/index.html', 'scripts/start-platform.js']);
 const MANIFEST_NAME = 'PACKAGE-MANIFEST.json';
 const MAX_FILES = 10000;
 const MAX_ENTRY_BYTES = 16 * 1024 * 1024;
@@ -33,7 +34,7 @@ function assertSafeArchivePath(name) {
 }
 function excludedName(name) {
   const lower = name.toLowerCase();
-  return EXCLUDED_DIRECTORIES.has(lower) || /^\.env(?:\.|$)/i.test(name) || /^(?:credentials?|secrets?|tokens?)(?:\.|$)/i.test(name) || /^id_(?:rsa|ed25519|ecdsa)(?:\.|$)/i.test(name) || /^\.terraformrc$/i.test(name) || /\.tfstate(?:\.|$)|\.tfplan(?:\.|$)/i.test(name) || (/\.tfvars(?:\.|$)/i.test(name) && !/\.tfvars\.example$/i.test(name)) || /\.(?:sqlite3?|db)(?:-(?:wal|shm|journal))?$/i.test(name) || /\.(?:pem|key|p12|pfx|log|zip)(?:\.sha256)?$/i.test(name);
+  return EXCLUDED_DIRECTORIES.has(lower) || /\.py[co]$/i.test(name) || /^Dockerfile(?:\.|$)|^compose\..*\.ya?ml$/i.test(name) || /^\.env(?:\.|$)/i.test(name) || /^(?:credentials?|secrets?|tokens?)(?:\.|$)/i.test(name) || /^id_(?:rsa|ed25519|ecdsa)(?:\.|$)/i.test(name) || /^\.terraformrc$/i.test(name) || /\.tfstate(?:\.|$)|\.tfplan(?:\.|$)/i.test(name) || (/\.tfvars(?:\.|$)/i.test(name) && !/\.tfvars\.example$/i.test(name)) || /\.(?:sqlite3?|db)(?:-(?:wal|shm|journal))?$/i.test(name) || /\.(?:pem|key|p12|pfx|log|zip)(?:\.sha256)?$/i.test(name);
 }
 function isPackageDirectoryAllowed(name) {
   assertSafeArchivePath(name);
@@ -44,6 +45,7 @@ function isPackagePathAllowed(name) {
   assertSafeArchivePath(name);
   if (ROOT_FILES.has(name)) return true;
   const parts = name.split('/');
+  if (parts[0] === 'tests' && parts.length === 2 && !/^dft[-.]/.test(parts[1]) && !['browser.e2e.js', 'chrome.js'].includes(parts[1])) return false;
   return parts.length > 1 && ROOT_DIRECTORIES.has(parts[0]) && !parts.some(excludedName);
 }
 function range(bytes, offset, length, label) {
@@ -121,6 +123,10 @@ function verifyManifest(files) {
     const bytes = files.get(entry.path);
     if (!bytes || !Number.isSafeInteger(entry.size) || entry.size !== bytes.length || !/^[a-f0-9]{64}$/.test(entry.sha256 || '') || sha256(bytes) !== entry.sha256) throw new Error(`Manifest hash or size mismatch: ${entry.path}`);
   }
+  for (const required of REQUIRED_FILES) if (!files.has(required)) throw new Error(`Required DFT source file is missing: ${required}`);
+  let config, lock;
+  try { config = JSON.parse(files.get('package.json').toString('utf8').replace(/^\uFEFF/, '')); lock = JSON.parse(files.get('package-lock.json').toString('utf8').replace(/^\uFEFF/, '')); } catch { throw new Error('Package dependency manifests must contain valid JSON.'); }
+  if (config.name !== manifest.name || config.version !== manifest.version || lock.name !== config.name || lock.version !== config.version || lock.packages?.['']?.version !== config.version) throw new Error('Package dependency manifests and release version do not match.');
   return manifest;
 }
 function verifyPackage({ archivePath, checksumPath = `${archivePath}.sha256`, requireChecksum = true } = {}) {
@@ -135,7 +141,7 @@ function verifyPackage({ archivePath, checksumPath = `${archivePath}.sha256`, re
   }
   return { valid: true, archivePath: absolute, sha256: hash, fileCount: manifest.files.length, totalBytes: manifest.files.reduce((sum, file) => sum + file.size, 0), manifest };
 }
-module.exports = { verifyPackage, readZip, verifyManifest, crc32, sha256, assertSafeArchivePath, isPackagePathAllowed, isPackageDirectoryAllowed, ROOT_DIRECTORIES, ROOT_FILES, MANIFEST_NAME, MAX_FILES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES };
+module.exports = { verifyPackage, readZip, verifyManifest, crc32, sha256, assertSafeArchivePath, isPackagePathAllowed, isPackageDirectoryAllowed, ROOT_DIRECTORIES, ROOT_FILES, REQUIRED_FILES, MANIFEST_NAME, MAX_FILES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES };
 if (require.main === module) {
   try {
     const args = process.argv.slice(2);

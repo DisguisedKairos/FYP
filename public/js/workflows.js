@@ -12,6 +12,9 @@ export function closeAccountDialog(id) {
 }
 export async function authenticate(values, demo = false) {
   if (state.authBusy) return;
+  if (values.otp && values.recoveryCode) return formError(document.querySelector('#auth-form'), 'Enter either an authenticator code or a recovery code.');
+  if (!values.otp) delete values.otp;
+  if (!values.recoveryCode) delete values.recoveryCode;
   state.authBusy = true;
   const form = document.querySelector('#auth-form');
   app.querySelectorAll('.auth-form-wrap button').forEach(button => { button.disabled = true; });
@@ -29,6 +32,16 @@ export async function authenticate(values, demo = false) {
     if (await loadDashboard()) ui.loadExtras?.(destination.page);
     app.querySelector('h1')?.focus();
   } catch (error) {
+    if (error.mfaRequired) {
+      if (demo) { form.elements.email.value = values.email; form.elements.password.value = values.password; }
+      const details = form.querySelector('#auth-factor-details');
+      if (details) details.open = true;
+      const factor = values.recoveryCode ? form.elements.recoveryCode : form.elements.otp;
+      if (factor) factor.value = '';
+      formError(form, error.message);
+      factor?.focus();
+      return;
+    }
     if (error.status === 403) {
       try { await api('/session'); error.message = 'Your session was refreshed. Please sign in again.'; } catch { /* Keep the transport error. */ }
     }

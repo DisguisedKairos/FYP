@@ -1,57 +1,35 @@
-# Platform architecture
+# DFT application architecture
 
-The local platform runs five Node.js processes. Docker Compose runs the same entrypoints as separate containers. Customer accounts, credentials, authorizations, and the money ledger share one transactional boundary in the banking service. Fraud evaluation and notifications have independent databases and authenticated HTTP contracts. The gateway is the only published application port.
+The active application has an Express banking API, a Python FastAPI scoring process, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. No separate gateway, container orchestrator or deployment pipeline is part of this DFT release.
 
 ```mermaid
 flowchart LR
-  UI[HTML, CSS and JavaScript browser app] --> Gateway[API gateway :3000]
-  Gateway --> Banking[Banking service :4010]
-  Banking --> Ledger[(SQLite ledger, schedules and outbox)]
-  Banking --> Risk[Fraud service :4011]
-  Risk --> RiskDB[(Rules, assessments and audit)]
-  Worker[Schedule and event worker :4013] --> Banking
-  Banking --> Notifications[Notification service :4012]
-  Notifications --> NotificationDB[(Notification inbox)]
+  Browser[Browser application] --> Express[Express banking API]
+  Express --> PG[(PostgreSQL)]
+  Express -->|Authenticated bound assessment| Python[Python FastAPI scorer]
+  Jobs[Schedule and outbox jobs] --> PG
+  Jobs --> Express
+  PG --> Alerts[In-app notifications]
 ```
 
-## Service responsibilities
+`app.js` supplies HTTP routing, body limits, headers, authentication, ownership enforcement and application lifecycle. `banking/auth.js` owns credentials and sessions; `banking/ledger.js` owns financial mutations; `banking/history.js` owns snapshot reads/statements; `banking/risk.js` owns policy snapshots and scorer validation; `banking/workflows.js` owns schedules, occurrence recovery and notifications. The assistant is an independent read/draft module with no payment execution function.
 
-| Service | Entrypoint | Responsibility |
-| --- | --- | --- |
-| Gateway | `services/gateway.js` | Routes browser traffic, hides internal endpoints, strips service credentials supplied by external clients, and checks dependency health. |
-| Banking | `app.js` | Sessions, account ownership, balance enquiries, password authorization, transfers, bill payments, scheduled instructions, statements/history data, review decisions, and the ledger/outbox. |
-| Fraud | `services/fraud/server.js` | Historical features, trained model inference, configurable rules, immutable assessments, and versioned rule changes. |
-| Notifications | `services/notifications/server.js` | Idempotent event consumption and per-customer notification/read state. |
-| Worker | `services/worker.js` | Periodically asks the banking service to execute due instructions and deliver outstanding events. |
+## Database boundary
 
-`npm start` generates an in-memory internal service token unless an ignored `.env` supplies one. Private services bind to loopback in native development. Compose uses a private backend network and exposes only loopback port 3000. The same source can run as one embedded banking process for isolated tests with `npm run start:banking`; the financial rules are identical.
+Versioned SQL migrations create customers, accounts, signed ledger entries, sessions, quotas, audit events, bound request keys, model assessments, fraud policies, schedules and the transactional notification outbox. Queries use positional parameters for customer input. Account numbers, request keys, schedule occurrences and settlement sequence values have database uniqueness constraints. Monetary values are integer cents with explicit supported bounds.
 
-## Money and events
+Payment submission permanently binds the customer's request key to canonical type, source and payload before awaiting Python. A persisted assessment binds the same identifiers, history summary and approved policy version. External I/O happens outside money write locks. Settlement locks the sender and affected accounts in a consistent order, rechecks authorization, funds and current blocking rules, then commits the debit/credit, immutable receipt, idempotent result, audit and outbox together. A failed transaction rolls back every financial effect.
 
-Balances are integer cents. A successful internal transfer writes the source debit, recipient credit, both ledger entries, the immutable request result, and notification outbox events in one `BEGIN IMMEDIATE` transaction. Failed changes roll back together. Client request identifiers prevent duplicate execution, including when an HTTP response is lost.
+Read dashboards, searches and statements use PostgreSQL snapshots. Statements validate stored opening provenance against completed ledger entries and the recorded balance; unexplained drift returns a conflict rather than inventing a new opening balance. `settlement_seq` gives explicit ordering independent of insertion accidents.
 
-Risk evaluation happens before the short money-write transaction. The ledger rechecks ownership, account state and current balance after scoring. A held transaction records its risk and lifecycle without moving funds. Independent review rechecks available funds at approval time.
+## Recovery and events
 
-The outbox is durable, with leases, bounded exponential retries and delivery state. The notification consumer deduplicates by event identifier. A crash after event consumption but before acknowledgement causes redelivery and a single visible notification. This is at-least-once delivery with idempotent effects.
+Schedules claim due occurrences through row locks and durable leases. Each occurrence uses a deterministic payment key. A retry after a crash reads the committed receipt instead of debiting again. Transient service failures preserve the occurrence and retry with bounded delay; permanent failures are recorded. Cancellation checks for an already committed occurrence before labelling its run cancelled. Monthly recurrence retains the original UTC day where the month permits it.
 
-Scheduled instructions retain authorization for the exact stored payment details; passwords are never stored in an instruction. Each occurrence has a stable identifier. Worker retries and concurrent ticks cannot create a second debit for that occurrence. Time is stored as UTC; customer dates and daily fraud limits use Singapore time.
+An outbox event commits in the same transaction as its banking operation. The dispatcher inserts a deduplicated in-app notification and marks the outbox event delivered in one transaction. Batches and locking permit interruption/retry; this is a durable in-app integration pattern, not an external message broker or email service.
 
-## Database design and optimisation
+## Security contracts
 
-The banking database contains users, sessions, savings accounts, transactions, request deduplication, scheduled instructions/runs, and the outbox. The fraud database contains rule configuration, change audit and cached assessments. The notification database contains recipient inbox/read state.
+Only Express interprets explicitly trusted proxy addresses; auth uses `req.ip`. Browser writes require the correct origin and session CSRF, with same-origin entry guards for login/register. Opaque cookies hold no customer records; PostgreSQL stores only token hashes. Authenticator secrets are encrypted and recovery codes hashed. Python rejects unauthorized requests, invalid schemas and response bindings. Model failure never silently switches to an unapproved JavaScript scorer.
 
-SQLite uses foreign keys, WAL mode and a busy timeout. Ownership/date indexes support account history; unique account numbers and request keys enforce identity and deduplication; partial indexes support unread notifications. Worker queries use bounded batches and indexed due/delivery columns. Transactions keep network operations outside their write locks.
-
-This implementation is a single-writer ledger suitable for the project demonstration. The cloud template keeps each SQLite file on one EC2 host's encrypted persistent storage and runs the same containers behind a TLS reverse proxy. It does not provide multi-host ledger availability. Actual provisioning and an AWS database adapter remain deferred. An AWS database migration must preserve conditional balance updates, idempotency, the outbox and maker-checker controls. DynamoDB is an option, with atomic writes across the relevant items through [`TransactWriteItems`](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html); it is not configured or claimed as this runtime's database.
-
-## Private assistant
-
-The banking service handles supported chat intents through a local parser. It reads only accounts and records owned by the session user, including when that user is an administrator. No external AI API is called and no chat database exists. The browser keeps the conversation in memory and clears it on logout/reload. Responses contain plain text, bounded result items and allowlisted navigation or draft actions. Payment draft actions fill the normal form; review, current-password authorization, fraud checks and settlement still occur through the financial endpoints. Chat has no write capability and cannot approve a held payment or alter a rule.
-
-The fraud scoring model is a separate trained statistical component; the banking assistant is not represented as a general-purpose language model. See [assistant examples and limits](assistant.md).
-
-## Automated delivery
-
-The GitHub Actions workflow runs financial/API/service tests, desktop/mobile browser checks, package integrity verification, Terraform validation and a Docker Compose smoke flow. Version tags publish the tested container to GHCR. Cloud provisioning and production rollout remain deferred. The image and release archive contain no database, `.env` or hosted prototype dependencies.
-
-The workflow follows GitHub's [Node.js testing](https://docs.github.com/en/actions/tutorials/build-and-test-code/nodejs) and [container publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images) patterns. Compose startup uses dependency [health checks](https://docs.docker.com/compose/how-tos/startup-order/).
+Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. This repository supplies the application boundaries and configuration contract without implementing those systems. Historical implementations remain excluded reference material.

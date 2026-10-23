@@ -1,90 +1,94 @@
-# Greenlink Digital Bank
+# Greenlink Digital Bank — DFT application
 
-A Node.js, JavaScript, HTML and CSS banking platform with savings accounts, authorized payments, scheduled payments, a private banking assistant, explainable fraud scoring and independent review. Runtime services use SQLite and Node's built-in modules; no runtime package installation is required. Use Node.js **22.13 or later**.
+C300 Final Year Project: banking features and financial security using **Node.js 22.13+, Express 5, PostgreSQL 16+ and Python 3.11+ FastAPI**. The browser uses JavaScript, HTML and CSS. This version focuses on DFT responsibilities; deployment pipelines, Docker, Terraform and cloud provisioning have been removed from the active application and release package.
 
 ## Run locally
 
+Install PostgreSQL and create an empty database for this project. Then:
+
 ```sh
-npm start
+npm ci
+python -m venv .venv
 ```
 
-Open **http://localhost:3000**. This starts the API gateway, banking, fraud, notification and schedule/event-worker processes. Internal services bind to loopback; their authentication token is generated in memory. Stop them together with Ctrl+C.
-
-| Demo identity | Email | Password | Purpose |
-| --- | --- | --- | --- |
-| Alex Morgan | `alex@greenlink.demo` | `Greenlink123!` | Funded banking account and administrator. |
-| Independent reviewer | `reviewer@greenlink.demo` | `Greenlink123!` | Review another user's held transactions. |
-| Jamie Lee | `jamie@greenlink.demo` | `Greenlink123!` | Recipient account `1020002001`. |
-
-New registrations are customers with a zero-balance savings account. Use a small transfer from Alex to fund one. Payments and schedules require the user's current password at confirmation. Administrators cannot approve their own held payment.
-
-## Containerised services
-
-With Docker Compose installed:
+Install Python dependencies using `.venv\Scripts\python -m pip install -r requirements.txt` on Windows, or `.venv/bin/python -m pip install -r requirements.txt` on macOS/Linux.
 
 ```sh
 npm run setup
-docker compose up --build
 ```
 
-The setup command creates an ignored `.env` with a random service token. Only the gateway is published, at `127.0.0.1:3000`. Separate volumes preserve banking, fraud and notification data. `docker compose down` stops the platform without deleting those volumes.
-
-## Included workflows
-
-- Register, sign in/out, manage savings accounts and enquire about balances.
-- Transfer to owned or registered accounts, pay supported bills, authorize requests and view receipts.
-- Create/cancel one-time, weekly and monthly schedules; inspect individual run results.
-- Search and paginate transaction history on the server, download matching CSV and print/save authoritative date-range statements as PDF.
-- Read notification updates and mark them as read.
-- Ask Greenlink Assistant about your own accounts, search activity, understand a flagged payment and prepare a transfer or bill draft. Chat runs locally with no external AI account; it never authorizes a payment or stores the conversation.
-- Score new payments from historical activity, retain explanations and hold suspicious requests without debiting funds.
-- Review another user's flagged request; configure versioned fraud rules, inspect their change history and view model provenance.
-
-The provided logistic-regression baseline is trained on synthetic labelled history. Its held-out metrics are visible and reproducible; they do not establish real-world fraud-detection performance. Regenerate the model with `npm run train:fraud`.
-
-## Verification
+Edit the generated, ignored `.env`: set `DATABASE_URL` to your PostgreSQL connection string and keep the generated `SERVICE_TOKEN` and `AUTH_ENCRYPTION_KEY` private. Use the exact `PUBLIC_ORIGIN` you open in your browser, normally `http://localhost:3000`.
 
 ```sh
-npm test
-npm run test:browser
+npm run db:migrate
+npm run db:seed
+npm start
 ```
 
-The browser checks require an installed Chrome, Chromium or Edge; `CHROME_PATH` can select it. Test databases are isolated from normal data, and screenshots/downloads go to ignored `test-results/`.
+Open **http://localhost:3000**. Startup launches the private Python scoring service and the Express banking application. PostgreSQL must already be running. Stop the application with Ctrl+C. Demo seeding is explicit and only inserts into an empty customer database.
 
-GitHub Actions runs API/service/control tests, desktop/mobile browser checks, release-package verification, infrastructure validation and a container smoke flow. A `v*` version tag publishes the tested image to GHCR. Actual cloud provisioning remains deferred, as requested. A deployable single-host AWS template and TLS Compose overlay are included; see [cloud instructions](cloud/README.md). This runtime uses SQLite, not an AWS database service.
+| Demo identity | Email | Password | Purpose |
+| --- | --- | --- | --- |
+| Alex Morgan | `alex@greenlink.demo` | `Greenlink123!` | Funded savings account and administrator |
+| Sam Patel | `reviewer@greenlink.demo` | `Greenlink123!` | Independent fraud reviewer |
+| Jamie Lee | `jamie@greenlink.demo` | `Greenlink123!` | Recipient account `1020002001` |
 
-## Application package
+New registrations receive one zero-balance savings account and the customer role. Demo money and bill payments are project simulations; no external payment provider is connected.
+
+## Banking and security
+
+- Savings account creation, renaming and safe closure; dashboard and balance enquiry.
+- Password-authorized internal transfers and bills with integer cents, database row locks, atomic ledger entries and mandatory idempotency keys.
+- One-time, weekly and monthly schedules with durable execution records, recovery after interruption and bounded transient retries.
+- Searchable transaction history, filtered CSV downloads and reconciled account statements that can be printed or saved as PDF.
+- Durable notification outbox, in-app alerts, independent review and versioned fraud-rule audit history.
+- Salted scrypt password hashes, hashed session tokens, login throttling, ownership checks, role checks, CSRF/origin controls, password changes and session revocation.
+- Optional authenticator verification with encrypted secrets, replay prevention and one-use recovery codes, available through Profile & security.
+- Private assistant for owned balances/history, explanations and payment drafts. It never executes a payment or sends a conversation to an external AI provider.
+
+Every new payment is screened by the Python model and current deterministic rules. High-risk requests are held or rejected without debiting funds; an independent administrator must authorize an approval. Unavailable or malformed scoring fails closed. The model is a reproducible **synthetic-data baseline**, not evidence of real-world fraud detection performance. See [model documentation](docs/fraud-model.md).
+
+## Existing data
+
+The original `data/banking.sqlite` is retained. It is **not** the new runtime database. Import into an empty PostgreSQL target before seeding:
+
+```sh
+npm run db:import-sqlite -- --source data/banking.sqlite --confirm-empty-target
+```
+
+The importer reads the source without modifying it, validates balances and chronology, preserves valid customer IDs/password hashes/history, and discards old sessions. It refuses an unrelated populated target. See [installation and migration](docs/installation.md).
+
+## Verification and package
+
+Point `TEST_DATABASE_URL` to a separate local PostgreSQL database whose owner can create/drop test schemas. Tests create unique schemas and remove only those schemas.
+
+```sh
+node --env-file=.env --test tests/dft-*.test.js
+node --env-file=.env --test tests/browser.e2e.js tests/dft-security-browser.js
+```
+
+Run Python tests with the virtual environment interpreter: `python -m unittest discover -s tests_python -v` (install `tests_python/requirements.txt` for test dependencies). `PYTHON` may select that interpreter for the launcher or platform smoke test. Run `node --env-file=.env scripts/platform-smoke.js` for an actual Express/PostgreSQL/FastAPI integration check. Browser checks need Chrome, Chromium or Edge; `CHROME_PATH` can select it. PostgreSQL-dependent tests explicitly skip when `TEST_DATABASE_URL` is missing; such a run does not validate financial persistence.
 
 ```sh
 npm run package
-npm run package:verify -- releases/greenlink-digital-bank-1.1.0.zip
+npm run package:verify
 ```
 
-The ZIP in `releases/` includes the app, model, synthetic dataset, tests, containers, cloud templates and documentation. Its SHA-256 companion and per-file manifest verify integrity. Release builds require clean tracked source. Extract the archive, install Node.js and run `npm start`; user databases, private credentials, `.env` and dependency folders are excluded. The documented demo credentials remain available for sample accounts. See [installation and upgrades](docs/installation.md).
+The source archive includes a locked npm dependency manifest, Python requirements, migrations, application sources and DFT tests. Credentials, databases, dependency installations, older prototypes and infrastructure files are excluded. Build from a clean committed checkout; use the builder's documented dirty-tree override only for local review.
 
-For a database without demo identities, set `SEED_DEMO=false` before the first start. Register the intended administrator, then run `npm run admin:grant -- --email registered@example.com` on the trusted ledger host. This operator-only command records the role grant. Register and grant a second administrator to support independent payment review.
-
-## Project layout
+## Project map
 
 ```text
-app.js                 Banking HTTP service
-db.js                  Ledger schema, migrations and demo seed
-controllers/           API handlers
-models/                Money, schedules, sessions and outbox
-public/                CSS, SVG and modular browser JavaScript
-views/                 HTML entrypoint
-services/              Gateway, fraud, notifications and worker
-scripts/               Startup, packaging, operator setup and model training
-datasets/              Synthetic labelled fraud observations
-tests/                 Financial, API, service and browser checks
-docs/                  Architecture, controls, model and requirement map
-cloud/                 Deferred AWS infrastructure and TLS deployment guide
-Dockerfile, compose.yaml
-.github/workflows/     Automated checks and image delivery
+app.js                  Express HTTP routes and application lifecycle
+banking/                Auth, ledger, risk, history, assistant, schedules and outbox
+database/               PostgreSQL pool, transactions and versioned migrations
+main.py, fraud_service/ FastAPI model assessment service
+public/, views/         Browser application
+scripts/                Local setup, seed/import/admin, model training and packaging
+tests/, tests_python/   DFT functional/security tests and browser checks
+docs/                   Requirements, API, controls and scope evidence
 ```
 
-See [API reference](docs/api.md), [architecture](docs/architecture.md), [financial controls](docs/financial-controls.md), [fraud model](docs/fraud-model.md), and [requirements/contributions](docs/requirements.md). Configuration keys are in `.env.example`; native data lives in ignored `data/`. `npm run start:banking` runs the core with embedded fraud/notification adapters for focused development; scheduled jobs need the full `npm start` worker.
+[DFT scope and security evidence](docs/dft-scope.md) · [Requirements](docs/requirements.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Financial controls](docs/financial-controls.md) · [Verification record](docs/verification.md)
 
-The source repository retains `evergreen-site/`, the earlier unpublished hosted prototype. It is excluded from the Greenlink application package.
-
-This is an educational project using sample funds. Real banks, payment providers, email and SMS delivery are not connected.
+Earlier implementations under `legacy/` and `evergreen-site/` remain reference material only and are excluded from the release. DIT owns infrastructure delivery, TLS termination, networks and cloud database operations. DFT supplies environment-variable, health and private scoring contracts for that integration; shared secrets must be injected privately by the operator.

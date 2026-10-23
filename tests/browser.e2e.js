@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { resolve, join } = require('node:path');
 const { readdirSync, readFileSync, writeFileSync } = require('node:fs');
-const { createFixture, accountNamed, totalBalance } = require('./helpers');
+const { createFixture, accountNamed, totalBalance } = require('./dft-helpers');
 const { launchChrome } = require('./chrome');
 
 const routes = { overview:'/dashboard', accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules', assistant:'/assistant' };
@@ -194,13 +194,13 @@ test('administrators configure real risk rules and independently review held pay
   await bankingPage(t, 'risk', {}, async (page) => {
     await login(page); const before = await snapshot(page);
     await nav(page, 'rules'); await page.waitFor(exists('[data-edit-rule="high_value"]'), 'real fraud rules loaded');
-    await page.click('[data-edit-rule="high_value"]'); await page.fill('#rule-threshold', '25'); await page.select('#rule-action', 'block'); await submit(page, '#rule-form');
+    await page.click('[data-edit-rule="high_value"]'); await page.fill('#rule-threshold', '25'); await page.select('#rule-action', 'block'); await page.fill('#authorizationPassword', 'Greenlink123!'); await submit(page, '#rule-form');
     await page.waitFor('!document.querySelector("#modal").open && !!document.querySelector(".rule-card")', 'rule persisted');
     await recipientTransfer(page, '100.00', 'Browser blocked transfer'); await confirm(page, 'Transfer rejected.');
     assert.match(await text(page, '#modal'), /No funds have moved/); await layout(page, 'blocked receipt'); await done(page);
     assert.equal(totalBalance(await snapshot(page)), totalBalance(before));
     await nav(page, 'rules'); await page.waitFor(exists('[data-edit-rule="high_value"]'), 'rules reload');
-    await page.click('[data-edit-rule="high_value"]'); await page.fill('#rule-threshold', '10000'); await page.select('#rule-action', 'review'); await submit(page, '#rule-form');
+    await page.click('[data-edit-rule="high_value"]'); await page.fill('#rule-threshold', '10000'); await page.select('#rule-action', 'review'); await page.fill('#authorizationPassword', 'Greenlink123!'); await submit(page, '#rule-form');
     await page.waitFor('!document.querySelector("#modal").open', 'review policy saved');
     await page.waitFor('document.querySelectorAll("#rule-audit-results .rule-audit-entry").length === 2', 'persisted rule changes shown');
     await page.select('#rule-audit-filter', 'high_value');
@@ -215,7 +215,10 @@ test('administrators configure real risk rules and independently review held pay
     await page.screenshot(resolve('test-results', 'risk-review-receipt.png')); await done(page);
     await nav(page, 'fraud'); await page.waitFor(exists('.review-queue'), 'maker review queue');
     assert.equal(await page.evaluate(`!!document.querySelector('[data-review-transaction="${held.id}"]')`), false);
-    await logout(page); await login(page, 'reviewer@greenlink.demo'); await nav(page, 'fraud');
+    await logout(page); await login(page, 'reviewer@greenlink.demo'); await nav(page, 'notifications');
+    await page.waitFor(exists('.notification-actions [data-nav="fraud"]'), 'review notification action');
+    await page.click('.notification-actions [data-nav="fraud"]');
+    await page.waitFor('location.pathname === "/fraud-monitoring"', 'notification opens independent review queue');
     await page.waitFor(exists(`[data-review-transaction="${held.id}"]`), 'independent reviewer queue'); await page.click(`[data-review-transaction="${held.id}"]`);
     await page.select('#review-decision', 'approve'); await page.fill('#review-reason', 'Independently verified during browser QA.');
     await page.fill('#authorizationPassword', 'Greenlink123!'); await submit(page, '#review-form');

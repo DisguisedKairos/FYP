@@ -28,16 +28,42 @@
     "trainRows": 1120,
     "testRows": 280,
     "seed": 98245,
-    "epochs": 1800
+    "epochs": 1800,
+    "split": "Deterministic shuffled 80/20 holdout of synthetic observations; not a temporal or customer-separated production validation."
+  },
+  "evaluation": {
+    "scoreFormula": "min(94, round(sigmoid(logit) * 100))",
+    "reviewScoreThreshold": 65,
+    "publishedRoundedWeights": true,
+    "scope": "Model-only review classification on the held-out synthetic split; configurable Node banking rules are evaluated separately."
   },
   "metrics": {
+    "thresholdType": "rounded_model_score",
+    "threshold": 65,
     "accuracy": 0.9107,
-    "precision": 0.9538,
-    "recall": 0.7381,
-    "truePositive": 62,
-    "falsePositive": 3,
-    "trueNegative": 193,
-    "falseNegative": 22
+    "precision": 0.9683,
+    "recall": 0.7262,
+    "falsePositiveRate": 0.0102,
+    "falseNegativeRate": 0.2738,
+    "truePositive": 61,
+    "falsePositive": 2,
+    "trueNegative": 194,
+    "falseNegative": 23
+  },
+  "diagnostics": {
+    "probabilityThreshold0_5": {
+      "thresholdType": "probability",
+      "threshold": 0.5,
+      "accuracy": 0.9107,
+      "precision": 0.9538,
+      "recall": 0.7381,
+      "falsePositiveRate": 0.0153,
+      "falseNegativeRate": 0.2619,
+      "truePositive": 62,
+      "falsePositive": 3,
+      "trueNegative": 193,
+      "falseNegative": 22
+    }
   },
   "policy": "Model scores flag transactions for human review. Only explicit financial-control rules automatically block a transaction."
 }

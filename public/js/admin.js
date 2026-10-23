@@ -26,7 +26,7 @@ export function ruleDialog(id) {
   if (state.user?.role !== 'admin') return;
   const result = state.remote.rules?.data, rule = result?.rules.find(rule => sameId(rule.id,id));
   if (!rule) return;
-  dialog('Edit fraud rule.', `<p class="modal-intro">${esc(rule.name)}<br>${esc(rule.description)}</p><form id="rule-form" data-id="${esc(id)}" data-version="${esc(result.version)}"><label class="checkbox-field"><input type="checkbox" name="enabled" ${rule.enabled ? 'checked' : ''}>Enable this rule</label><div class="field"><label for="rule-threshold">Threshold${rule.unit ? ` (${esc(rule.unit)})` : ''}</label><input id="rule-threshold" name="threshold" type="number" min="${rule.id === "velocity" ? "1" : "0.01"}" max="${rule.id === "balance_utilization" ? "100" : rule.id === "velocity" ? "1000" : "10000000"}" step="${rule.id === "velocity" ? "1" : "0.01"}" value="${esc(rule.threshold)}" required></div><div class="field"><label for="rule-action">Action when matched</label><select id="rule-action" name="action"><option value="review" ${rule.action === 'review' ? 'selected' : ''}>Hold for independent review</option><option value="block" ${rule.action === 'block' ? 'selected' : ''}>Block request</option></select></div><div class="error-message" role="alert"></div><div class="notice">This changes how future requests are assessed. Every change is saved with a new rule version.</div><button type="submit" class="button full">Save rule ${icon('check')}</button></form>`);
+  dialog('Edit fraud rule.', `<p class="modal-intro">${esc(rule.name)}<br>${esc(rule.description)}</p><form id="rule-form" data-id="${esc(id)}" data-version="${esc(result.version)}"><label class="checkbox-field"><input type="checkbox" name="enabled" ${rule.enabled ? 'checked' : ''}>Enable this rule</label><div class="field"><label for="rule-threshold">Threshold${rule.unit ? ` (${esc(rule.unit)})` : ''}</label><input id="rule-threshold" name="threshold" type="number" min="${rule.id === "velocity" ? "1" : "0.01"}" max="${rule.id === "balance_utilization" ? "100" : rule.id === "velocity" ? "1000" : "10000000"}" step="${rule.id === "velocity" ? "1" : "0.01"}" value="${esc(rule.threshold)}" required></div><div class="field"><label for="rule-action">Action when matched</label><select id="rule-action" name="action"><option value="review" ${rule.action === 'review' ? 'selected' : ''}>Hold for independent review</option><option value="block" ${rule.action === 'block' ? 'selected' : ''}>Block request</option></select></div>${authorizationField()}<div class="error-message" role="alert"></div><div class="notice">This changes how future requests are assessed. Every change is saved with a new rule version.</div><button type="submit" class="button full">Save rule ${icon('check')}</button></form>`);
 }
 export async function saveRule(form) {
   if (state.modalBusy || state.user?.role !== 'admin') return;
@@ -35,13 +35,13 @@ export async function saveRule(form) {
   state.modalBusy = true; formBusy(form,true);
   try {
     const currentVersion = Number.isFinite(Number(form.dataset.version)) ? Number(form.dataset.version) : form.dataset.version;
-    await api(`/fraud/rules/${encodeURIComponent(form.dataset.id)}`, { enabled: form.elements.enabled.checked, threshold, action: form.elements.action.value, version: currentVersion }, 'PATCH');
+    await api(`/fraud/rules/${encodeURIComponent(form.dataset.id)}`, { enabled: form.elements.enabled.checked, threshold, action: form.elements.action.value, version: currentVersion, authorizationPassword: form.elements.authorizationPassword.value }, 'PATCH');
     state.modalBusy = false; closeDialog();
     if (state.ruleAudit) state.ruleAudit.page=1;
     await loadExtras('rules',{force:true});
     toast('Fraud rule updated for future assessments.');
   } catch (error) { if (!await recoverSession(error)) formError(form,error.status === 409 ? `${error.message} Close this dialog and refresh the rules before editing again.` : error.message); }
-  finally { state.modalBusy = false; formBusy(form,false); }
+  finally { if (form.elements.authorizationPassword) form.elements.authorizationPassword.value = ''; state.modalBusy = false; formBusy(form,false); }
 }
 export function reviewDialog(id) {
   if (state.user?.role !== 'admin') return;

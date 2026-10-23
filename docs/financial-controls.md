@@ -1,34 +1,29 @@
-# Banking workflows and financial controls
+# Financial control requirements
 
-## Immediate payments
+## Money and transaction lifecycle
 
-1. The signed-in customer selects an owned, active savings account and a registered recipient or supported biller.
-2. The browser validates the fields and displays the exact payee, amount and reference for review.
-3. The server verifies the customer's current password. No review-screen state can substitute for server authorization.
-4. The fraud service evaluates historical amount patterns, recipient familiarity, recent activity, time and balance usage; enabled rules are evaluated against the same context.
-5. The ledger records the assessment and either completes the payment, holds it for independent review, or rejects it under a blocking rule.
-6. A committed event is delivered to the customer's notification inbox. The receipt and transaction history show the actual result.
+Supported amounts are positive decimal strings with at most two places, converted exactly to integer cents. Scientific notation, floating-point overflow, zero and negative instructions are rejected. PostgreSQL constraints bound balances and ledger entries. Transfers debit the owned active source and credit a distinct active registered destination atomically. Bills debit the source and retain a supported biller and billing reference; live settlement rails are outside this demonstration.
 
-## Financial invariants
+Each financial submission requires a customer-scoped `requestId` and the current password. The key is permanently bound to canonical operation type, source account and payload before screening. Retrying an identical request returns its receipt; changing the payload under the same key returns 409. Account locks prevent parallel overspending. A database failure rolls back balances, both transfer entries, the receipt and outbox together.
 
-| Requirement | Control |
-| --- | --- |
-| No overdraft | Integer-cent arithmetic, positive amount validation and a balance recheck inside the ledger transaction. |
-| No double spending on retries | Per-user idempotency keys and atomic source/recipient ledger changes. |
-| Account ownership | Every account mutation and source payment resolves the account against the authenticated customer. |
-| Authorization | Current-password verification on payments, scheduled instruction creation and review decisions. |
-| Separation of duties | An administrator cannot approve or reject their own held payment. A second administrator is required. |
-| Held funds | A payment under review has no ledger debit. Approval uses the then-current available balance. |
-| Configuration accountability | Admin-only fraud configuration, optimistic version checks and before/after change audit. |
-| Confidentiality | Hashed passwords, server sessions, HttpOnly cookies, CSRF and same-origin validation, private service tokens. |
-| Durable notifications | Transactional outbox, retry leases and consumer deduplication. |
-| Scheduled consent | The authorized source, recipient, amount, frequency and date are immutable; cancellation stops future occurrences. |
-| Statements | Filters and exports use real stored records and identify status. Pending/rejected records do not imply money moved. |
-| Statement reconciliation | Completed entries preserve settlement order for tied timestamps, including approved holds. Impossible legacy chronology, negative running balances or a closing mismatch stop statement issuance. |
-| Private assistant | Owned read queries and payment drafts only; chat cannot bypass password authorization, screening or independent review. |
+The lifecycle is `requested → screened → completed | pending_review | rejected`. Pending/rejected requests never debit or reserve funds. Completed entries have a settlement sequence and completion time. Review keeps request and decision evidence. An administrator cannot approve their own request. Approval requires fresh authorization, current funds, active accounts and the current blocking policies; concurrent review attempts settle once.
 
-## Fraud monitoring
+## Fraud guardrails
 
-Customers see the assessment explanation on transaction details. Administrators have a review queue, model information and rule controls. A decision records who reviewed it, when, and why. The demo has two admin identities so the maker-checker restriction can be exercised.
+Python scores every new transfer/bill, including a schedule occurrence, from explicit prior outgoing aggregates. The application persists the bound assessment and policy before calling the scorer. It validates identifiers, source, payload hash, score/decision, finite bounded features, historical context, model provenance and assessment timestamp. Unauthorized, unavailable, malformed or mismatched responses fail closed without settlement.
 
-Historical seed transactions predate the scoring feature; new payment attempts receive an assessment. The provided model is a reproducible logistic-regression baseline trained on synthetic labelled observations, with held-out metrics and a dataset hash. Those metrics describe the included test dataset, not a validated real-world fraud detector. See [fraud model](fraud-model.md).
+Approved deterministic rules apply independently of the model. Controls include high value, daily outgoing total, recent velocity, new payee and balance utilization. Rule changes require an administrator's current password, matching policy version and an exact audit record. Settlement rechecks current blocking rules under the sender lock, so a concurrent payment or policy change cannot rely solely on stale screening. Model explanations support a review and do not prove fraud.
+
+## Schedules, notifications and statements
+
+A schedule stores the authorized canonical instruction and next occurrence. Every occurrence has a stable key, processing lease, attempt count and terminal result. A transient dependency outage retries the same occurrence with bounded delay; a committed result is recovered after interruption without a second debit. Cancellation respects an occurrence that already committed. Past occurrences remain visible.
+
+Financial operations emit outbox events in their transaction. Delivery and notification insertion are atomic and deduplicated. Notification lists/acknowledgements are scoped to their owner. Notifications are in-app only.
+
+Statements use a consistent database snapshot and Singapore date boundaries. Their opening balance derives from stored creation/import provenance and completed entries before the period. Every row's running balance must stay nonnegative and reconcile with the closing/current balance. Positive or negative unexplained drift is an error. Explicit verified legacy opening balances are distinguishable from transaction activity. Pending/rejected rows do not affect money totals. CSV protects textual cells against formula execution.
+
+## Customer and security requirements
+
+Customers can access only their own accounts, history, receipts, schedules, statements and notifications. The assistant follows the same ownership boundary, returns drafts requiring the ordinary review/password flow, and cannot authorize writes. Registration cannot assign privileges. Password changes and session revocation invalidate stale authorizations; optional authenticator login prevents code/recovery replay. Audit records contain decisions and actor context without passwords, raw cookies, OTPs or recovery secrets.
+
+The functional/security suites test concurrency, rollback, idempotency, independent review, hostile inputs, data isolation, service failure, recovery and reconciliation. Their evidence applies to this project implementation with synthetic data, not a live bank certification.

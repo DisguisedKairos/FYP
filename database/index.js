@@ -1,0 +1,45 @@
+'use strict';
+
+const { Pool } = require('pg');
+const { readdir, readFile } = require('node:fs/promises');
+const path = require('node:path');
+const { createHash } = require('node:crypto');
+
+function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptions = {} } = {}) {
+  if (!connectionString && !poolOptions.host) throw new Error('DATABASE_URL is required. PostgreSQL is the active banking database.');
+  const pool = new Pool({ connectionString, max: 10, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000, ...poolOptions });
+  pool.on('error', error => console.error('Idle PostgreSQL connection failed:', error.message));
+  const query = (text, values) => pool.query(text, values);
+  async function transaction(work, { isolation = 'READ COMMITTED', readOnly = false } = {}) {
+    if (!['READ COMMITTED', 'REPEATABLE READ', 'SERIALIZABLE'].includes(isolation)) throw new Error('Unsupported transaction isolation.');
+    const client = await pool.connect();
+    try {
+      await client.query(`BEGIN ISOLATION LEVEL ${isolation}${readOnly ? ' READ ONLY' : ''}`);
+      await client.query("SET LOCAL statement_timeout = '15s'; SET LOCAL lock_timeout = '10s'");
+      const result = await work(client);
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      try { await client.query('ROLLBACK'); } catch {}
+      throw error;
+    } finally { client.release(); }
+  }
+  async function migrate() {
+    return transaction(async client => {
+      await client.query("SELECT pg_advisory_xact_lock(783456120)");
+      await client.query('CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
+      const directory = path.join(__dirname, 'migrations');
+      for (const name of (await readdir(directory)).filter(name => /^\d+.*\.sql$/.test(name)).sort()) {
+        const sql = (await readFile(path.join(directory, name), 'utf8')).replace(/\r\n/g, '\n');
+        const checksum = createHash('sha256').update(sql).digest('hex');
+        const previous = (await client.query('SELECT checksum FROM schema_migrations WHERE name=$1', [name])).rows[0];
+        if (previous) { if (previous.checksum !== checksum) throw new Error(`Applied migration changed: ${name}`); continue; }
+        await client.query(sql);
+        await client.query('INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)', [name, checksum]);
+      }
+    });
+  }
+  return { pool, query, transaction, migrate, close: () => pool.end() };
+}
+
+module.exports = { createDatabase };

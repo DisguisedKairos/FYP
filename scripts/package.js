@@ -5,7 +5,7 @@ const path = require('node:path');
 const { deflateRawSync } = require('node:zlib');
 const { execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
-const { verifyPackage, crc32, sha256, isPackagePathAllowed, isPackageDirectoryAllowed, ROOT_DIRECTORIES, ROOT_FILES, MANIFEST_NAME, MAX_FILES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES } = require('./verify-package');
+const { verifyPackage, crc32, sha256, isPackagePathAllowed, isPackageDirectoryAllowed, ROOT_DIRECTORIES, ROOT_FILES, REQUIRED_FILES, MANIFEST_NAME, MAX_FILES, MAX_ENTRY_BYTES, MAX_TOTAL_BYTES } = require('./verify-package');
 
 const compare = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 function git(root, args) {
@@ -84,6 +84,8 @@ function buildPackage({ root = path.resolve(__dirname, '..'), outputDirectory, a
   const config = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8').replace(/^\uFEFF/, ''));
   if (!/^\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?$/.test(config.version || '')) throw new Error('package.json must contain a portable release version.');
   const files = collectSource(root);
+  const included = new Set(files.map(file => file.path));
+  for (const required of REQUIRED_FILES) if (!included.has(required)) throw new Error(`Required DFT source file is missing: ${required}`);
   const tracked = new Set(git(root, ['ls-files', '-z']).split('\0').filter(Boolean));
   const dirtyTracked = Boolean(git(root, ['status', '--porcelain=v1', '--untracked-files=no']).trim());
   const untrackedSource = files.some(file => !tracked.has(file.path));

@@ -1,8 +1,0 @@
-region               = "ap-southeast-1"
-deployment_name      = "greenlink"
-domain               = "bank.example.com"
-release_bucket       = "replace-with-existing-private-release-bucket"
-release_key          = "greenlink/releases/replace-with-reviewed-release.zip"
-release_sha256       = "REPLACE_WITH_64_CHARACTER_SHA256"
-instance_type        = "t3.small"
-data_volume_size_gib = 30

@@ -6,8 +6,9 @@ import { loadHistory, loadAccountRecent, openTransaction, cancelHistoryReads, ca
 import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, reviewMoney, transactionDetails, confirmMoney, updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './js/workflows.js';
 import { loadExtras, loadNotifications, stopBackgroundReads, notificationsPage, schedulesPage, markNotification, scheduleDialog, changeScheduleType, reviewSchedule, confirmSchedule, scheduleDetails, cancelScheduleDialog, cancelSchedule } from './js/services.js';
 import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview } from './js/admin.js';
+import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 
-Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, cancelAssistant, transactionDetails, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); } });
+Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); } });
 Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage });
 
 function switchAuth() {
@@ -23,14 +24,18 @@ async function signOut(control) {
   stopBackgroundReads();
   try {
     await api('/auth/logout',{});
-    clearBankingState();
-    state.intendedRoute = null; state.authMode = 'login'; state.authNotice = 'You have signed out.';
-    history.pushState({},'','/login');
-    auth({focus:true});
+    endSession('You have signed out.');
   } finally {
     state.signingOut = false;
     if (state.user) loadExtras(state.route.page,{force:true});
   }
+}
+function endSession(notice) {
+  state.signingOut = true;
+  ui.cancelReads(); stopBackgroundReads(); clearBankingState(); clearSecuritySecrets();
+  state.intendedRoute = null; state.authMode = 'login'; state.authNotice = notice;
+  history.pushState({}, '', '/login'); auth({ focus: true });
+  state.signingOut = false;
 }
 function helpDialog() {
   dialog('A little guidance.', `<div class="detail-section"><h3>Your savings</h3><p>Open an account, check its balance and history, or rename it to match a goal. Empty accounts can be closed while one stays open.</p></div><div class="detail-section"><h3>Move money and pay bills</h3><p>Review the recipient, amount and reference, then authorize with your current password. Fraud checks can complete, hold or reject a request. Only completed requests change balances.</p></div><div class="detail-section"><h3>Plan ahead</h3><p>Schedule a future transfer or bill. No money is reserved now. Due payments run while the local Node.js server is running and catch up when it restarts.</p></div><div class="detail-section"><h3>Keep a record</h3><p>Search activity by payee, account, status or date. Export matching transactions as CSV or print an account statement to PDF.</p></div><div class="notice">This is an educational project using sample funds. No real transfers or bill payments are made.</div>`);
@@ -64,6 +69,11 @@ document.addEventListener('submit',async event => {
       case 'cancel-schedule-form': await cancelSchedule(form); break;
       case 'rule-form': await saveRule(form); break;
       case 'review-form': await submitReview(form); break;
+      case 'security-password-form':
+      case 'security-revoke-form':
+      case 'security-mfa-setup-form':
+      case 'security-mfa-confirm-form':
+      case 'security-mfa-disable-form': await submitSecurity(form); break;
     }
   } catch (error) { if (!await recoverSession(error)) formError(form,error.message); }
 });
@@ -123,7 +133,12 @@ document.addEventListener('click',async event => {
       case 'reload-page': control.disabled = true; await loadExtras(state.route.page,{force:true}); break;
       case 'refresh': if (!state.refreshing) { state.refreshing = true; control.disabled = true; await loadDashboard(); state.refreshing = false; } break;
       case 'reload': location.reload(); break;
-      case 'profile': dialog('Your profile', `<div class="profile-card"><span class="avatar">${esc(state.user.name[0])}</span><div><h3>${esc(state.user.name)}</h3><p>${esc(state.user.email)}</p></div></div><dl class="review-list"><div><dt>Access</dt><dd>${state.user.role === 'admin' ? 'Banking administrator' : 'Personal banking customer'}</dd></div></dl><div class="notice">Accounts, payment requests and activity are saved in the application database.</div><button type="button" class="button full" data-action="close-dialog">Back to banking</button>`); break;
+      case 'profile': await profileDialog(); break;
+      case 'security-password': passwordDialog(); break;
+      case 'security-revoke': revokeDialog(); break;
+      case 'security-mfa-setup': mfaSetupDialog(); break;
+      case 'security-mfa-disable': mfaDisableDialog(); break;
+      case 'security-copy-recovery': await copyRecoveryCodes(); break;
       case 'help': helpDialog(); break;
     }
   } catch (error) { if (!await recoverSession(error)) toast(error.message); if (control.isConnected) control.disabled = false; }
@@ -160,7 +175,7 @@ document.addEventListener('keydown',event => {
   }
 });
 modal.addEventListener('cancel',event => { if (state.modalBusy) event.preventDefault(); });
-modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
+modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); clearSecuritySecrets(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
 modal.addEventListener('click',event => {
   if (event.target !== modal || state.modalBusy) return;
   const bounds = modal.getBoundingClientRect();
@@ -178,7 +193,7 @@ window.addEventListener('popstate',() => {
 });
 async function start() {
   try {
-    const session = await api('/session'); state.user = session.user;
+    const session = await api('/session'); state.user = session.user; state.demoAvailable = Boolean(session.demoAvailable);
     if (session.user) {
       if (['/','/login','/register'].includes(location.pathname)) history.replaceState({},'','/dashboard');
       state.route = routeFromLocation();

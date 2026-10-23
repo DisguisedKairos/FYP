@@ -35,6 +35,25 @@ function generateDataset() {
   fs.writeFileSync(defaultData, rows.join('\n') + '\n');
 }
 
+function evaluate(observations, intercept, weights, { type = 'rounded_model_score', threshold = 65 } = {}) {
+  const confusion = { truePositive: 0, falsePositive: 0, trueNegative: 0, falseNegative: 0 };
+  for (const row of observations) {
+    const probability = sigmoid(intercept + weights.reduce((sum, weight, i) => sum + weight * row.x[i], 0));
+    const predicted = type === 'probability' ? probability >= threshold : Math.min(94, Math.round(probability * 100)) >= threshold;
+    confusion[predicted ? row.y ? 'truePositive' : 'falsePositive' : row.y ? 'falseNegative' : 'trueNegative']++;
+  }
+  const round = value => Number(value.toFixed(4));
+  return {
+    thresholdType: type, threshold,
+    accuracy: round((confusion.truePositive + confusion.trueNegative) / observations.length),
+    precision: round(confusion.truePositive / Math.max(1, confusion.truePositive + confusion.falsePositive)),
+    recall: round(confusion.truePositive / Math.max(1, confusion.truePositive + confusion.falseNegative)),
+    falsePositiveRate: round(confusion.falsePositive / Math.max(1, confusion.falsePositive + confusion.trueNegative)),
+    falseNegativeRate: round(confusion.falseNegative / Math.max(1, confusion.falseNegative + confusion.truePositive)),
+    ...confusion,
+  };
+}
+
 function train(filename = defaultData) {
   const source = fs.readFileSync(filename, 'utf8').replace(/\r\n/g, '\n');
   const lines = source.trim().split(/\r?\n/);
@@ -66,20 +85,24 @@ function train(filename = defaultData) {
     intercept -= 0.14 * bias / trainRows.length;
     for (let i = 0; i < weights.length; i++) weights[i] -= 0.14 * (gradient[i] / trainRows.length + 0.002 * weights[i]);
   }
-  const confusion = { truePositive: 0, falsePositive: 0, trueNegative: 0, falseNegative: 0 };
-  for (const row of testRows) {
-    const predicted = sigmoid(intercept + weights.reduce((sum, w, i) => sum + w * row.x[i], 0)) >= 0.5;
-    confusion[predicted ? row.y ? 'truePositive' : 'falsePositive' : row.y ? 'falseNegative' : 'trueNegative']++;
-  }
+  // Evaluate the exact published weights and rounded/capped score used at runtime.
   const round = v => Number(v.toFixed(4));
+  const publishedIntercept = round(intercept), publishedWeights = weights.map(round);
+  const metrics = evaluate(testRows, publishedIntercept, publishedWeights, { type: 'rounded_model_score', threshold: 65 });
+  const probabilityDiagnostics = evaluate(testRows, publishedIntercept, publishedWeights, { type: 'probability', threshold: 0.5 });
   const model = {
     version: `logistic-v1-${createHash('sha256').update(source).digest('hex').slice(0, 12)}`,
-    algorithm: 'Regularized logistic regression', features: FEATURE_NAMES, intercept: round(intercept), weights: weights.map(round),
-    training: { dataset: path.basename(filename), synthetic: path.resolve(filename) === defaultData, datasetSha256: createHash('sha256').update(source).digest('hex'), rows: observations.length, trainRows: trainRows.length, testRows: testRows.length, seed: 98245, epochs: 1800 },
-    metrics: { accuracy: round((confusion.truePositive + confusion.trueNegative) / testRows.length), precision: round(confusion.truePositive / Math.max(1, confusion.truePositive + confusion.falsePositive)), recall: round(confusion.truePositive / Math.max(1, confusion.truePositive + confusion.falseNegative)), ...confusion },
+    algorithm: 'Regularized logistic regression', features: FEATURE_NAMES, intercept: publishedIntercept, weights: publishedWeights,
+    training: { dataset: path.basename(filename), synthetic: path.resolve(filename) === defaultData, datasetSha256: createHash('sha256').update(source).digest('hex'), rows: observations.length, trainRows: trainRows.length, testRows: testRows.length, seed: 98245, epochs: 1800, split: 'Deterministic shuffled 80/20 holdout of synthetic observations; not a temporal or customer-separated production validation.' },
+    evaluation: { scoreFormula: 'min(94, round(sigmoid(logit) * 100))', reviewScoreThreshold: 65, publishedRoundedWeights: true, scope: 'Model-only review classification on the held-out synthetic split; configurable Node banking rules are evaluated separately.' },
+    metrics,
+    diagnostics: { probabilityThreshold0_5: probabilityDiagnostics },
     policy: 'Model scores flag transactions for human review. Only explicit financial-control rules automatically block a transaction.',
   };
-  fs.writeFileSync(path.join(ROOT, 'services', 'fraud', 'model.json'), JSON.stringify(model, null, 2) + '\n');
+  const artifact = JSON.stringify(model, null, 2) + '\n';
+  fs.writeFileSync(path.join(ROOT, 'services', 'fraud', 'model.json'), artifact);
+  // Updating a model and its approval checksum is an explicit offline operator action.
+  fs.writeFileSync(path.join(ROOT, 'fraud_service', 'model.sha256'), createHash('sha256').update(artifact).digest('hex') + '\n');
   console.log(JSON.stringify({ version: model.version, training: model.training, metrics: model.metrics }, null, 2));
   return model;
 }
@@ -91,4 +114,4 @@ if (require.main === module) {
     train(path.resolve(file));
   } catch (error) { console.error(error.message); process.exitCode = 1; }
 }
-module.exports = { train, generateDataset };
+module.exports = { train, generateDataset, evaluate };

@@ -1,0 +1,38 @@
+'use strict';
+const test=require('node:test');
+const assert=require('node:assert/strict');
+const {randomBytes}=require('node:crypto');
+const {fixture}=require('./dft-helpers');
+const {launchChrome}=require('./chrome');
+const {codeForCounter,PERIOD_MS}=require('../banking/totp');
+const exists=selector=>`!!document.querySelector(${JSON.stringify(selector)})`;
+const submit=(page,id)=>page.click(`${id} button[type=submit]`);
+const heading=(page,title)=>page.waitFor(`document.querySelector('#modal[open] h2')?.textContent===${JSON.stringify(title)}`,title);
+
+test('DFT browser password, authenticator, recovery and all-device revocation flows preserve privacy',async t=>{
+  let clock=Date.now();
+  const f=await fixture(t,{now:()=>clock,authEncryptionKey:randomBytes(32).toString('hex')}),page=await launchChrome(t,{});
+  const login=async(password,code)=>{await page.fill('#email','alex@greenlink.demo');await page.fill('#password',password);if(code){await page.evaluate("document.querySelector('#auth-factor-details').open=true");await page.fill('#auth-recovery',code);}await submit(page,'#auth-form');};
+  await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await login('Greenlink123!');await page.waitFor(exists('.balance-card'));
+  await page.click('[data-action=profile]');await heading(page,'Your profile and security');
+  await page.click('[data-action=security-password]');await page.fill('#security-current-password','Greenlink123!');await page.fill('#security-new-password','UpdatedPass456!');await page.fill('#security-confirm-password','UpdatedPass456!');
+  await submit(page,'#security-password-form');await heading(page,'Your profile and security');
+  await page.click('[data-action=security-mfa-setup]');await page.fill('#security-setup-password','UpdatedPass456!');await submit(page,'#security-mfa-setup-form');await heading(page,'Connect your authenticator');
+  const secret=await page.evaluate("document.querySelector('#authenticator-secret').value");assert.match(secret,/^[A-Z2-7]{32}$/);
+  const code=()=>codeForCounter(secret,Math.floor(clock/PERIOD_MS));
+  await page.fill('#security-otp',code());await submit(page,'#security-mfa-confirm-form');await heading(page,'Save your recovery codes');
+  const recovery=(await page.evaluate("document.querySelector('#mfa-recovery-codes').value")).split('\n');assert.equal(recovery.length,10);
+  await page.click('#modal .modal-actions [data-action=close-dialog]');await page.waitFor('!document.querySelector("#modal").open');
+  assert.equal(await page.evaluate('document.querySelector("#modal").textContent.length===0'),true, 'Enrollment and recovery secrets clear when the dialog closes.');
+  await page.click('[data-action=logout]');await page.waitFor(exists('#auth-form'));await login('UpdatedPass456!');
+  await page.waitFor("document.querySelector('#auth-factor-details').open && document.querySelector('#auth-error').textContent.length>0",'MFA challenge');
+  clock+=PERIOD_MS;await page.fill('#auth-otp',code());await submit(page,'#auth-form');await page.waitFor(exists('.balance-card'));
+  await page.click('[data-action=logout]');await page.waitFor(exists('#auth-form'));await login('UpdatedPass456!',recovery[0]);await page.waitFor(exists('.balance-card'));
+  await page.click('[data-action=profile]');await heading(page,'Your profile and security');await page.click('[data-action=security-mfa-disable]');
+  clock+=PERIOD_MS;await page.fill('#security-disable-password','UpdatedPass456!');await page.fill('#security-otp',code());await submit(page,'#security-mfa-disable-form');await heading(page,'Your profile and security');
+  assert.equal(await page.evaluate('!!document.querySelector("[data-action=security-mfa-setup]")'),true);
+  await page.click('[data-action=security-revoke]');await page.fill('#security-revoke-password','UpdatedPass456!');await submit(page,'#security-revoke-form');await page.waitFor(exists('#auth-form'),'all sessions revoked');
+  await page.navigate(f.baseUrl+'/dashboard');await page.waitFor(exists('#auth-form'));await login('UpdatedPass456!');await page.waitFor(exists('.balance-card'));
+  const exceptions=page.events.filter(event=>event.method==='Runtime.exceptionThrown');assert.deepEqual(exceptions,[]);
+  const requests=page.events.filter(event=>event.method==='Network.requestWillBeSent').map(event=>event.params.request.url).filter(url=>/^https?:/.test(url));assert.ok(requests.every(url=>new URL(url).hostname==='127.0.0.1'));
+});

@@ -1,23 +1,32 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "1.1.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Greenlink Digital Bank with a private assistant, explainable fraud scoring and containerized banking services.",
+  "description": "DFT banking application with Express, PostgreSQL, a private assistant and Python FastAPI fraud scoring.",
   "main": "app.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env scripts/start-platform.js",
     "start:banking": "node --env-file-if-exists=.env app.js",
     "dev": "node --env-file-if-exists=.env scripts/start-platform.js",
     "setup": "node scripts/setup.js",
-    "test": "node --test tests/*.test.js",
-    "test:browser": "node tests/browser.e2e.js",
+    "test": "node --test tests/dft-*.test.js",
+    "test:browser": "node --test tests/browser.e2e.js tests/dft-security-browser.js",
     "train:fraud": "node scripts/train-fraud.js",
     "package": "node scripts/package.js",
     "package:verify": "node scripts/verify-package.js",
-    "admin:grant": "node --env-file-if-exists=.env scripts/manage-admin.js"
+    "admin:grant": "node --env-file-if-exists=.env scripts/manage-admin.js",
+    "db:migrate": "node --env-file-if-exists=.env database/migrate.js",
+    "db:seed": "node --env-file-if-exists=.env scripts/seed-demo.js",
+    "db:import-sqlite": "node --env-file-if-exists=.env scripts/import-sqlite.js",
+    "start:fraud": "python -m uvicorn main:app --host 127.0.0.1 --port 4011",
+    "test:python": "python -m unittest discover -s tests_python -v"
   },
   "engines": {
     "node": ">=22.13.0"
   },
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "express": "5.3.0",
+    "pg": "8.23.1"
+  }
 }

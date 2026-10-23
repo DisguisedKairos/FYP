@@ -1,17 +1,31 @@
-# Installation, release and upgrades
+# Local installation and migration
 
-Install Node.js 22.13 or later. Extract a verified release ZIP into a new directory, open a terminal there and run `npm start`. Visit `http://localhost:3000`. The five services start together and stop with Ctrl+C. No `npm install` is required. Registration, demo credentials and workflow details are in the [README](../README.md).
+Required: Node.js 22.13+, PostgreSQL 16+ and Python 3.11+ with a virtual environment. The application uses Express and `pg`; run `npm ci`. Create `.venv` and install `requirements.txt` using its interpreter. The local launcher discovers `.venv`, or accepts `PYTHON` as an executable path.
 
-For Docker, run `npm run setup` followed by `docker compose up --build`. Persistent named volumes hold the three separate stores. `docker compose down` retains them. The default published port is loopback only. [Cloud instructions](../cloud/README.md) describe the optional TLS reverse proxy and AWS host; provisioning is an operator task.
+Run `npm run setup` once. It preserves existing configuration and generates missing private service/encryption keys. Edit `.env` with a PostgreSQL `DATABASE_URL`; do not place real values in `.env.example`. `PUBLIC_ORIGIN` is the exact browser origin, including scheme and port. An HTTPS origin enables Secure cookies. Local HTTP uses ordinary HttpOnly/SameSite cookies. Direct use does not require proxy trust.
 
-Configuration is loaded from the ignored `.env`. `DATA_DIR` selects native SQLite storage, default `./data`; `PORT` selects the gateway port and `INTERNAL_BASE_PORT` selects four consecutive private ports. `SERVICE_TOKEN` is generated per native run when omitted and persisted by `npm run setup` for Compose. `SEED_DEMO=false` prevents demo identities on a fresh database. `PUBLIC_ORIGIN`, when set, must be your exact HTTPS origin and enables Secure session cookies. Do not set it for plain HTTP localhost development.
+Run `npm run db:migrate`, optionally `npm run db:seed`, then `npm start`. There is no SQLite runtime fallback. Startup requires the configured PostgreSQL server, usable secrets and a healthy authenticated Python scorer. The scorer binds to loopback by default. Scheduled payments and outbox delivery run inside the banking process with persistent PostgreSQL leases and records. An external email/SMS sender is not included; notifications are in-app.
 
-An empty installation starts with zero-balance customer accounts. Demo funding exists only with demo seeding; this application has no external deposit or real biller settlement integration. The local `admin:grant` command grants an existing registered account administrator access without setting or revealing a password. Grant a separate reviewer account for maker-checker testing.
+## Migration from the previous SQLite application
 
-Build from a clean source checkout with `npm run package`. Verify the resulting ZIP and companion checksum using `npm run package:verify -- releases/greenlink-digital-bank-1.1.0.zip`. Review its `PACKAGE-MANIFEST.json` for source commit and per-file hashes. The checksum detects corruption; it is not a publisher signature. CI also builds and verifies the release archive.
+Stop the previous application before importing its store. Leave the source and its WAL/SHM files together so SQLite can read a consistent view. Select an empty PostgreSQL database in `.env`, run migrations, then:
 
-Before an upgrade, stop all five services and take a consistent backup of all three database directories/volumes. Copy an extracted release into a separate application directory and retain `.env` and data outside the application tree. Point `DATA_DIR` at the existing native directory. Schema migrations are additive and tested against legacy demo data. Keep the matching previous application and database backup for rollback; do not run two application versions against the same ledger simultaneously.
+```sh
+npm run db:import-sqlite -- --source data/banking.sqlite --confirm-empty-target
+```
 
-Existing Evergreen Docker installations used Compose project `evergreen`. Continue with `docker compose -p evergreen up --build` to attach the same named volumes after the Greenlink rebrand. The new default project name `greenlink` creates different volumes. Native installations keep the same `data/` path. Known seeded demo emails migrate to `@greenlink.demo`; balances, IDs, ledger history and custom passwords are retained. The old session-cookie name remains an internal compatibility detail. Arbitrary registered customer identities are not renamed.
+Optional `--with-adjacent-stores` imports compatible notification and historical fraud information found beside the source. Historical model responses are archives, never current reusable authorization assessments. The importer opens SQLite read-only, validates all records before commit, and preserves IDs, balances, password hashes and valid historical requests. It records an explicit verified opening balance; it rejects a negative baseline, invalid money chronology or unexplained drift. All writes are one PostgreSQL transaction. An unrelated populated target is refused. Repeating the same completed import is a no-op. Sessions are intentionally discarded and users sign in again.
 
-Database backups must be taken with services stopped or a SQLite-aware backup procedure, including any WAL content. Store backups securely and practice restoring them into an isolated directory. The cloud template is a single-host demonstration deployment: high availability, disaster recovery automation, real payment rails and real-world model validation require further work.
+Do not run demo seeding before an import. Imported identities, passwords and roles are preserved; demo credentials are available only in a separately seeded empty database. The sign-in page advertises the sample login only when its original seeded identity is available. If the imported database has no administrator, use the explicit local operator command below for the intended existing user. Never substitute a customer database for test fixtures. The old store remains available as reference; the new application accesses only PostgreSQL.
+
+## Administration and secrets
+
+Registration always creates `customer`. Grant an existing user's administrator role locally with `npm run admin:grant -- --email registered@example.com`. Role changes invalidate sessions and create an audit event. Do not expose this script through a customer API.
+
+`SERVICE_TOKEN` protects private scoring calls; both processes receive the same value. `AUTH_ENCRYPTION_KEY` is 64 hexadecimal characters and encrypts authenticator secrets with AES-256-GCM and a user binding. Keep it stable and privately recoverable; changing or losing it prevents verification of existing authenticator codes. Never commit `.env`, test credentials, raw tokens, recovery codes or database files. The release builder excludes them.
+
+DIT handles deployment credentials, network access, certificates and cloud database operations. Application integration needs `DATABASE_URL`, the scoring address/token, stable encryption key, exact public origin and narrowly trusted proxy addresses. An arbitrary client-supplied `X-Forwarded-For` does not become authoritative by default.
+
+## Testing
+
+Set `TEST_DATABASE_URL` to a separate database. The tests use unique `dft_...` schemas with local search paths, run migrations, and drop only their own schema after verification. `npm test` does not implicitly read `.env`; invoke `node --env-file=.env --test tests/dft-*.test.js` or export the variable in your shell. Python tests need `tests_python/requirements.txt` installed. Browser tests similarly need the variable plus an installed Chrome/Edge. Screenshots, downloads and test logs go to ignored `test-results/`.
