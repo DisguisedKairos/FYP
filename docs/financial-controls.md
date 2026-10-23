@@ -2,6 +2,8 @@
 
 ## Money and transaction lifecycle
 
+The legal customer is a registered business, linked to its accounts through `business_id`. The primary contact's user ID is an authorization boundary, not the legal account-holder name. New businesses require bank onboarding approval before account changes, sending or receiving money. Independent review, fresh authorization, optimistic versions and a verification confirmation protect onboarding decisions. Pending legacy business profiles also pause standing payment occurrences until approval, without consuming screening retries or advancing the occurrence. Company-level multi-signatory mandates are outside this iteration.
+
 Supported amounts are positive decimal strings with at most two places, converted exactly to integer cents. Scientific notation, floating-point overflow, zero and negative instructions are rejected. PostgreSQL constraints bound balances and ledger entries. Transfers debit the owned active source and credit a distinct active registered destination atomically. Bills debit the source and retain a supported biller and billing reference; live settlement rails are outside this demonstration.
 
 Each financial submission requires a customer-scoped `requestId` and the current password. The key is permanently bound to canonical operation type, source account and payload before screening. Retrying an identical request returns its receipt; changing the payload under the same key returns 409. Account locks prevent parallel overspending. A database failure rolls back balances, both transfer entries, the receipt and outbox together.

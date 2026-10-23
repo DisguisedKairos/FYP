@@ -2,6 +2,7 @@
 
 const { HttpError } = require('../models/errors');
 const { accountView, transactionView, accountId, cents } = require('./ledger');
+const businesses = require('./business');
 const DAY_MS = 86400000;
 const LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const ROWS = 'SELECT t.*,a.name AS account_name,a.number AS account_number FROM transactions t JOIN accounts a ON a.id=t.account_id';
@@ -132,7 +133,7 @@ async function statement(db, user, params, now = Date.now) {
     }
     if (!added) addOpening();
     if (running !== closingBalanceCents) throw corrupt();
-    return { account: accountView(account), user: publicUser(user), period: { from: range.from, to: range.to, timeZone: 'Asia/Singapore' },
+    return { account: accountView(account), business:await businesses.own(client,user), user: publicUser(user), period: { from: range.from, to: range.to, timeZone: 'Asia/Singapore' },
       openingBalanceCents, closingBalanceCents, baselineCents, adjustmentCents, openingProvenance: account.opening_provenance, transactions, generatedAt: generated.toISOString(), currency: 'SGD' };
   });
 }
@@ -157,7 +158,7 @@ async function dashboard(db, userId, { now = Date.now } = {}) {
     const sums = (await client.query(`SELECT COALESCE(SUM(t.amount_cents) FILTER(WHERE t.amount_cents>0),0) AS income,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0) AS outgoing
       ${JOIN} WHERE a.user_id=$1 AND t.status='completed' AND NOT t.internal AND t.completed_at>=$2::timestamptz AND t.completed_at<=$3::timestamptz`, [userId, since, generated.toISOString()])).rows[0];
     const billers = (await client.query('SELECT * FROM billers ORDER BY id')).rows;
-    return { accounts: accounts.filter(row => row.status === 'active').map(accountView), closedAccounts: accounts.filter(row => row.status === 'closed').map(accountView), transactions, billers,
+    return { business:await businesses.own(client,{id:userId}),accounts: accounts.filter(row => row.status === 'active').map(accountView), closedAccounts: accounts.filter(row => row.status === 'closed').map(accountView), transactions, billers,
       summary: { incomeCents: cents(sums.income), outgoingCents: cents(sums.outgoing) }, insights: await insights(client, userId, () => generated) };
   });
 }

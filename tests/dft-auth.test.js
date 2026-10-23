@@ -89,7 +89,7 @@ function browser(auth, ip = '198.51.100.20') {
     get cookie() { return cookie; },
     get csrfToken() { return csrfToken; },
     bootstrap: async () => capture(await auth.bootstrap(req(), res)),
-    register: async (email = 'alex@example.test', extra = {}) => capture(await auth.register(req(), res, { name: 'Alex Morgan', email, password: PASSWORD, confirmPassword: PASSWORD, ...extra })),
+    register: async (email = 'alex@example.test', extra = {}) => capture(await auth.register(req(), res, { name: 'Alex Morgan', email, password: PASSWORD, confirmPassword: PASSWORD, business:require('./dft-helpers').businessProfile('TEST'+require('node:crypto').createHash('sha256').update(email.toLowerCase()).digest('hex').slice(0,16)), ...extra })),
     login: async (email = 'alex@example.test', password = PASSWORD) => capture(await auth.login(req(), res, { email, password })),
     logout: async () => capture(await auth.logout(req(), res)),
     load: () => auth.load(req()),

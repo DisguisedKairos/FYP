@@ -39,15 +39,15 @@ function draftAmount(value) {
 
 function transferDraft(message, rows, db, user) {
   const match = message.match(/^(?:please\s+)?(?:transfer|send|move)\s+(?:(?:SGD|S\$|\$)\s*)?(\d+(?:,\d{3})*(?:\.\d{1,2})?)\s+(?:from\s+(.+?)\s+)?to\s+(.+?)(?:\s+(?:for|with\s+note)\s+(.+))?[.!]?$/i);
-  if (!match) return result('draft_transfer', 'Open the transfer form to choose your savings account, recipient and amount. Review the details and authorize with your password.', { actions: [navigate('transfers', 'Prepare transfer')], requiresAuthorization: true });
+  if (!match) return result('draft_transfer', 'Open the transfer form to choose your business savings account, recipient and amount. Review the details and authorize with your password.', { actions: [navigate('transfers', 'Prepare transfer')], requiresAuthorization: true });
   const cents = draftAmount(match[1]), source = ownedSource(rows, match[2]);
   if (!source || !cents) return result('draft_transfer', 'Choose one of your active savings accounts and a positive amount with up to two decimal places in the transfer form.', { actions: [navigate('transfers', 'Prepare transfer')], requiresAuthorization: true });
   const target = match[3].trim().replace(/^my\s+/i, '');
   const ownTarget = rows.find(row => row.name.toLowerCase() === target.toLowerCase() || row.number === target);
-  // Jamie is an explicitly published demo recipient, never a customer directory.
+  // Harbour Supplies is an explicitly published demo business, never a customer directory.
   // Only an owned seeded demo identity receives this demo convenience.
   const isDemo = user.email === 'alex@greenlink.demo' && rows.some(row => row.number === '1020001001' && row.opening_provenance === 'seed');
-  const demoTarget = /^(?:jamie|jamie lee)$/i.test(target) && isDemo ? '1020002001' : '';
+  const demoTarget = /^harbour supplies(?: pte\.? ltd\.?)?$/i.test(target) && isDemo ? '1020002001' : '';
   const number = ownTarget?.number || (/^\d{10}$/.test(target) ? target : demoTarget);
   if (!number) return result('draft_transfer', 'Please enter the recipient’s 10-digit account number in the transfer form. I cannot look up other customers by name.', { actions: [navigate('transfers', 'Choose recipient')], requiresAuthorization: true });
   if (number === source.number) return result('draft_transfer', 'Choose a different destination account in the transfer form.', { actions: [navigate('transfers', 'Prepare transfer')], requiresAuthorization: true });
@@ -95,9 +95,9 @@ async function answer(context) {
   // assistant cannot inspect another customer's account or transaction.
   const accountNumber = message.match(/\b\d{10}\b/)?.[0];
   const referencedAccount = accountNumber ? (await db.query('SELECT * FROM accounts WHERE user_id=$1 AND number=$2', [user.id, accountNumber])).rows[0] : null;
-  if (accountNumber && !referencedAccount) return result('privacy', 'I can show only your own signed-in accounts. Open your account dashboard to see your balances.', { actions: [navigate('accounts', 'Your accounts')] });
+  if (accountNumber && !referencedAccount) return result('privacy', 'I can show only accounts linked to your signed-in business. Open your account dashboard to see your balances.', { actions: [navigate('accounts', 'Your accounts')] });
   if (/\b(?:balance|accounts?|savings)\b/i.test(message) && !/\b(?:transaction|search|find|flag|risk)\b/i.test(message)) {
-    if (!referencedAccount && /(?:\b(?:their|his|her|someone|another|other customer)\b|\b\w+[’']s\s+(?:account|balance)|\bbalance\s+(?:of|for)\s+(?!my\b|me\b|account\b))/i.test(message)) return result('privacy', 'I can show only your own signed-in savings accounts.', { actions: [navigate('accounts', 'Your accounts')] });
+    if (!referencedAccount && /(?:\b(?:their|his|her|someone|another|other customer)\b|\b\w+[’']s\s+(?:account|balance)|\bbalance\s+(?:of|for)\s+(?!my\b|me\b|account\b))/i.test(message)) return result('privacy', 'I can show only accounts linked to your signed-in business.', { actions: [navigate('accounts', 'Your accounts')] });
     const selected = referencedAccount ? [referencedAccount] : rows;
     return result(/balance/i.test(message) ? 'balance' : 'accounts', `Your available savings balance is ${formatMoney(selected.reduce((sum, row) => sum + Number(row.balance_cents), 0))}.`, { items: selected.map(accountItem), actions: [navigate('accounts', 'Manage savings accounts')] });
   }
@@ -127,7 +127,7 @@ async function answer(context) {
     const response = await history.list(db, user, params);
     return result('transactions', response.pagination.total ? `Showing ${response.transactions.length} of ${response.pagination.total} matching transactions from your accounts.` : 'No matching transactions were found in your accounts.', { items: response.transactions.map(transactionItem), actions: [navigate('activity', 'View transaction history', search ? { q: search } : undefined)] });
   }
-  return result('help', 'I can show your savings balances, search activity, explain a flagged transaction, list schedules and notifications, or prepare a transfer or bill payment draft. Try “Transfer SGD 25 to 1020002001” or “Pay SGD 86.42 to SP Services reference SP-12345”. Payment drafts always require your review and password.', { actions: [navigate('overview', 'Open dashboard')] });
+  return result('help', 'I can show your business savings balances, search activity, explain a flagged transaction, list schedules and notifications, or prepare a transfer or bill payment draft. Try “Transfer SGD 25 to 1020002001” or “Pay SGD 86.42 to SP Services reference SP-12345”. Payment drafts always require your review and password.', { actions: [navigate('overview', 'Open dashboard')] });
 }
 
 module.exports = { answer, SENSITIVE };

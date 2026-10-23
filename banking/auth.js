@@ -2,6 +2,7 @@
 
 const security = require('./security');
 const totp = require('./totp');
+const businesses = require('./business');
 const { HttpError } = security;
 
 const LIMIT_WINDOW_MS = 15 * 60 * 1000;
@@ -126,6 +127,7 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
     assertWrite(req, null, { csrf: false });
     objectBody(body);
     const name = security.fullName(body.name), email = security.emailAddress(body.email), value = security.password(body.password);
+    const businessProfile = businesses.normalize(body.business);
     if (body.confirmPassword !== undefined && body.confirmPassword !== value) throw new HttpError(400, 'The passwords do not match.');
     const ip = security.clientAddress(req), date = timestamp(now);
     await consumeLimits(db, buckets('register', ip), date);
@@ -134,17 +136,18 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
     try {
       result = await db.transaction(async client => {
         const user = (await client.query(`INSERT INTO users(name,email,password_hash,created_at) VALUES($1,$2,$3,$4) RETURNING id,name,email,role,auth_version`, [name, email, hash, date])).rows[0];
+        const business = await businesses.create(client,user,businessProfile,{now});
         let account;
         for (let attempt = 0; attempt < 10 && !account; attempt++) account = (await client.query(`INSERT INTO accounts(user_id,name,number,created_at)
-          VALUES($1,'Main savings',$2,$3) ON CONFLICT(number) DO NOTHING RETURNING *`, [user.id, security.accountNumber(), date])).rows[0];
+          VALUES($1,'Operating savings',$2,$3) ON CONFLICT(number) DO NOTHING RETURNING *`, [user.id, security.accountNumber(), date])).rows[0];
         if (!account) throw new Error('A unique savings account number could not be allocated.');
         user.mfaEnabled = false;
         const session = await insertSession(client, req, user, date);
         await audit(client, 'auth.registered', { userId: user.id, ip, now: date });
-        return { user, account, session };
+        return { user, account, session, business };
       });
-    } catch (error) { if (error.code === '23505') throw new HttpError(409, 'An account with this email already exists.'); throw error; }
-    return finish(res, result.session, result.user, { account: { id: String(result.account.id), name: result.account.name, number: result.account.number, balanceCents: 0, status: result.account.status, createdAt: timestamp(result.account.created_at).toISOString() } });
+    } catch (error) { if (error.code === '23505') throw new HttpError(409, 'An application with this email or business registration number already exists.'); throw error; }
+    return finish(res, result.session, result.user, { business: result.business, account: { id: String(result.account.id), name: result.account.name, number: result.account.number, balanceCents: 0, status: result.account.status, productType: 'business_savings', businessId: result.business.id, createdAt: timestamp(result.account.created_at).toISOString() } });
   }
 
   async function login(req, res, body) {

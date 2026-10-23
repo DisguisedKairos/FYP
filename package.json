@@ -1,8 +1,8 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
-  "description": "DFT banking application with Express, PostgreSQL, a private assistant and Python FastAPI fraud scoring.",
+  "description": "Digital wholesale banking for registered businesses with Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env scripts/start-platform.js",
@@ -15,6 +15,7 @@
     "package": "node scripts/package.js",
     "package:verify": "node scripts/verify-package.js",
     "admin:grant": "node --env-file-if-exists=.env scripts/manage-admin.js",
+    "admin:create": "node --env-file-if-exists=.env scripts/create-staff.js",
     "db:migrate": "node --env-file-if-exists=.env database/migrate.js",
     "db:seed": "node --env-file-if-exists=.env scripts/seed-demo.js",
     "db:import-sqlite": "node --env-file-if-exists=.env scripts/import-sqlite.js",

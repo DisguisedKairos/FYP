@@ -5,7 +5,7 @@ const { readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { createFixture, accountNamed, totalBalance } = require('./dft-helpers');
 const { launchChrome } = require('./chrome');
 
-const routes = { overview:'/dashboard', accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules', assistant:'/assistant' };
+const routes = { overview:'/dashboard',business:'/business',onboarding:'/business-onboarding', accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules', assistant:'/assistant' };
 const snapshot = page => page.evaluate("fetch('/api/dashboard').then(response => response.json())");
 const text = (page, selector) => page.evaluate(`document.querySelector(${JSON.stringify(selector)})?.textContent`);
 const exists = selector => `!!document.querySelector(${JSON.stringify(selector)})`;
@@ -64,10 +64,24 @@ async function ask(page, message) {
   return text(page, '#assistant-thread .from-assistant:last-child');
 }
 
+test('wholesale bank staff use an operations workspace without consumer or company deposit navigation',async t=>{
+  await bankingPage(t,'bank-operations',{width:390,height:844,mobile:true},async(page,fixture)=>{
+    await require('../scripts/create-staff').createStaff({db:fixture.db,email:'staff@bank.example.test',name:'Bank Operations',password:'Greenlink123!'});
+    await page.fill('#email','staff@bank.example.test');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');
+    await page.waitFor(exists('[data-bank-operations]'),'bank staff workspace');
+    assert.equal(await page.evaluate('!!document.querySelector(".nav-items [data-nav=accounts],.nav-items [data-nav=payments],.balance-card")'),false);
+    await layout(page,'wholesale staff mobile workspace');
+    await page.click('[data-bank-operations] [data-nav=onboarding]');await page.waitFor('location.pathname==="/business-onboarding" && document.body.textContent.includes("No applications awaiting review")','bank staff application queue');
+    await layout(page,'wholesale staff mobile onboarding queue');await page.screenshot(resolve('test-results','wholesale-bank-operations-mobile.png'));
+  });
+});
+
 test('desktop registration, savings management, authorized money movement and activity exports work together', async (t) => {
   await bankingPage(t, 'desktop', {}, async (page, fixture, downloads) => {
     await page.click('[data-action="auth-switch"]'); await page.waitFor(exists('#confirm-password'), 'registration confirmation field');
     await page.fill('#name', 'Browser Customer'); await page.fill('#email', 'browser-customer@example.com');
+    await page.fill('#business-legal-name','Browser Trading Pte. Ltd.');await page.fill('#business-registration-number','BROWSERCOMPANY001');
+    await page.fill('#business-industry','Wholesale trading');await page.fill('#business-registered-address','1 Browser Business Road, Singapore 000001');
     await page.fill('#password', 'Greenlink123!'); await page.fill('#confirm-password', 'Different123!'); await submit(page, '#auth-form');
     await page.waitFor('document.querySelector("#auth-error").textContent.includes("do not match")', 'password mismatch validation');
     await page.fill('#confirm-password', 'Greenlink123!'); await page.click('[data-input="password"]');
@@ -75,6 +89,14 @@ test('desktop registration, savings management, authorized money movement and ac
     await page.click('[data-input="password"]'); await submit(page, '#auth-form'); await page.waitFor(exists('.balance-card'), 'registered dashboard');
     assert.equal(totalBalance(await snapshot(page)), 0);
     assert.equal(await page.evaluate('!!document.querySelector("[data-nav=fraud], [data-nav=rules]")'), false);
+    assert.match(await text(page,'#main-content'),/Business onboarding awaiting bank review/);
+    await nav(page,'business');assert.match(await text(page,'#main-content'),/Browser Trading Pte\. Ltd\./);
+    await logout(page);await login(page,'reviewer@greenlink.demo');await nav(page,'onboarding');
+    await page.waitFor(exists('[data-review-business]'),'pending business review');await page.click('[data-review-business]');
+    await page.fill('#business-review-reason','Company registration and authorized contact verified for browser testing.');
+    await page.click('#business-verification-confirmed');await page.fill('#authorizationPassword','Greenlink123!');await submit(page,'#business-review-form');
+    await page.waitFor('!document.querySelector("#modal").open && !document.querySelector("[data-review-business]")','business onboarding approved');
+    await logout(page);await login(page,'browser-customer@example.com');
     await nav(page, 'accounts'); await page.click('[data-action="new-account"]'); await page.fill('#account-name', 'Browser goal'); await submit(page, '#account-form');
     await page.waitFor('document.querySelector("#main-content h1")?.textContent === "Browser goal"', 'new account details');
     await page.click('[data-action="rename-account"]'); await page.fill('#account-name', 'Browser travel'); await submit(page, '#account-form');
@@ -82,11 +104,11 @@ test('desktop registration, savings management, authorized money movement and ac
     await page.click('[data-action="close-account-review"]'); await submit(page, '#close-account-form'); await page.waitFor(exists('.closed-accounts'), 'closed account history');
     assert.equal((await snapshot(page)).accounts.length, 1);
     await logout(page); await login(page);
-    const before = await snapshot(page), main = accountNamed(before, 'Main savings'), rainy = accountNamed(before, 'Rainy day');
+    const before = await snapshot(page), main = accountNamed(before, 'Operating savings'), rainy = accountNamed(before, 'Liquidity reserve');
     await nav(page, 'assistant');
     assert.match(await ask(page, 'What is my balance?'), /30,050\.50/);
     const privateReply = await ask(page, 'What is the balance of account 1020002001?');
-    assert.match(privateReply, /only your own/i); assert.doesNotMatch(privateReply, /1,200\.00/);
+    assert.match(privateReply, /only accounts linked to your signed-in business/i); assert.doesNotMatch(privateReply, /1,200\.00/);
     await page.fill('#assistant-message', 'My password is Greenlink123!'); await submit(page, '#assistant-form');
     await page.waitFor('document.querySelector("#assistant-error").textContent.includes("keep passwords")', 'sensitive chat input redacted');
     assert.equal((await text(page, '#assistant-thread')).includes('Greenlink123!'), false);
@@ -110,7 +132,7 @@ test('desktop registration, savings management, authorized money movement and ac
     await nav(page, 'transfers'); await page.click('input[name="recipientType"][value="own"]');
     await page.select('#fromAccountId', main.id); await page.select('#toAccountNumber', rainy.number);
     await page.fill('#amount', '12.34'); await page.fill('#description', 'QA own transfer'); await submit(page, '#money-form');
-    await page.waitFor(exists('#confirm-money-form'), 'own transfer review'); assert.match(await text(page, '#modal'), /Rainy day/);
+    await page.waitFor(exists('#confirm-money-form'), 'own transfer review'); assert.match(await text(page, '#modal'), /Liquidity reserve/);
     await page.click('#modal [data-action="close-dialog"]'); assert.equal(await page.evaluate('document.querySelector("#amount").value'), '12.34');
     await submit(page, '#money-form'); await page.fill('#authorizationPassword', 'Incorrect123!'); await submit(page, '#confirm-money-form');
     await page.waitFor('document.querySelector("#confirm-money-form .error-message")?.textContent.includes("incorrect")', 'authorization error retains session');

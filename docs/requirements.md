@@ -2,9 +2,11 @@
 
 | Requirement | Active implementation | Evidence |
 | --- | --- | --- |
+| Wholesale business eligibility and legal ownership | Registered business profiles, company-account foreign keys and operator binding | `dft-business.test.js` |
+| Bank onboarding review | Pending/approved/rejected lifecycle, independent staff review and financial restrictions | Business security tests and registration browser flow |
 | Register/login/logout and password security | Express routes, scrypt, hashed tokens, durable throttles | `dft-auth.test.js`, `dft-http.test.js` |
 | Authorization and customer isolation | Server roles, owned queries, password reauthorization, CSRF/origin | Auth, ledger, HTTP and browser tests |
-| Savings management and balance enquiry | Create/rename/close safeguards, PostgreSQL dashboard | HTTP and browser tests |
+| Business savings management and balance enquiry | Approved business accounts, create/rename/close safeguards and company dashboard | HTTP and browser tests |
 | Internal transfers and bill payments | Integer cents, account locks, atomic ledger and mandatory request keys | `dft-ledger.test.js`, HTTP/browser |
 | Scheduled payments | Once/weekly/monthly, occurrence leases, retries and cancellation recovery | `dft-workflows.test.js`, mobile browser |
 | History, search and statements | Bound filters, pagination, safe CSV, explicit reconciled baseline | HTTP and browser export checks |
@@ -24,4 +26,4 @@ Tests against PostgreSQL require `TEST_DATABASE_URL`; skipped cases are not acce
 
 DFT owns banking workflows, financial controls, authentication, roles, fraud guardrails, SQL injection prevention, functional/security tests and application audit records. DIT owns containerisation, CI/CD, cloud provisioning, TLS/network configuration and cloud database operations/backups. Secrets are shared: DFT excludes them from source and protects application use; the delivery team injects and operates private values.
 
-The project uses simulated funds and configured demonstration billers, with no live banking/biller integration. Email verification, forgotten-password delivery, external notification delivery, real customer identity/KYC, production model validation and operational support workflows remain future scope. Optional TOTP does not by itself establish regulatory compliance or production readiness.
+The project serves registered businesses and institutions through one authorized primary operator per business. Consumer accounts are not offered. Multi-user company permissions and corporate signing mandates are future scope. Funds, business checks and billers are simulated; official KYB/registry, beneficial ownership, sanctions screening, live settlement, email/SMS and production corporate-model validation are not implemented. See `wholesale-banking.md` for the precise boundary.

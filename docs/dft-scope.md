@@ -2,6 +2,8 @@
 
 The DFT application covers customer banking workflows, authorization, financial controls, transaction history, statements, and fraud-review decisions. Express handles HTTP, PostgreSQL owns the persistent banking records and transaction boundary, and the Python scoring endpoint is a private assessment dependency. Cloud provisioning, container deployment, infrastructure management, and release delivery are outside the active DFT implementation.
 
+Greenlink is a digital wholesale banking project. Customer access represents a registered business and its authorized primary operator. Business identity, independent bank onboarding approval, company ownership checks, restricted pending applications and a separate staff workspace are described in `wholesale-banking.md`; they are exercised in `tests/dft-business.test.js` and the browser flows. Internal `customer` role values do not imply consumer accounts.
+
 ## Authentication and security
 
 `banking/security.js` provides password validation, salted scrypt hashing and verification, opaque tokens, cookie handling, exact-origin checks, and CSRF validation. Authentication uses the pure password verifier and accepts no legacy demo-password alias. New passwords contain 8–128 characters with uppercase, lowercase and a digit, without silent trimming. Existing password hashes remain valid at login. Registration ignores client-supplied roles and creates a customer with one zero-balance savings account.

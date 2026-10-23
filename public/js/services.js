@@ -45,6 +45,7 @@ export async function loadNotifications({ renderPage = false } = {}) {
   }
 }
 export async function loadExtras(page, { force = false } = {}) {
+  if(page==='onboarding')return ui.loadBusinessApplications?.();
   if (!state.user || state.signingOut) return;
   if (page !== 'notifications') loadNotifications();
   if (page === 'notifications') return loadNotifications({ renderPage: true });

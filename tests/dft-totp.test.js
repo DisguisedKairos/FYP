@@ -79,7 +79,7 @@ function browser(auth, ip = '198.51.100.20') {
   const capture = result => { if (result.csrfToken) csrfToken = result.csrfToken; return result; };
   return {
     req, res, headers, load: () => auth.load(req()),
-    register: async () => capture(await auth.register(req(), res, { name: 'Alex Morgan', email: 'alex@example.test', password: PASSWORD })),
+    register: async () => capture(await auth.register(req(), res, { name: 'Alex Morgan', email: 'alex@example.test', password: PASSWORD, business:require('./dft-helpers').businessProfile('TESTTOTP001') })),
     login: async extra => capture(await auth.login(req(), res, { email: 'alex@example.test', password: PASSWORD, ...extra })),
     setup: body => auth.mfaSetup(req(), res, body || { currentPassword: PASSWORD }),
     confirm: async otp => capture(await auth.mfaConfirm(req(), res, { otp })),

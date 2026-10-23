@@ -26,8 +26,9 @@ async function setup(t, { modelScore = 5, assessModel } = {}) {
   const { db } = await require('./dft-helpers').fixture(t, { http: false, seed: false });
   const makeUser = async (name, role) => (await db.query('INSERT INTO users(name,email,password_hash,role) VALUES($1,$2,$3,$4) RETURNING *', [name, `${randomUUID()}@ledger.example.test`, 'test-only-unused', role])).rows[0];
   const owner = await makeUser('Ledger Maker', 'admin'), recipient = await makeUser('Ledger Recipient', 'customer'), reviewer = await makeUser('Independent Reviewer', 'admin');
+  for(const user of [owner,recipient,reviewer])await require('./dft-helpers').approveBusiness(db,user);
   const makeAccount = async (user, name, number, balance) => (await db.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_balance_cents,opening_provenance,created_at) VALUES($1,$2,$3,$4,$4,'seed','2026-01-01T00:00:00Z') RETURNING *", [user.id, name, number, balance])).rows[0];
-  const source = await makeAccount(owner, 'Main savings', '9200000001', 1000000), reserve = await makeAccount(owner, 'Reserve savings', '9200000002', 500000), target = await makeAccount(recipient, 'Recipient savings', '9200000003', 500000);
+  const source = await makeAccount(owner, 'Operating savings', '9200000001', 1000000), reserve = await makeAccount(owner, 'Reserve savings', '9200000002', 500000), target = await makeAccount(recipient, 'Recipient savings', '9200000003', 500000);
   const riskClient = createRiskClient({ db, assessModel: assessModel || (async input => modelResult(input, modelScore)) });
   const options = { riskClient, authorize: authorized, now: () => Date.parse(NOW) };
   const body = changes => ({ fromAccountId: String(source.id), toAccountNumber: target.number, amount: '25.00', description: 'Integration transfer', requestId: randomUUID(), authorizationPassword: 'unused-test-stub', ...changes });

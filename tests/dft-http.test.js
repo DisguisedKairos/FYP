@@ -34,7 +34,7 @@ pgTest('DFT Express enforces authentication, CSRF, exact origins, role and recor
 
 pgTest('DFT Express savings lifecycle, transfer idempotency and bill payment use authoritative PostgreSQL records',async t=>{
   const f=await fixture(t),client=f.client();await client.login();
-  const before=await client.dashboard(),main=accountNamed(before,'Main savings');
+  const before=await client.dashboard(),main=accountNamed(before,'Operating savings');
   const created=await client.request('/api/accounts',{method:'POST',body:{name:'HTTP goal'}});assert.equal(created.status,201);assert.equal(created.data.account.balanceCents,0);
   const id=created.data.account.id;
   assert.equal((await client.request(`/api/accounts/${id}`,{method:'PATCH',body:{name:'HTTP renamed'}})).data.account.name,'HTTP renamed');
@@ -52,7 +52,7 @@ pgTest('DFT Express savings lifecycle, transfer idempotency and bill payment use
 });
 
 pgTest('DFT search escapes SQL and LIKE metacharacters, validates filters and exports safe reconciled statements',async t=>{
-  const f=await fixture(t),client=f.client();await client.login();const data=await client.dashboard(),main=accountNamed(data,'Main savings');
+  const f=await fixture(t),client=f.client();await client.login();const data=await client.dashboard(),main=accountNamed(data,'Operating savings');
   const note="=SUM(1+1) 100%_literal ' OR 1=1 --";
   const paid=await client.request('/api/transfers',{method:'POST',body:transfer(main,{description:note})});assert.equal(paid.status,200,JSON.stringify(paid.data));
   const found=await client.history({q:note});assert.equal(found.pagination.total,1);
@@ -61,7 +61,7 @@ pgTest('DFT search escapes SQL and LIKE metacharacters, validates filters and ex
   for(const query of ['page=0','pageSize=101','from=2026-02-30','status=anything','q=a&q=b'])assert.equal((await client.request('/api/transactions?'+query)).status,400,query);
   const result=await client.request('/api/statements?'+new URLSearchParams({accountId:main.id,from:'2020-01-01',to:'2099-01-01'}));
   assert.equal(result.status,200,JSON.stringify(result.data));const statement=result.data.statement;
-  assert.equal(statement.closingBalanceCents,accountNamed(await client.dashboard(),'Main savings').balanceCents);
+  assert.equal(statement.closingBalanceCents,accountNamed(await client.dashboard(),'Operating savings').balanceCents);
   assert.equal(statement.transactions.at(-1).runningBalanceCents,statement.closingBalanceCents);
   await f.db.query('UPDATE accounts SET balance_cents=balance_cents+1 WHERE id=$1',[main.id]);
   const corrupt=await client.request('/api/statements?'+new URLSearchParams({accountId:main.id,from:'2020-01-01',to:'2099-01-01'}));
@@ -109,7 +109,7 @@ pgTest('DFT password changes invalidate a payment authorization while Python scr
   let announce,release;
   const entered=new Promise(resolve=>{announce=resolve;}),waiting=new Promise(resolve=>{release=resolve;});
   const f=await fixture(t,{assessModel:async input=>{announce();await waiting;return modelStub()(input);}}),client=f.client();
-  t.after(()=>release());await client.login();const before=await client.dashboard(),main=accountNamed(before,'Main savings');
+  t.after(()=>release());await client.login();const before=await client.dashboard(),main=accountNamed(before,'Operating savings');
   const pending=client.request('/api/transfers',{method:'POST',body:transfer(main)});
   await Promise.race([entered,pending.then(result=>{throw new Error(`Payment ended before screening with status ${result.status}.`);})]);
   try {

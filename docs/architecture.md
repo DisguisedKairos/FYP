@@ -2,6 +2,8 @@
 
 The active application has an Express banking API, a Python FastAPI scoring process, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. No separate gateway, container orchestrator or deployment pipeline is part of this DFT release.
 
+This is a digital wholesale banking project. `businesses` stores the legal customer; `users` stores authorized operators and bank staff. `accounts.business_id` links the legal owner while `user_id` retains the primary operator authorization boundary. A database trigger enforces that binding. Migration 005 adds this model without rewriting existing customer names, passwords, balances or history. No business identity is fabricated for a legacy user. New applications require independent bank review before account changes or funds movement.
+
 ```mermaid
 flowchart LR
   Browser[Browser application] --> Express[Express banking API]

@@ -5,13 +5,15 @@ export const mobileQuery = matchMedia('(max-width: 760px)');
 export const ui = {};
 export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
+  business: { path: '/business', label: 'Business profile', icon: 'wallet' },
   assistant: { path: '/assistant', label: 'Greenlink Assistant', icon: 'chat' },
-  accounts: { path: '/accounts', label: 'My accounts', icon: 'wallet' },
+  accounts: { path: '/accounts', label: 'Business accounts', icon: 'wallet' },
   transfers: { path: '/transfers', label: 'Transfers', icon: 'transfer' },
-  payments: { path: '/payments', label: 'Bill payments', icon: 'bill' },
+  payments: { path: '/payments', label: 'Business bills', icon: 'bill' },
   schedules: { path: '/scheduled-payments', label: 'Scheduled payments', icon: 'calendar' },
   activity: { path: '/activity', label: 'Activity', icon: 'activity' },
   notifications: { path: '/notifications', label: 'Notifications', icon: 'bell' },
+  onboarding: { path: '/business-onboarding', label: 'Business onboarding', icon: 'shield', admin: true },
   fraud: { path: '/fraud-monitoring', label: 'Fraud monitoring', icon: 'shield', admin: true },
   rules: { path: '/fraud-rules', label: 'Fraud rules', icon: 'sliders', admin: true },
 };
@@ -178,7 +180,7 @@ export function navigate(page, { account = '', replace = false, focus = true } =
   ui.loadExtras?.(page);
   scrollTo({ top: 0, behavior: 'instant' });
 }
-export function statusLabel(status) { return ({ completed: 'Completed', pending_review: 'Awaiting review', rejected: 'Rejected', blocked: 'Blocked', scheduled: 'Scheduled', active: 'Active', cancelled: 'Cancelled', failed: 'Failed', processing: 'Processing' })[status] || String(status || 'Unknown'); }
+export function statusLabel(status) { return ({ completed: 'Completed', pending_review: 'Awaiting review', rejected: 'Rejected', blocked: 'Blocked', scheduled: 'Scheduled', active: 'Active', cancelled: 'Cancelled', failed: 'Failed', processing: 'Processing', awaiting_business_approval:'Awaiting business approval', approved:'Approved', retrying:'Retrying' })[status] || String(status || 'Unknown'); }
 export function statusPill(status) { return `<span class="status-pill status-${esc(status)}">${esc(statusLabel(status))}</span>`; }
 export function accountOptions(selected = '') { return state.data.accounts.map(a => `<option value="${esc(a.id)}" ${sameId(a.id, selected) ? 'selected' : ''}>${esc(a.name)} · ${money(a.balanceCents)}</option>`).join(''); }
 export function authorizationField() { return `<div class="field authorization-field"><label for="authorizationPassword">Authorize with your password</label><input id="authorizationPassword" name="authorizationPassword" type="password" autocomplete="current-password" maxlength="128" required aria-describedby="authorization-help"><small id="authorization-help">Enter your current sign-in password to authorize this request.</small></div>`; }

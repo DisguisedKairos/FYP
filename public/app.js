@@ -7,9 +7,11 @@ import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, rev
 import { loadExtras, loadNotifications, stopBackgroundReads, notificationsPage, schedulesPage, markNotification, scheduleDialog, changeScheduleType, reviewSchedule, confirmSchedule, scheduleDetails, cancelScheduleDialog, cancelSchedule } from './js/services.js';
 import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview } from './js/admin.js';
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
+import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
 Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); } });
-Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage });
+Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
+ui.loadBusinessApplications=loadBusinessApplications;
 
 function switchAuth() {
   state.authMode = state.authMode === 'login' ? 'register' : 'login';
@@ -38,7 +40,7 @@ function endSession(notice) {
   state.signingOut = false;
 }
 function helpDialog() {
-  dialog('A little guidance.', `<div class="detail-section"><h3>Your savings</h3><p>Open an account, check its balance and history, or rename it to match a goal. Empty accounts can be closed while one stays open.</p></div><div class="detail-section"><h3>Move money and pay bills</h3><p>Review the recipient, amount and reference, then authorize with your current password. Fraud checks can complete, hold or reject a request. Only completed requests change balances.</p></div><div class="detail-section"><h3>Plan ahead</h3><p>Schedule a future transfer or bill. No money is reserved now. Due payments run while the local Node.js server is running and catch up when it restarts.</p></div><div class="detail-section"><h3>Keep a record</h3><p>Search activity by payee, account, status or date. Export matching transactions as CSV or print an account statement to PDF.</p></div><div class="notice">This is an educational project using sample funds. No real transfers or bill payments are made.</div>`);
+  dialog('A little guidance.', `<div class="detail-section"><h3>Business savings</h3><p>Open business savings accounts, check balances and history, or rename accounts for their operating purpose. Empty accounts can be closed while one stays open.</p></div><div class="detail-section"><h3>Move money and pay bills</h3><p>Review the recipient, amount and reference, then authorize with your current password. Fraud checks can complete, hold or reject a request. Only completed requests change balances.</p></div><div class="detail-section"><h3>Plan ahead</h3><p>Schedule a future transfer or bill. No money is reserved now. Due payments run while the local Node.js server is running and catch up when it restarts.</p></div><div class="detail-section"><h3>Keep a record</h3><p>Search activity by payee, account, status or date. Export matching transactions as CSV or print an account statement to PDF.</p></div><div class="notice">This is an educational project using sample funds. No real transfers or bill payments are made.</div>`);
 }
 
 // One delegated listener per event keeps rendered views free of inline handlers.
@@ -56,10 +58,14 @@ document.addEventListener('submit',async event => {
         if (state.authMode === 'register') {
           if (values.password !== values.confirmPassword) throw new Error('The passwords do not match.');
           if (!/[A-Z]/.test(values.password) || !/[a-z]/.test(values.password) || !/\d/.test(values.password)) throw new Error('Use uppercase, lowercase and a number in your password.');
+          values.business=profileFromForm(values);
+          for(const key of ['legalName','registrationNumber','legalForm','country','industry','registeredAddress'])delete values[key];
         }
         await authenticate(values); break;
       }
       case 'account-form': await submitAccount(form); break;
+      case 'business-profile-form': await submitBusiness(form); break;
+      case 'business-review-form': await submitBusinessReview(form); break;
       case 'close-account-form': await submitAccount(form,true); break;
       case 'money-form': reviewMoney(form); break;
       case 'confirm-money-form': await confirmMoney(form); break;
@@ -96,8 +102,10 @@ document.addEventListener('click',async event => {
     if (control.dataset.cancelSchedule) return cancelScheduleDialog(control.dataset.cancelSchedule);
     if (control.dataset.editRule) return ruleDialog(control.dataset.editRule);
     if (control.dataset.reviewTransaction) return reviewDialog(control.dataset.reviewTransaction);
+    if (control.dataset.reviewBusiness) return reviewBusinessDialog(control.dataset.reviewBusiness);
     switch (control.dataset.action) {
       case 'auth-switch': switchAuth(); break;
+      case 'refresh-business-applications': await loadBusinessApplications(); break;
       case 'assistant-clear': clearAssistant(); break;
       case 'assistant-retry': await retryAssistant(); break;
       case 'password': {

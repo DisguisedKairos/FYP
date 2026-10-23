@@ -1,6 +1,6 @@
 # Greenlink Assistant
 
-Open **Greenlink Assistant** after signing in. It supports these examples:
+Open **Greenlink Assistant** after signing in as an authorized business operator. It reads only that operator's linked business account records and prepares business payment drafts. It supports these examples:
 
 | Message | Result |
 | --- | --- |
@@ -11,11 +11,11 @@ Open **Greenlink Assistant** after signing in. It supports these examples:
 | Show notifications | Unread count and recent notifications without marking them read. |
 | Explain my latest flagged transaction | Recorded score, status and reasons for your latest held/rejected scored payment. |
 | Transfer SGD 25 to 1020002001 | A draft opened in the normal transfer form. |
-| Transfer SGD 25 from Main savings to Rainy day | A draft between your own named accounts. |
+| Transfer SGD 25 from Operating savings to Liquidity reserve | A draft between your business's own accounts. |
 | Pay SGD 86.42 to SP Services reference SP-12345 | A bill draft with the supplied reference. |
 | Download a statement | Opens activity, where you choose the account and Singapore date range. |
 
-The assistant is a local intent parser, so unsupported wording produces help or a link to a banking screen. It is separate from the trained fraud-scoring model. It does not infer ambiguous payment dates, look up other customers by name, promise recipient validity, or provide general financial advice. The published Jamie demo recipient is available by name only for known demo identities.
+The assistant is a local intent parser, so unsupported wording produces help or a link to a banking screen. It is separate from the trained fraud-scoring model. It does not infer ambiguous payment dates, search a business directory, promise recipient eligibility, or provide general financial advice. The sample Harbour Supplies recipient is available by name only for the seeded demo. All actual payments still require approved source and recipient businesses.
 
 Chat cannot create, authorize, send, approve or cancel payments. A draft must be checked in the normal form and authorized with the current password; risk scoring and financial checks occur when that form is submitted. A later balance or rule change can affect the result.
 

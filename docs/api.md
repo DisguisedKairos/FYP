@@ -29,6 +29,10 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | GET | `/api/notifications` | Owned notifications and unread count |
 | PATCH | `/api/notifications/:id` | Mark owned item or `all` read with `{read:true}` |
 | POST | `/api/assistant/messages` | `{message}`; private read/draft response |
+| GET | `/api/business` | Signed-in operator's business profile |
+| POST | `/api/business/profile` | Submit/correct `{business,version?,authorizationPassword}` |
+| GET | `/api/business/applications` | Bank staff queue; optional `status` |
+| POST | `/api/business/applications/:id/review` | Independent bank `{decision,reason,version,verificationConfirmed,authorizationPassword}` |
 | GET | `/api/fraud/rules` | Admin rules and version |
 | PATCH | `/api/fraud/rules/:id` | Admin `{enabled?,threshold?,action?,version,authorizationPassword}` |
 | GET | `/api/fraud/rules/audit` | Admin paginated policy history |
@@ -37,6 +41,10 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | POST | `/api/fraud/reviews/:id` | Independent admin `{decision,reason,authorizationPassword}` |
 
 ## Financial payloads
+
+Registration additionally requires `business:{legalName,registrationNumber,country:"SG",legalForm,industry,registeredAddress}`. Legal form is `company`, `partnership` or `institution`; personal onboarding is rejected. The business starts pending review regardless of client-supplied status. Approval requires a fresh bank staff password and `verificationConfirmed:true`; review cannot be performed by the business's own primary operator. Version mismatches and already-reviewed applications return409. Approved identity changes require bank assistance.
+
+Account changes, payment source ownership and recipient eligibility enforce an approved business. Missing/pending/rejected source identity returns 403 with `code:"BUSINESS_APPROVAL_REQUIRED"`; a recipient without approval is unavailable for transfer. `customer` is the internal role name for a business operator, not a consumer product.
 
 Transfer: `{fromAccountId,toAccountNumber,amount,description?,requestId,authorizationPassword}`. Bill: `{fromAccountId,billerId,reference,amount,requestId,authorizationPassword}`. `amount` is a decimal string in SGD, `requestId` is a stable unique string generated once for that reviewed instruction. A repeated key with the same canonical payload replays the result; a changed payload returns 409. Persist the same key when retrying a connection failure. A successful HTTP response may contain a `pending_review` or `rejected` transaction: inspect the lifecycle status.
 

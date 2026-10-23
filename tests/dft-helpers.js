@@ -20,6 +20,10 @@ async function fixture(t,{http=true,seed=true,now=Date.now,riskClient,assessMode
   if(http)await start();
   return {db,dbPath:null,schema,riskClient:actualRisk,start,stop,get server(){return server;},get baseUrl(){return baseUrl;},client:()=>new Client(()=>baseUrl),runJobs:()=>server.runJobs()};
 }
+async function approveBusiness(db,user,{legalName=`Test Business ${user.id} Pte. Ltd.`,registrationNumber=`TEST${String(user.id).padStart(8,'0')}`}={}) {
+  return require('../banking/business').create(db,user,{legalName,registrationNumber,country:'SG',legalForm:'company',industry:'Test business services',registeredAddress:'1 Test Business Road, Singapore 000001'},{status:'approved'});
+}
+function businessProfile(registrationNumber='TESTCOMPANY001'){return {legalName:'Test Company Pte. Ltd.',registrationNumber,country:'SG',legalForm:'company',industry:'Business services',registeredAddress:'1 Test Business Road, Singapore 000001'};}
 class Client{
   constructor(base){this.base=base;this.cookies=new Map();this.csrfToken=null;this.password='Greenlink123!';}
   async request(path,{method='GET',body,csrf=true,authorize=true,headers={},responseType='json'}={}){
@@ -35,4 +39,4 @@ class Client{
   async history(filters={}){const result=await this.request(`/api/transactions?${new URLSearchParams(filters)}`);assert.equal(result.status,200,JSON.stringify(result.data));return result.data;}
   async ledger(filters={}){const rows=[];for(let page=1;;page++){const result=await this.history({...filters,page,pageSize:100});rows.push(...result.transactions);if(page>=result.pagination.totalPages)return rows;}}
 }
-module.exports={fixture,createFixture:fixture,Client,modelStub,accountNamed:(data,name)=>{const account=data.accounts.find(row=>row.name===name);assert.ok(account);return account;},totalBalance:data=>data.accounts.reduce((sum,row)=>sum+row.balanceCents,0)};
+module.exports={fixture,createFixture:fixture,Client,modelStub,approveBusiness,businessProfile,accountNamed:(data,name)=>{const account=data.accounts.find(row=>row.name===name);assert.ok(account);return account;},totalBalance:data=>data.accounts.reduce((sum,row)=>sum+row.balanceCents,0)};

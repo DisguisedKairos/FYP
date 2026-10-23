@@ -2,6 +2,7 @@
 const { randomUUID } = require('node:crypto');
 const { createDatabase } = require('../database');
 const { hashPassword } = require('../banking/security');
+const businesses = require('../banking/business');
 
 async function seedDemo(db, { now = Date.now } = {}) {
   const passwordHash = await hashPassword('Greenlink123!');
@@ -13,22 +14,25 @@ async function seedDemo(db, { now = Date.now } = {}) {
     for (const [key, name, role, days] of [['alex','Alex Morgan','admin',100],['jamie','Jamie Lee','customer',90],['reviewer','Sam Rivera','admin',100]]) {
       users[key] = (await client.query('INSERT INTO users(name,email,password_hash,role,created_at) VALUES($1,$2,$3,$4,$5) RETURNING id', [name, `${key}@greenlink.demo`, passwordHash, role, date(days)])).rows[0].id;
     }
+    for(const [key,legalName,registrationNumber] of [['alex','Meridian Logistics Pte. Ltd.','202600001A'],['jamie','Harbour Supplies Pte. Ltd.','202600002B'],['reviewer','Northstar Treasury Pte. Ltd.','202600003C']]) {
+      await businesses.create(client,{id:users[key]},{legalName,registrationNumber,country:'SG',legalForm:'company',industry:'Business services',registeredAddress:'1 Sample Business Avenue, Singapore 000001'},{now,status:'approved'});
+    }
     const accounts = {};
-    for (const [key, owner, name, number, days] of [['main','alex','Main savings','1020001001',100],['rainy','alex','Rainy day','1020001002',80],['jamie','jamie','Main savings','1020002001',90],['reviewer','reviewer','Main savings','1020009001',100]]) {
+    for (const [key, owner, name, number, days] of [['main','alex','Operating savings','1020001001',100],['rainy','alex','Liquidity reserve','1020001002',80],['jamie','jamie','Operating savings','1020002001',90],['reviewer','reviewer','Operating savings','1020009001',100]]) {
       accounts[key] = (await client.query("INSERT INTO accounts(user_id,name,number,opening_provenance,created_at) VALUES($1,$2,$3,'seed',$4) RETURNING id", [users[owner], name, number, date(days)])).rows[0].id;
     }
     const rows = [
       ['main','credit','Opening balance',1898250,'Welcome deposit','DEMO-OPENING',false,100,null],
-      ['main','credit','Monthly salary',520000,'Acme Studio','SALARY',false,24,null],
+      ['main','credit','Invoice settlement',520000,'Acme Trading Pte. Ltd.','INVOICE-025',false,24,null],
       ['main','bill','SP Services bill',-12680,'SP Services','SP-810294',false,18,'sp-services'],
-      ['main','transfer','Dinner with friends',-8500,'Jamie Lee','DEMO-DINNER',false,14,'1020002001'],
+      ['main','transfer','Supplier invoice payment',-8500,'Harbour Supplies Pte. Ltd.','DEMO-SUPPLIER',false,14,'1020002001'],
       ['jamie','credit','Opening balance',111500,'Welcome deposit','DEMO-OPENING',false,90,null],
-      ['jamie','transfer','Dinner with friends',8500,'Alex Morgan','DEMO-DINNER',false,14,'1020001001'],
-      ['main','transfer','Monthly savings',-50000,'Rainy day','DEMO-SAVINGS',true,10,'1020001002'],
+      ['jamie','transfer','Supplier invoice payment',8500,'Meridian Logistics Pte. Ltd.','DEMO-SUPPLIER',false,14,'1020001001'],
+      ['main','transfer','Liquidity allocation',-50000,'Liquidity reserve','DEMO-LIQUIDITY',true,10,'1020001002'],
       ['rainy','credit','Opening balance',470000,'Welcome deposit','DEMO-OPENING',false,80,null],
-      ['rainy','transfer','Monthly savings',50000,'Main savings','DEMO-SAVINGS',true,10,'1020001001'],
-      ['main','bill','Singtel mobile plan',-4800,'Singtel','ST-298134',false,5,'singtel'],
-      ['main','credit','Project payment',142780,'Studio North','INVOICE-026',false,2,null],
+      ['rainy','transfer','Liquidity allocation',50000,'Operating savings','DEMO-LIQUIDITY',true,10,'1020001001'],
+      ['main','bill','Business connectivity bill',-4800,'Singtel','ST-298134',false,5,'singtel'],
+      ['main','credit','Client invoice receipt',142780,'Studio North Pte. Ltd.','INVOICE-026',false,2,null],
     ];
     for (const [key,type,description,cents,counterparty,reference,internal,days,payee] of rows) {
       await client.query(`INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq,payee,biller_id)

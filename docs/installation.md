@@ -20,6 +20,10 @@ Do not run demo seeding before an import. Imported identities, passwords and rol
 
 ## Administration and secrets
 
+For a separate bank operations login, set a private strong `GREENLINK_STAFF_PASSWORD` environment variable and run `npm run admin:create -- --email operator@example.com --name "Bank Operations"`. The script creates staff access without a business or deposit account, refuses existing emails, hashes the password and records an operator audit event. The password is never accepted as a command-line argument or printed. Clear the temporary password environment variable afterwards. Do not use public demo passwords outside sample data.
+
+Imported business operators can sign in with their existing credentials, open **Business profile**, submit registered entity details and await an independent staff decision in **Business onboarding**. Pending or missing business identity blocks financial changes and receiving funds. Existing balances/history remain readable. An old standing schedule waits for approval instead of losing its due occurrence. No existing customer is automatically promoted to staff.
+
 Registration always creates `customer`. Grant an existing user's administrator role locally with `npm run admin:grant -- --email registered@example.com`. Role changes invalidate sessions and create an audit event. Do not expose this script through a customer API.
 
 `SERVICE_TOKEN` protects private scoring calls; both processes receive the same value. `AUTH_ENCRYPTION_KEY` is 64 hexadecimal characters and encrypts authenticator secrets with AES-256-GCM and a user binding. Keep it stable and privately recoverable; changing or losing it prevents verification of existing authenticator codes. Never commit `.env`, test credentials, raw tokens, recovery codes or database files. The release builder excludes them.

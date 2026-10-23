@@ -50,7 +50,7 @@ async function cancelSchedule(db,user,id,{now=Date.now}={}){
     const updated=(await client.query("UPDATE scheduled_payments SET status='cancelled',next_run_at=NULL,lease_owner=NULL,lease_until=NULL WHERE id=$1 RETURNING *",[id])).rows[0];
     // A worker may have committed the ledger and crashed before recording its
     // run result. The sender lock prevents a later settlement during this read.
-    const pending=(await client.query("SELECT * FROM scheduled_payment_runs WHERE schedule_id=$1 AND status IN ('processing','retrying') FOR UPDATE",[id])).rows;
+    const pending=(await client.query("SELECT * FROM scheduled_payment_runs WHERE schedule_id=$1 AND status IN ('processing','retrying','awaiting_business_approval') FOR UPDATE",[id])).rows;
     for(const run of pending){
       const requestId=`schedule:${id}:${new Date(run.due_at).getTime()}`;
       const receipt=(await client.query('SELECT result_json FROM requests WHERE user_id=$1 AND request_id=$2',[user.id,requestId])).rows[0]?.result_json;
@@ -79,6 +79,12 @@ async function runDue(db,{riskClient,now=Date.now,maxAttempts=5}={}){
       const current=(await client.query('SELECT * FROM scheduled_payments WHERE id=$1 FOR UPDATE',[row.id])).rows[0];
     if(current.lease_owner!==owner || current.status!=='active' || iso(current.next_run_at)!==iso(row.next_run_at))return;
       const run=(await client.query('SELECT * FROM scheduled_payment_runs WHERE schedule_id=$1 AND due_at=$2 FOR UPDATE',[row.id,row.next_run_at])).rows[0];
+      if(failure?.code==='BUSINESS_APPROVAL_REQUIRED'){
+        const resumeAt=new Date(now()+60000);
+        await client.query("UPDATE scheduled_payment_runs SET status='awaiting_business_approval',error=$3,next_attempt_at=$4,attempts=GREATEST(attempts-1,0) WHERE schedule_id=$1 AND due_at=$2",[row.id,row.next_run_at,failure.message,resumeAt]);
+        await client.query("UPDATE scheduled_payments SET lease_owner=NULL,lease_until=$2,last_status='awaiting_business_approval',last_error=$3 WHERE id=$1",[row.id,resumeAt,failure.message]);
+        return;
+      }
       const leaseExpired=current.lease_until && new Date(current.lease_until).getTime()<=now();
       const retry=failure && (!failure.status || failure.status>=500 || failure.status===429 || leaseExpired) && run.attempts<maxAttempts;
       const message=failure?String(failure.message || failure).slice(0,500):null;

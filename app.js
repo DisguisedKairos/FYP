@@ -9,6 +9,7 @@ const security = require('./banking/security');
 const ledger = require('./banking/ledger');
 const history = require('./banking/history');
 const workflows = require('./banking/workflows');
+const businesses = require('./banking/business');
 const { createRiskClient } = require('./banking/risk');
 const { seedDemo } = require('./scripts/seed-demo');
 const { HttpError } = require('./models/errors');
@@ -79,6 +80,10 @@ async function createApplication(options = {}) {
   });
   const authorizeFor = req => (_db, user, password, _clock) => auth.authorize(user, password, { ip: req.ip, purpose: 'payment' });
   const financialOptions = req => ({ riskClient, now, authorize: authorizeFor(req) });
+  route('get','/api/business',async req=>({business:await businesses.own(db,req.banking.user)}));
+  route('post','/api/business/profile',async req=>({business:await businesses.submit(db,req.banking.user,req.body,financialOptions(req))}));
+  route('get','/api/business/applications',async req=>({applications:await businesses.applications(db,req.banking.user,{status:req.query.status})}));
+  route('post','/api/business/applications/:id/review',async req=>({business:await businesses.review(db,req.banking.user,req.params.id,req.body,financialOptions(req))}));
   route('get', '/api/session', async (req, res) => {
     const session = await auth.bootstrap(req, res, req.banking);
     const demo = (await db.query("SELECT EXISTS(SELECT 1 FROM users u JOIN accounts a ON a.user_id=u.id WHERE u.email='alex@greenlink.demo' AND u.role='admin' AND u.auth_version=1 AND a.opening_provenance='seed') AS available")).rows[0];
@@ -111,6 +116,7 @@ async function createApplication(options = {}) {
   route('post', '/api/accounts', async req => db.transaction(async client => {
     const name = accountName(req.body?.name), user = req.banking.user;
     await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [user.id]);
+    await businesses.assertApproved(client,user);
     if (Number((await client.query("SELECT count(*) AS count FROM accounts WHERE user_id=$1 AND status='active'", [user.id])).rows[0].count) >= 8) throw new HttpError(409, 'You can have up to eight active savings accounts.');
     let account;
     for (let attempt = 0; attempt < 10 && !account; attempt++) account = (await client.query('INSERT INTO accounts(user_id,name,number) VALUES($1,$2,$3) ON CONFLICT(number) DO NOTHING RETURNING *', [user.id, name, security.accountNumber()])).rows[0];
@@ -123,6 +129,7 @@ async function createApplication(options = {}) {
     await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [user.id]);
     const account = (await client.query('SELECT * FROM accounts WHERE id=$1 AND user_id=$2 FOR UPDATE', [id, user.id])).rows[0];
     if (!account) throw new HttpError(404, 'Savings account not found.');
+    await businesses.assertApproved(client,user,{accountId:account.id});
     if (account.status !== 'active') throw new HttpError(409, 'This savings account is closed.');
     let updated;
     if (method === 'delete') {
@@ -158,7 +165,7 @@ async function createApplication(options = {}) {
   route('post', '/api/assistant/messages', req => require('./banking/assistant').answer({ db, user: req.banking.user, body: req.body, now, notificationClient: { list: id => workflows.notifications(db, { id }) } }));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
   app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error, _req, res, _next) => {

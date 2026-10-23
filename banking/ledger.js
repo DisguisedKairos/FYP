@@ -3,6 +3,7 @@
 const { createHash, randomUUID } = require('node:crypto');
 const { HttpError } = require('../models/errors');
 const { readPolicy, evaluateRules, sameBinding } = require('./risk');
+const businesses = require('./business');
 const MAX_CENTS = 9000000000000;
 const iso = value => value ? new Date(value).toISOString() : null;
 const clock = now => iso((now || Date.now)());
@@ -20,7 +21,7 @@ function parseAmount(value) {
   return Number(result);
 }
 function requestKey(value) { if (typeof value !== 'string' || !/^[A-Za-z0-9:_-]{1,100}$/.test(value)) throw new HttpError(400, 'A stable requestId is required for this action.'); return value; }
-function accountView(row) { return { id: String(row.id), name: row.name, number: row.number, balanceCents: cents(row.balance_cents), status: row.status, createdAt: iso(row.created_at) }; }
+function accountView(row) { return { id: String(row.id), name: row.name, number: row.number, balanceCents: cents(row.balance_cents), status: row.status, productType:row.product_type || 'business_savings',businessId:row.business_id?String(row.business_id):null,createdAt: iso(row.created_at) }; }
 function transactionView(row) {
   return { id: row.id, type: row.type, description: row.description, amountCents: cents(row.amount_cents), counterparty: row.counterparty,
     status: row.status, createdAt: iso(row.created_at), accountId: String(row.account_id), accountName: row.account_name || '', accountNumber: row.account_number || '',
@@ -53,18 +54,20 @@ async function replay(db, userId, key, kind, payload) {
 }
 async function resolve(db, user, kind, payload, { checkFunds = true, lock = false } = {}) {
   let target = null;
-  if (kind === 'transfer') target = (await db.query('SELECT a.*,u.name AS owner_name FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.number=$1', [payload.number])).rows[0];
+  if (kind === 'transfer') target = (await db.query('SELECT a.*,b.legal_name AS owner_name,b.status AS business_status FROM accounts a LEFT JOIN businesses b ON b.id=a.business_id WHERE a.number=$1', [payload.number])).rows[0];
   if (lock) {
     const ids = [...new Set([payload.fromId, ...(target ? [String(target.id)] : [])])].sort((a, b) => BigInt(a) < BigInt(b) ? -1 : 1);
     await db.query('SELECT id FROM accounts WHERE id=ANY($1::bigint[]) ORDER BY id FOR UPDATE', [ids]);
-    if (target) target = (await db.query('SELECT a.*,u.name AS owner_name FROM accounts a JOIN users u ON u.id=a.user_id WHERE a.id=$1', [target.id])).rows[0];
+    if (target) target = (await db.query('SELECT a.*,b.legal_name AS owner_name,b.status AS business_status FROM accounts a LEFT JOIN businesses b ON b.id=a.business_id WHERE a.id=$1', [target.id])).rows[0];
   }
   const source = (await db.query('SELECT * FROM accounts WHERE id=$1 AND user_id=$2', [payload.fromId, user.id])).rows[0];
   if (!source) throw new HttpError(404, 'Savings account not found.');
+  const business = await businesses.assertApproved(db,user,{accountId:source.id});
   if (source.status !== 'active') throw new HttpError(409, 'The selected savings account is closed.');
   let counterparty, note, internal = false;
   if (kind === 'transfer') {
     if (!target) throw new HttpError(404, 'Recipient account not found.');
+    if(target.business_status!=='approved')throw new HttpError(409,'The recipient must have an approved Greenlink business account.');
     if (target.status !== 'active') throw new HttpError(409, 'The recipient account is closed.');
     if (String(target.id) === String(source.id)) throw new HttpError(409, 'Choose another destination account.');
     if (cents(target.balance_cents) + payload.amountCents > MAX_CENTS) throw new HttpError(409, 'The recipient account cannot receive this amount.');
@@ -75,7 +78,7 @@ async function resolve(db, user, kind, payload, { checkFunds = true, lock = fals
     counterparty = biller.name; note = `${biller.name} bill`;
   }
   if (checkFunds && cents(source.balance_cents) < payload.amountCents) throw new HttpError(409, 'Insufficient funds in the selected account.');
-  return { source, target, counterparty, note, internal };
+  return { source, target, counterparty, note, internal, business };
 }
 async function historySummary(db, userId, payee, createdAt) {
   const result = (await db.query(`SELECT
@@ -141,8 +144,8 @@ async function settle(client, user, payload, resolved, transactionId, reference,
       assessedAt: risk.assessedAt, assessmentId: transactionId, reasons: [{ code: 'associated_transfer', message: 'Screened with the originating transfer.', contribution: 0 }] };
     await client.query(`INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq,payee,risk_json)
       VALUES($1,$2,'transfer',$3,$4,$5,'completed',$6,$7,$8,$8,$8,nextval('settlement_sequence'),$9,$10)`,
-    [incomingId, resolved.target.id, resolved.note, payload.amountCents, resolved.internal ? resolved.source.name : user.name, reference, resolved.internal, createdAt, resolved.source.number, associated]);
-    if (!resolved.internal) await enqueue(client, { userId: resolved.target.user_id, type: 'transaction.received', title: 'Transfer received', message: `${user.name} sent you SGD ${(payload.amountCents / 100).toFixed(2)}.`, transactionId: incomingId, createdAt });
+    [incomingId, resolved.target.id, resolved.note, payload.amountCents, resolved.internal ? resolved.source.name : resolved.business.legalName, reference, resolved.internal, createdAt, resolved.source.number, associated]);
+    if (!resolved.internal) await enqueue(client, { userId: resolved.target.user_id, type: 'transaction.received', title: 'Business transfer received', message: `${resolved.business.legalName} sent SGD ${(payload.amountCents / 100).toFixed(2)}.`, transactionId: incomingId, createdAt });
   }
   await enqueue(client, { userId: user.id, type: 'transaction.completed', title: resolved.target ? 'Transfer completed' : 'Bill payment completed', message: `Your payment of SGD ${(payload.amountCents / 100).toFixed(2)} to ${resolved.counterparty} is complete.`, transactionId, createdAt });
 }

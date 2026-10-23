@@ -51,11 +51,11 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   const alex = new BrowserSession(), recipient = new BrowserSession(), reviewer = new BrowserSession();
   await alex.login('alex@greenlink.demo');
   const original = await alex.request('/api/dashboard');
-  const source = original.accounts.find(a => a.name === 'Main savings') || original.accounts[0];
+  const source = original.accounts.find(a => a.name === 'Operating savings') || original.accounts[0];
   const assistantBalance = await alex.request('/api/assistant/messages', { message: 'What is my balance?' });
   assert.equal(assistantBalance.intent, 'balance');
   assert.equal(assistantBalance.privacy.externalServices, false);
-  const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 to Jamie Lee' });
+  const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 to Harbour Supplies Pte. Ltd.' });
   assert.equal(assistantDraft.actions[0].type, 'draft_transfer');
   assert.equal(assistantDraft.requiresAuthorization, true);
   assert.equal((await alex.request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, source.balanceCents);
@@ -66,7 +66,9 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   assert.equal(afterFirst.accounts.find(a => a.id === source.id).balanceCents, source.balanceCents - 125);
 
   await recipient.request('/api/session');
-  const registration = await recipient.request('/api/auth/register', { name: 'Smoke Recipient', email: `smoke-${randomUUID()}@greenlink.demo`, password, confirmPassword: password }, 'POST', 201);
+  const registration = await recipient.request('/api/auth/register', { name: 'Smoke Recipient', email: `smoke-${randomUUID()}@greenlink.demo`, password, confirmPassword: password,business:{legalName:'Smoke Trading Pte. Ltd.',registrationNumber:'SMOKE'+randomUUID().replace(/-/g,'').slice(0,16),country:'SG',legalForm:'company',industry:'Business services',registeredAddress:'1 Sample Business Road, Singapore 000001'} }, 'POST', 201);
+  await reviewer.login('reviewer@greenlink.demo');
+  await reviewer.request(`/api/business/applications/${registration.business.id}/review`,{decision:'approve',version:registration.business.version,reason:'Business registration checked for isolated project smoke.',verificationConfirmed:true,authorizationPassword:password});
   const target = registration.account || (await recipient.request('/api/dashboard')).accounts[0];
   const held = await alex.request('/api/transfers', { fromAccountId: source.id, toAccountNumber: target.number, amount: '2000.00', description: 'Review smoke transfer', authorizationPassword: password, requestId: randomUUID() });
   assert.equal(held.transaction.status, 'pending_review');

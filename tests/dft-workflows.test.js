@@ -21,7 +21,9 @@ async function setup(t, options = {}) {
   let timestamp = Date.parse('2027-01-01T04:00:00Z');
   const now = () => timestamp;
   const owner = (await db.query("INSERT INTO users(name,email,password_hash,role) VALUES('Schedule Owner',$1,'test-only','customer') RETURNING *", [`${randomUUID()}@example.test`])).rows[0];
+  await require('./dft-helpers').approveBusiness(db,owner);
   const recipient = (await db.query("INSERT INTO users(name,email,password_hash) VALUES('Schedule Recipient',$1,'test-only') RETURNING *", [`${randomUUID()}@example.test`])).rows[0];
+  await require('./dft-helpers').approveBusiness(db,recipient);
   const account = async (user, number, balance) => (await db.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_balance_cents,opening_provenance,created_at) VALUES($1,'Main savings',$2,$3,$3,'seed','2026-01-01T00:00:00Z') RETURNING *", [user.id, number, balance])).rows[0];
   const source = await account(owner, '9300000001', 100000), target = await account(recipient, '9300000002', 0);
   const authorize = async () => ({ method: 'password', authorizedAt: new Date(now()).toISOString(), userId: String(owner.id), authVersion: 1 });

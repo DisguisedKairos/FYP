@@ -1,6 +1,8 @@
 # Greenlink Digital Bank — DFT application
 
-C300 Final Year Project: banking features and financial security using **Node.js 22.13+, Express 5, PostgreSQL 16+ and Python 3.11+ FastAPI**. The browser uses JavaScript, HTML and CSS. This version focuses on DFT responsibilities; deployment pipelines, Docker, Terraform and cloud provisioning have been removed from the active application and release package.
+C300 Final Year Project: **digital wholesale banking for registered businesses and institutions**, using Node.js 22.13+, Express 5, PostgreSQL 16+ and Python 3.11+ FastAPI. People sign in as authorized business operators or bank staff; the registered business is the account holder. The browser uses JavaScript, HTML and CSS. Deployment pipelines, Docker, Terraform and cloud provisioning remain outside this DFT package.
+
+Registration collects business details and submits them for independent bank review. Account changes and payments require approval. This version supports one primary operator per business; team membership and corporate payment mandates are future work. See [wholesale banking scope](docs/wholesale-banking.md).
 
 ## Run locally
 
@@ -29,15 +31,16 @@ Open **http://localhost:3000**. Startup launches the private Python scoring serv
 
 | Demo identity | Email | Password | Purpose |
 | --- | --- | --- | --- |
-| Alex Morgan | `alex@greenlink.demo` | `Greenlink123!` | Funded savings account and administrator |
-| Sam Patel | `reviewer@greenlink.demo` | `Greenlink123!` | Independent fraud reviewer |
-| Jamie Lee | `jamie@greenlink.demo` | `Greenlink123!` | Recipient account `1020002001` |
+| Alex Morgan | `alex@greenlink.demo` | `Greenlink123!` | Meridian Logistics: funded business accounts; broad demo administrator access |
+| Sam Rivera | `reviewer@greenlink.demo` | `Greenlink123!` | Independent bank onboarding/fraud reviewer for demo workflows |
+| Jamie Lee | `jamie@greenlink.demo` | `Greenlink123!` | Harbour Supplies: recipient business account `1020002001` |
 
-New registrations receive one zero-balance savings account and the customer role. Demo money and bill payments are project simulations; no external payment provider is connected.
+New registrations receive a pending business application, one zero-balance business savings record and the business operator role (internal value `customer`). They cannot send/receive funds or change accounts before bank approval. Dedicated staff accounts can be created with the local `admin:create` command; see the installation guide. Demo money and bill payments are simulations with no external payment provider.
 
 ## Banking and security
 
-- Savings account creation, renaming and safe closure; dashboard and balance enquiry.
+- Business profiles, independent onboarding review and approved-business payment restrictions.
+- Business savings creation, renaming and safe closure; company dashboard and balance enquiry.
 - Password-authorized internal transfers and bills with integer cents, database row locks, atomic ledger entries and mandatory idempotency keys.
 - One-time, weekly and monthly schedules with durable execution records, recovery after interruption and bounded transient retries.
 - Searchable transaction history, filtered CSV downloads and reconciled account statements that can be printed or saved as PDF.
@@ -50,7 +53,7 @@ Every new payment is screened by the Python model and current deterministic rule
 
 ## Existing data
 
-The original `data/banking.sqlite` is retained. It is **not** the new runtime database. Import into an empty PostgreSQL target before seeding:
+The original `data/banking.sqlite` is retained. It is **not** the runtime database. Existing imported identities, passwords, balances and history stay intact. Operators without a business profile must submit one and obtain bank approval before financial writes resume. Import into an empty PostgreSQL target before seeding:
 
 ```sh
 npm run db:import-sqlite -- --source data/banking.sqlite --confirm-empty-target
@@ -89,6 +92,6 @@ tests/, tests_python/   DFT functional/security tests and browser checks
 docs/                   Requirements, API, controls and scope evidence
 ```
 
-[DFT scope and security evidence](docs/dft-scope.md) · [Requirements](docs/requirements.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Financial controls](docs/financial-controls.md) · [Verification record](docs/verification.md)
+[Wholesale scope](docs/wholesale-banking.md) · [DFT security](docs/dft-scope.md) · [Requirements](docs/requirements.md) · [Architecture](docs/architecture.md) · [API](docs/api.md) · [Financial controls](docs/financial-controls.md) · [Verification record](docs/verification.md)
 
 Earlier implementations under `legacy/` and `evergreen-site/` remain reference material only and are excluded from the release. DIT owns infrastructure delivery, TLS termination, networks and cloud database operations. DFT supplies environment-variable, health and private scoring contracts for that integration; shared secrets must be injected privately by the operator.
