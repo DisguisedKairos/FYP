@@ -1,0 +1,143 @@
+name: greenlink
+
+x-banking-image: &banking-image
+  image: ${GREENLINK_BANKING_IMAGE:-greenlink-banking:local}
+  build:
+    context: .
+    target: banking
+
+x-runtime: &runtime
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  tmpfs: [/tmp:rw,noexec,nosuid,size=32m]
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    secrets: [postgres_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U postgres -d postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  database-setup:
+    <<: [*banking-image, *runtime]
+    command: [node, deploy/database.js]
+    restart: 'no'
+    healthcheck:
+      disable: true
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: greenlink_dft
+      GREENLINK_SEED_DEMO: ${GREENLINK_SEED_DEMO:-false}
+    secrets: [postgres_password, owner_password, app_password]
+    networks: [backend]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  staff-admin:
+    <<: [*banking-image, *runtime]
+    profiles: [ops]
+    entrypoint: [node, deploy/staff.js]
+    command: []
+    restart: 'no'
+    healthcheck:
+      disable: true
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: greenlink_dft
+    secrets: [owner_password]
+    networks: [backend]
+    depends_on:
+      database-setup:
+        condition: service_completed_successfully
+
+  fraud:
+    <<: *runtime
+    image: ${GREENLINK_FRAUD_IMAGE:-greenlink-fraud:local}
+    build:
+      context: .
+      target: fraud
+    restart: unless-stopped
+    environment:
+      SERVICE_TOKEN_FILE: /run/secrets/service_token
+    secrets: [service_token]
+    networks: [backend]
+
+  banking:
+    <<: [*banking-image, *runtime]
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: '5432'
+      DB_NAME: greenlink_dft
+      PUBLIC_ORIGIN: ${GREENLINK_PUBLIC_ORIGIN:-http://localhost:8080}
+      FRAUD_SERVICE_URL: http://fraud:4011
+      TRUST_PROXY: 172.30.5.10/32
+    secrets: [app_password, service_token, auth_encryption_key]
+    networks: [backend, frontend]
+    depends_on:
+      database-setup:
+        condition: service_completed_successfully
+      fraud:
+        condition: service_healthy
+
+  nginx:
+    <<: *runtime
+    image: nginx:stable-alpine
+    user: '101:101'
+    entrypoint: [nginx, -g, 'daemon off;']
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${GREENLINK_WEB_PORT:-8080}:8080'
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      frontend:
+        ipv4_address: 172.30.5.10
+    depends_on:
+      banking:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, --spider, http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+networks:
+  backend:
+    internal: true
+  frontend:
+    ipam:
+      config:
+        - subnet: 172.30.5.0/24
+
+volumes:
+  postgres_data:
+
+secrets:
+  postgres_password:
+    file: ./data/devops/secrets/postgres_password
+  owner_password:
+    file: ./data/devops/secrets/owner_password
+  app_password:
+    file: ./data/devops/secrets/app_password
+  service_token:
+    file: ./data/devops/secrets/service_token
+  auth_encryption_key:
+    file: ./data/devops/secrets/auth_encryption_key

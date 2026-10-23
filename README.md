@@ -2,7 +2,7 @@
 
 Republic Polytechnic C300 FYP prototype based on **Green Link Digital Bank (GLDB)**. The interface uses the bank's official blue/orange identity and locally served logos. See [branding sources and coverage](docs/branding.md). Screens and statements identify the application as a student project using sample funds.
 
-C300 Final Year Project: **digital wholesale banking for registered businesses and institutions**, using Node.js 22.13+, Express 5, PostgreSQL 16+ and Python 3.11+ FastAPI. People sign in as authorized business operators or bank staff; the registered business is the account holder. The browser uses JavaScript, HTML and CSS. Deployment pipelines, Docker, Terraform and cloud provisioning remain outside this DFT package.
+C300 Final Year Project: **digital wholesale banking for registered businesses and institutions**, using Node.js 22.13+, Express 5, PostgreSQL 16+ and Python 3.11+ FastAPI. People sign in as authorized business operators or bank staff; the registered business is the account holder. The browser uses JavaScript, HTML and CSS. The repository includes an adapted GitHub Actions pipeline and a separate Docker Compose delivery example; see [DevOps setup](docs/devops.md). Cloud provisioning remains DIT work.
 
 Registration collects business details and submits them for independent bank review. Account changes and payments require approval. This version supports one primary operator per business; team membership and corporate payment mandates are future work. See [wholesale banking scope](docs/wholesale-banking.md).
 
@@ -80,7 +80,7 @@ npm run package
 npm run package:verify
 ```
 
-The source archive includes a locked npm dependency manifest, Python requirements, migrations, application sources and DFT tests. Credentials, databases, dependency installations, older prototypes and infrastructure files are excluded. Build from a clean committed checkout; use the builder's documented dirty-tree override only for local review.
+The source archive includes a locked npm dependency manifest, Python requirements, migrations, application sources and DFT tests. Credentials, databases, dependency installations, older prototypes and unrelated infrastructure files are excluded. The adapted workflow, Dockerfile, Compose configuration and delivery scripts are included. Build from a clean committed checkout; use the builder's documented dirty-tree override only for local review.
 
 ## Project map
 
@@ -91,7 +91,9 @@ banking/                Auth, ledger, risk, history, assistant, schedules and ou
 database/               PostgreSQL provisioning, permissions, checks and migrations
 main.py, fraud_service/ FastAPI model assessment service
 public/, views/         Browser application
-scripts/                Local setup, seed/import/admin, model training and packaging
+scripts/                Local setup, seed/admin, model training and packaging
+deploy/, compose.yaml   Container entrypoints, private services and Nginx
+.github/workflows/      Verification, container builds and optional GHCR delivery
 tests/, tests_python/   DFT functional/security tests and browser checks
 docs/                   Requirements, API, controls and scope evidence
 ```

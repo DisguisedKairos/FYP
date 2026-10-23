@@ -4,8 +4,8 @@ Verified locally on 24 October 2026 (Asia/Singapore), using Node.js 22.14, Postg
 
 | Check | Result |
 | --- | --- |
-| Active Node DFT functional/security suite | 90 passed, 0 failed, 0 skipped against real PostgreSQL |
-| Python FastAPI/model suite | 15 passed, including 63 JavaScript parity vectors and independent held-out metric verification |
+| Active Node DFT functional/security suite | 94 passed, 0 failed, 0 skipped against real PostgreSQL, including delivery credential isolation |
+| Python FastAPI/model and delivery suite | 18 passed, including token-file validation, 63 JavaScript parity vectors and independent held-out metric verification |
 | Browser workflows | 5 passed: business registration/onboarding and banking, mobile banking, standalone bank operations workspace, administrator fraud review, password/MFA/recovery/session controls |
 | Actual process integration | Express + PostgreSQL + FastAPI smoke passed with authenticated scoring, payment lifecycle, history, statements, notifications and policy audit |
 | Packaged source | Archive integrity verified; fresh offline `npm ci` installed 79 locked packages; extracted application passed the actual two-process smoke |
@@ -23,6 +23,8 @@ The 2.3.0 demonstration adds `demo:fraud` and `demo:fraud:serve`, printable HTML
 
 The 2.4.0 cleanup removes retired database files, the old hosting prototype, inactive controllers/models/services, the completed import command and obsolete tests. A verified PostgreSQL dump was taken before deletion. Migration 006 preserves hashes and money while correcting only recognized demo emails, revoking affected sessions and refusing collisions. The revised suite has 90 Node tests, including three identity migration cases; five browser flows and 15 Python tests also passed. The previous name is retained only in historical identity migration data and its regression test.
 
-Use the commands in the root README to reproduce these checks. PostgreSQL tests require a separate `TEST_DATABASE_URL`, Python tests require the test requirements, and browser tests require Chrome/Edge. Retired implementation tests are removed. No infrastructure pipeline or hosted deployment is claimed by this verification.
+The 2.5.0 delivery integration adapts the user-supplied pipeline example to this application. Local checks passed: all 94 Node tests, all 18 Python tests, actionlint validation, Compose rendering and credential/network boundary assertions. The archive allowlist includes the requested delivery source and excludes every checked local/native/container secret. Docker Engine is unavailable on the development machine, so image builds and the actual Compose stack are verified by the GitHub `containers` job rather than claimed from local syntax checks. The five local browser flows above were last run on 2.4.0; the new workflow runs them again on Linux. No cloud deployment or image publication is implied by committing the workflow. See [delivery setup and reproduction](devops.md).
+
+Use the commands in the root README to reproduce these checks. PostgreSQL tests require a separate `TEST_DATABASE_URL`, Python tests require the test requirements, and browser tests require Chrome/Edge. Retired implementation tests are removed.
 
 The scorer's synthetic evaluation is a model demonstration, not real-world fraud detection validation. Live bill settlement, email/SMS, KYC and account-recovery delivery remain outside the implemented project flows; see `requirements.md`.

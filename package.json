@@ -1,6 +1,6 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.4.0",
+  "version": "2.5.0",
   "private": true,
   "description": "Republic Polytechnic C300 business banking prototype based on Green Link Digital Bank, using Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
@@ -26,7 +26,12 @@
     "db:stop": "node --env-file-if-exists=.env database/local.js stop",
     "db:status": "node --env-file-if-exists=.env database/local.js status",
     "demo:fraud": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-fraud.js",
-    "demo:fraud:serve": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-fraud.js --serve"
+    "demo:fraud:serve": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-fraud.js --serve",
+    "check": "node scripts/check-source.js",
+    "devops:setup": "node deploy/configuration.js",
+    "devops:up": "docker compose up --build --wait --wait-timeout 180",
+    "devops:down": "docker compose down",
+    "test:containers": "node deploy/smoke.js"
   },
   "engines": {
     "node": ">=22.13.0"

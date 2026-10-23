@@ -45,6 +45,12 @@ function fixture(t) {
     'datasets/fraud-history.csv': 'amount,label\n25,0\n',
     'scripts/start.js': "console.log('start');\n",
     'tests/dft-example.test.js': "require('node:test')('example', () => {});\n",
+    'Dockerfile': 'FROM node:22-bookworm-slim AS banking\n',
+    '.dockerignore': 'data/\n',
+    'compose.yaml': 'services: {}\n',
+    '.github/workflows/ci-cd.yml': 'name: Delivery\n',
+    'deploy/nginx.conf': 'events {}\n',
+    'deploy/configuration.js': 'module.exports = {};\n',
     'docs/architecture.md': 'Local services\n',
     'fraud_service/model.sha256': 'approved-model-checksum\n',
     'tests_python/requirements.txt': '-r ../requirements.txt\n',
@@ -52,8 +58,6 @@ function fixture(t) {
   for (const required of REQUIRED_FILES) if (!(required in source)) source[required] = required.endsWith('.py') ? '# Python source fixture\n' : 'DFT source fixture\n';
   const excluded = {
     'legacy/sqlite-db.js': 'DO_NOT_PACKAGE_LEGACY_DB',
-    'Dockerfile': 'DO_NOT_PACKAGE_DOCKER',
-    'compose.yaml': 'DO_NOT_PACKAGE_COMPOSE',
     'compose.cloud.yaml': 'DO_NOT_PACKAGE_COMPOSE_CLOUD',
     '.github/workflows/ci.yml': 'DO_NOT_PACKAGE_CICD',
     'cloud/README.md': 'DO_NOT_PACKAGE_CLOUD',
@@ -102,7 +106,7 @@ function saveArchive(root, bytes, name = 'tampered.zip') {
   return filename;
 }
 
-test('portable package includes only source allowlist, excludes secrets/runtime/DIT sources, and is deterministic', t => {
+test('portable package includes only source allowlist, excludes secrets/runtime/unrelated delivery files, and is deterministic', t => {
   const { root, source, excluded } = fixture(t);
   const first = buildPackage({ root });
   assert.match(first.archivePath, /greenlink-digital-bank-2\.0\.0\.zip$/);

@@ -1,6 +1,6 @@
 # DFT application architecture
 
-The active application has an Express banking API, a Python FastAPI scoring process, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. No separate gateway, container orchestrator or deployment pipeline is part of this DFT release.
+The active application has an Express banking API, a Python FastAPI scoring process, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. The local launcher remains available, alongside the requested reference Nginx/Compose topology and GitHub Actions pipeline; see [DevOps setup](devops.md).
 
 This is a digital wholesale banking project. `businesses` stores the legal customer; `users` stores authorized operators and bank staff. `accounts.business_id` links the legal owner while `user_id` retains the primary operator authorization boundary. A database trigger enforces that binding. Migration 005 adds this model without rewriting existing customer names, passwords, balances or history. No business identity is fabricated for a legacy user. New applications require independent bank review before account changes or funds movement.
 
@@ -36,4 +36,4 @@ An outbox event commits in the same transaction as its banking operation. The di
 
 Only Express interprets explicitly trusted proxy addresses; auth uses `req.ip`. Browser writes require the correct origin and session CSRF, with same-origin entry guards for login/register. Opaque cookies hold no customer records; PostgreSQL stores only token hashes. Authenticator secrets are encrypted and recovery codes hashed. Python rejects unauthorized requests, invalid schemas and response bindings. Model failure never silently switches to an unapproved JavaScript scorer.
 
-Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. This repository supplies the application boundaries and configuration contract without implementing those systems. Retired implementations have been removed from the checkout.
+Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. This repository now includes a reference container/pipeline handoff; cloud provisioning and hosted deployment remain outside it. Retired implementations have been removed from the checkout.

@@ -1,6 +1,6 @@
 # DFT banking scope and acceptance map
 
-The DFT application covers customer banking workflows, authorization, financial controls, transaction history, statements, and fraud-review decisions. Express handles HTTP, PostgreSQL owns the persistent banking records and transaction boundary, and the Python scoring endpoint is a private assessment dependency. Cloud provisioning, container deployment, infrastructure management, and release delivery are outside the active DFT implementation.
+The DFT application covers customer banking workflows, authorization, financial controls, transaction history, statements, and fraud-review decisions. Express handles HTTP, PostgreSQL owns the persistent banking records and transaction boundary, and the Python scoring endpoint is a private assessment dependency. Cloud provisioning and infrastructure operations remain DIT responsibilities. The repository also includes the requested reference container/pipeline handoff in `docs/devops.md`; financial controls remain within the DFT application.
 
 Green Link Digital Bank is a digital wholesale banking project. Customer access represents a registered business and its authorized primary operator. Business identity, independent bank onboarding approval, company ownership checks, restricted pending applications and a separate staff workspace are described in `wholesale-banking.md`; they are exercised in `tests/dft-business.test.js` and the browser flows. Internal `customer` role values do not imply consumer accounts.
 
