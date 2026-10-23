@@ -66,6 +66,8 @@ The importer reads the source without modifying it, validates balances and chron
 
 ## Verification and package
 
+Run `npm run demo:fraud` for real Python/Express/PostgreSQL fraud scenarios with a printable evidence report, or `npm run demo:fraud:serve` to inspect the resulting rules, audit and pending reviews in a separate banking app at `http://127.0.0.1:3001`. The script uses a newly created disposable database and verifies the existing application's financial data is unchanged. See [fraud simulation and presentation steps](docs/fraud-simulation.md).
+
 Put `TEST_DATABASE_URL` in ignored `.env.test`, pointing to a separate local PostgreSQL test/maintenance database. Most tests create/drop unique schemas; provisioning tests additionally create/drop uniquely named disposable databases and roles and require local database/role creation privileges. Test and operator credentials are never loaded by `npm start`.
 
 ```sh
