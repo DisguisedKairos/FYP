@@ -121,6 +121,7 @@ jobs:
         run: |
           node deploy/configuration.js
           docker compose config --quiet
+          docker compose config --format json | node deploy/check-compose.js
       - name: Start the isolated Compose fixture
         run: docker compose up --no-build --wait --wait-timeout 180
       - name: Exercise banking through Nginx and the Python container

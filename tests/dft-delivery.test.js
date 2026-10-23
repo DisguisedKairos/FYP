@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { setupSecrets, readSecret, databaseUrl, NAMES } = require('../deploy/configuration');
 const { runtimeEnvironment } = require('../deploy/banking');
+const { validateTmpfs } = require('../deploy/check-compose');
 
 function directory(t) {
   const parent = path.resolve(__dirname, '..', 'test-results');
@@ -63,4 +64,11 @@ test('Delivery database URL construction encodes credentials and rejects unsafe 
   assert.equal(url.pathname, '/greenlink_dft');
   for (const env of [{ DB_HOST: 'postgres/attacker' }, { DB_PORT: '5432?options=unsafe' }, { DB_PORT: '0' }, { DB_NAME: 'invalid;drop' }]) assert.throws(() => databaseUrl(env, 'greenlink_app', 'secret'), /Invalid delivery database/);
   assert.throws(() => databaseUrl({}, 'app;drop', 'secret'), /Invalid delivery database/);
+});
+
+test('Container validation rejects YAML-split mount options before reaching the Docker daemon', () => {
+  assert.doesNotThrow(() => validateTmpfs(['/tmp:rw,noexec,nosuid,size=32m']));
+  assert.throws(() => validateTmpfs(['/tmp:rw', 'noexec', 'nosuid', 'size=32m']), /exactly one temporary filesystem/);
+  assert.throws(() => validateTmpfs(['noexec']), /absolute \/tmp mount path/);
+  assert.throws(() => validateTmpfs(['/tmp:rw']), /options must remain attached/);
 });
