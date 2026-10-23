@@ -18,6 +18,7 @@
 | Authenticator and recovery | Encrypted TOTP secrets, atomic counter/recovery consumption | `dft-totp.test.js`, security browser |
 | PostgreSQL data connection | Migrations, bounded pool and transaction helper | All database integration tests |
 | Existing-data and identity maintenance | PostgreSQL provenance, credential-preserving demo identity migration, collision refusal and reconciliation | `dft-identity.test.js`, `dft-postgres.test.js` |
+| Complete local feature-testing identities | Ten opt-in test users covering both roles, onboarding states, maker/checker, MFA and real screened financial/schedule examples | `dft-feature-accounts.test.js`, live browser checks and private walkthrough |
 | Automated verification and container delivery | Adapted GitHub Actions workflow, separate images, gated Compose integration and optional GHCR publishing | `docs/devops.md`, delivery secret tests and CI runs |
 | Reviewable application package | Locked dependencies, source allowlist and integrity checks | `dft-package.test.js` |
 

@@ -131,3 +131,7 @@ node --env-file=.env --env-file=.env.test scripts/platform-smoke.js
 ```
 
 The provisioning tests verify fresh setup, repeat setup with retained data, restricted SQL failures, ledger drift detection, refusal of unrelated tables and real banking workflows through the restricted login. Containerisation, cloud database administration and deployment remain with DIT.
+
+## Explicit feature-testing fixtures
+
+`npm run test:accounts` adds dedicated synthetic users without replacing the original records. After the 2.6.0 walkthrough, this native database has 13 users, 7 business profiles, 13 savings records and 28 ledger rows; the original three users, three accounts and eleven ledger rows are unchanged. Runtime privileges and reconciliation still pass. Credentials and MFA material live privately in ignored `data/testing/`; see [feature walkthrough](feature-testing.md). The command verifies its owner/runtime connections target the same local database and schema before writing.

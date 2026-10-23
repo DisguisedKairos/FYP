@@ -40,6 +40,10 @@ Open **http://localhost:3000**. Startup launches the private Python scoring serv
 
 New registrations receive a pending business application, one zero-balance business savings record and the business operator role (internal value `customer`). They cannot send/receive funds or change accounts before bank approval. Dedicated staff accounts can be created with the local `admin:create` command; see the installation guide. Demo money and bill payments are simulations with no external payment provider.
 
+## Feature-testing accounts
+
+Run `npm run test:accounts` explicitly while the native application and Python scorer are running. It creates ten additional local test identities for both permission roles and the onboarding, empty-balance, maker/checker and MFA cases, plus real screened payments and schedule examples. Existing users and fraud settings are preserved. The generated initial password, authenticator setup and full login table are saved privately in `data/testing/FEATURE-TESTING.md`. Use `npm run test:accounts:otp` for the dedicated MFA tester. Follow the [complete feature walkthrough](docs/feature-testing.md). These accounts belong to the native app on port 3000.
+
 ## Banking and security
 
 - Business profiles, independent onboarding review and approved-business payment restrictions.
