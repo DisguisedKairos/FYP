@@ -79,7 +79,7 @@ async function startPlatform({ env = process.env, root = ROOT } = {}) {
     await ready(config.fraudUrl, '/internal/health', 'fraud', true);
     start('Express banking', process.execPath, ['app.js'], { HOST: env.HOST || '127.0.0.1', PORT: String(config.publicPort) });
     await ready(`http://127.0.0.1:${config.publicPort}`, '/health', 'banking', false);
-    console.log(`\nGreenlink Digital Bank ready: ${config.publicOrigin}\nExpress + PostgreSQL banking and private Python FastAPI scoring.\n`);
+    console.log(`\nGreen Link Digital Bank ready: ${config.publicOrigin}\nExpress + PostgreSQL banking and private Python FastAPI scoring.\n`);
     if (env.SEED_DEMO === 'true') console.log('Demo: alex@greenlink.demo / Greenlink123!; independent reviewer: reviewer@greenlink.demo.');
     return { stop, children };
   } catch (error) { stop(1); throw error; }

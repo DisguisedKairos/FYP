@@ -41,7 +41,7 @@ export function mfaSetupDialog() {
 }
 
 function mfaConfirmDialog(result) {
-  securityDialog('Connect your authenticator', `<p class="modal-intro">Add a new account manually in your authenticator app using this setup key. Enter its six-digit code to finish. This setup expires in ten minutes.</p><div class="field"><label for="authenticator-secret">Private setup key</label><textarea id="authenticator-secret" rows="2" readonly spellcheck="false" autocomplete="off">${esc(result.secret)}</textarea></div><p>Account: ${esc(state.user.email)}<br>Issuer: Greenlink Digital Bank</p><form id="security-mfa-confirm-form">${otpField()}${submit('Enable authenticator')}</form>`, { secret: true });
+  securityDialog('Connect your authenticator', `<p class="modal-intro">Add a new account manually in your authenticator app using this setup key. Enter its six-digit code to finish. This setup expires in ten minutes.</p><div class="field"><label for="authenticator-secret">Private setup key</label><textarea id="authenticator-secret" rows="2" readonly spellcheck="false" autocomplete="off">${esc(result.secret)}</textarea></div><p>Account: ${esc(state.user.email)}<br>Issuer: Green Link Digital Bank</p><form id="security-mfa-confirm-form">${otpField()}${submit('Enable authenticator')}</form>`, { secret: true });
 }
 
 export function mfaDisableDialog() {

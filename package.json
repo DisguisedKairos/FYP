@@ -1,8 +1,8 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
-  "description": "Digital wholesale banking for registered businesses with Express, PostgreSQL and private FastAPI fraud scoring.",
+  "description": "Republic Polytechnic C300 business banking prototype based on Green Link Digital Bank, using Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
   "scripts": {
     "start": "node --env-file-if-exists=.env scripts/start-platform.js",

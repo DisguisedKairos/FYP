@@ -1,4 +1,6 @@
-# Greenlink Digital Bank — DFT application
+# Green Link Digital Bank — DFT application
+
+Republic Polytechnic C300 FYP prototype based on **Green Link Digital Bank (GLDB)**. The interface uses the bank's official blue/orange identity and locally served logos. See [branding sources and coverage](docs/branding.md). Screens and statements identify the application as a student project using sample funds.
 
 C300 Final Year Project: **digital wholesale banking for registered businesses and institutions**, using Node.js 22.13+, Express 5, PostgreSQL 16+ and Python 3.11+ FastAPI. People sign in as authorized business operators or bank staff; the registered business is the account holder. The browser uses JavaScript, HTML and CSS. Deployment pipelines, Docker, Terraform and cloud provisioning remain outside this DFT package.
 

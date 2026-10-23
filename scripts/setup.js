@@ -9,7 +9,7 @@ const { parseEnv } = require('node:util');
 function configureEnvironment({ filename = path.resolve(__dirname, '..', '.env'), templatePath = path.resolve(__dirname, '..', '.env.example') } = {}) {
   const existed = fs.existsSync(filename);
   if (existed && fs.lstatSync(filename).isSymbolicLink()) throw new Error('Refusing to replace a linked environment file.');
-  let content = existed ? fs.readFileSync(filename, 'utf8').replace(/^\uFEFF/, '') : fs.existsSync(templatePath) ? fs.readFileSync(templatePath, 'utf8').replace(/^\uFEFF/, '') : '# Greenlink local configuration\n';
+  let content = existed ? fs.readFileSync(filename, 'utf8').replace(/^\uFEFF/, '') : fs.existsSync(templatePath) ? fs.readFileSync(templatePath, 'utf8').replace(/^\uFEFF/, '') : '# Green Link Digital Bank local configuration\n';
   const configured = parseEnv(content), added = [];
   function ensure(key, value, valid) {
     if (configured[key]) {

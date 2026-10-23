@@ -67,7 +67,7 @@ async function resolve(db, user, kind, payload, { checkFunds = true, lock = fals
   let counterparty, note, internal = false;
   if (kind === 'transfer') {
     if (!target) throw new HttpError(404, 'Recipient account not found.');
-    if(target.business_status!=='approved')throw new HttpError(409,'The recipient must have an approved Greenlink business account.');
+    if(target.business_status!=='approved')throw new HttpError(409,'The recipient must have an approved Green Link Digital Bank business account.');
     if (target.status !== 'active') throw new HttpError(409, 'The recipient account is closed.');
     if (String(target.id) === String(source.id)) throw new HttpError(409, 'Choose another destination account.');
     if (cents(target.balance_cents) + payload.amountCents > MAX_CENTS) throw new HttpError(409, 'The recipient account cannot receive this amount.');

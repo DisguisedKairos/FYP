@@ -6,7 +6,7 @@ export const ui = {};
 export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
   business: { path: '/business', label: 'Business profile', icon: 'wallet' },
-  assistant: { path: '/assistant', label: 'Greenlink Assistant', icon: 'chat' },
+  assistant: { path: '/assistant', label: 'GLDB Assistant', icon: 'chat' },
   accounts: { path: '/accounts', label: 'Business accounts', icon: 'wallet' },
   transfers: { path: '/transfers', label: 'Transfers', icon: 'transfer' },
   payments: { path: '/payments', label: 'Business bills', icon: 'bill' },
@@ -35,7 +35,7 @@ export const esc = value => String(value ?? '').replace(/[&<>"']/g, character =>
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
 export const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-export const brand = () => `<div class="brand"><svg class="brand-mark" aria-hidden="true"><use href="#i-leaf"/></svg>Greenlink<span>.</span></div>`;
+export const brand = () => `<div class="brand"><img class="brand-logo" src="/brand/gldb-logo.svg" width="217" height="59" alt="Green Link Digital Bank"><img class="brand-logo-inverse" src="/brand/gldb-logo-white.svg" width="307" height="83" alt="Green Link Digital Bank"></div>`;
 const currency = new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' });
 export const money = cents => currency.format(cents / 100);
 export const visibleMoney = cents => state.hiddenBalance ? '••••••' : money(cents);

@@ -90,10 +90,10 @@ export function reviewMoney(form) {
     recipient = biller.name;
   } else {
     values.toAccountNumber = String(values.toAccountNumber ?? '').replace(/[\s-]/g, '');
-    if (!/^\d{10}$/.test(values.toAccountNumber)) throw new Error('Enter a 10-digit Greenlink account number.');
+    if (!/^\d{10}$/.test(values.toAccountNumber)) throw new Error('Enter a 10-digit GLDB business account number.');
     if (values.toAccountNumber === source.number) throw new Error('Choose a different destination account.');
     const own = state.data.accounts.find(a => a.number === values.toAccountNumber);
-    recipient = own ? own.name : values.toAccountNumber === '1020002001' ? 'Jamie Lee' : 'Greenlink account';
+    recipient = own ? own.name : state.demoAvailable && values.toAccountNumber === '1020002001' ? 'Harbour Supplies Pte. Ltd. (demo)' : 'GLDB business account';
     values.description = String(values.description ?? '').trim();
     if (values.description.length > 100) throw new Error('Use a transfer note of 100 characters or fewer.');
   }

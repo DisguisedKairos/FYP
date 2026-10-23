@@ -1,6 +1,6 @@
 # Digital wholesale banking scope
 
-Greenlink's customers in this project are registered companies, partnerships and institutions. People sign in as authorized business operators or bank operations staff. The project offers business savings accounts, liquidity separation, internal business transfers, business bill payments, scheduled instructions, company statements and fraud controls. It does not offer consumer or personal savings products.
+Green Link Digital Bank's customers in this project are registered companies, partnerships and institutions. People sign in as authorized business operators or bank operations staff. The project offers business savings accounts, liquidity separation, internal business transfers, business bill payments, scheduled instructions, company statements and fraud controls. It does not offer consumer or personal savings products.
 
 ## Business identity and onboarding
 

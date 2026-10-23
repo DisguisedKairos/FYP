@@ -53,7 +53,7 @@ npm run db:setup
 npm run db:check
 ```
 
-`db:setup` creates the named database if missing, applies the migrations and configures separate application/migration roles. Its default target is the database name in `.env` (`greenlink_dft` in the example); `DATABASE_NAME` can select another lowercase name. The administrator needs permission to create the database and roles and to adopt an existing Greenlink schema. An unrelated populated target, unknown pre-existing role or elevated runtime/migration role is refused.
+`db:setup` creates the named database if missing, applies the migrations and configures separate application/migration roles. Its default target is the database name in `.env` (`greenlink_dft` in the example); `DATABASE_NAME` can select another lowercase name. The administrator needs permission to create the database and roles and to adopt an existing Green Link Digital Bank schema. An unrelated populated target, unknown pre-existing role or elevated runtime/migration role is refused.
 
 Setup saves randomly generated passwords privately; rerunning it reuses the saved credentials and preserves banking records. It does not seed, reset or overwrite users. Do not change the generated URLs to perform password rotation; coordinate a deliberate PostgreSQL role password change and matching configuration update instead. Database/role creation is not one PostgreSQL transaction; an interrupted setup may leave provisioned objects and saved credentials, which a retry can reuse.
 

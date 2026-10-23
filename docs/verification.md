@@ -16,6 +16,8 @@ The wholesale revision additionally verifies registered business eligibility, le
 
 The PostgreSQL revision moves the project-owned server to persistent `data/postgresql`, gives the application a restricted login and saves migration/bootstrap/test credentials separately. The startup test confirms neither child inherits operator credentials and the Python scorer receives no database or MFA encryption credentials. The 91 Node tests and five browser workflows were rerun, as were the actual source and extracted-package process smoke checks. Database/admin secrets, native binaries and cluster files are excluded from the source archive.
 
+The GLDB branding revision (2.2.1) uses the official full-colour/white logos, orange/blue identity, corrected bank name, business payment wording and legal company account-holder display. All 91 Node tests and five browser workflows passed again. Desktop sign-in/dashboard previews were inspected, and browser checks verified local-only assets, responsive navigation, statements/PDFs and authenticator enrolment. See [asset sources and coverage](branding.md).
+
 Use the commands in the root README to reproduce these checks. PostgreSQL tests require a separate `TEST_DATABASE_URL`, Python tests require the test requirements, and browser tests require Chrome/Edge. Older SQLite/native-service tests are reference files, not part of these counts. No infrastructure pipeline or hosted deployment is claimed by this verification.
 
 The scorer's synthetic evaluation is a model demonstration, not real-world fraud detection validation. Live bill settlement, email/SMS, KYC and account-recovery delivery remain outside the implemented project flows; see `requirements.md`.

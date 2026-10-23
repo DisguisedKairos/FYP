@@ -86,7 +86,7 @@ function recoveryHash(code, userId) {
 }
 
 function enrollmentUrl(secret, email) {
-  return `otpauth://totp/${encodeURIComponent(`Greenlink Digital Bank:${email}`)}?${new URLSearchParams({ secret, issuer: 'Greenlink Digital Bank', algorithm: 'SHA1', digits: '6', period: '30' })}`;
+  return `otpauth://totp/${encodeURIComponent(`Green Link Digital Bank:${email}`)}?${new URLSearchParams({ secret, issuer: 'Green Link Digital Bank', algorithm: 'SHA1', digits: '6', period: '30' })}`;
 }
 
 module.exports = { PERIOD_MS, base32, newSecret, codeForCounter, verifyCode, encryptSecret, decryptSecret, recoveryCodes, recoveryHash, enrollmentUrl };

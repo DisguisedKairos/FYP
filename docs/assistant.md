@@ -1,6 +1,6 @@
-# Greenlink Assistant
+# GLDB Assistant
 
-Open **Greenlink Assistant** after signing in as an authorized business operator. It reads only that operator's linked business account records and prepares business payment drafts. It supports these examples:
+Open **GLDB Assistant** after signing in as an authorized business operator. It reads only that operator's linked business account records and prepares business payment drafts. It supports these examples:
 
 | Message | Result |
 | --- | --- |
