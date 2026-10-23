@@ -147,7 +147,7 @@ async function launchChrome(t, { width = 1440, height = 1000, mobile = false, do
     '/usr/bin/chromium', '/usr/bin/chromium-browser', '/opt/google/chrome/chrome',
   ].find(existsSync);
   if (!executable || !existsSync(executable)) throw new Error('Set CHROME_PATH to an installed Chromium browser.');
-  const profile = mkdtempSync(join(tmpdir(), 'evergreen-chrome-'));
+  const profile = mkdtempSync(join(tmpdir(), 'greenlink-chrome-'));
   const processHandle = spawn(executable, [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
     '--no-first-run', '--no-default-browser-check', '--disable-extensions',

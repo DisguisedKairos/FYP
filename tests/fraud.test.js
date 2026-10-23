@@ -79,6 +79,42 @@ test('assessments and rule configuration survive a service restart', t => {
   engine.close();
 });
 
+test('rule audit is append-only, filterable, paginated and retains actor names across restart', t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'evergreen-audit-')); t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const dbPath = path.join(directory, 'fraud.sqlite');
+  let engine = new FraudEngine({ dbPath });
+  const original = engine.getRules().rules.find(rule => rule.id === 'high_value');
+  assert.equal(engine.getAudit().pagination.total, 0);
+  engine.updateRule('high_value', { threshold: 8000, version: 1 }, { id: 'reviewer-1', name: 'Sam Rivera' });
+  engine.updateRule('new_payee', { enabled: false, version: 2 }, { id: 'reviewer-2', name: 'Alex Morgan' });
+  engine.updateRule('high_value', { action: 'block', version: 3 }, { id: 'reviewer-1', name: 'Sam Rivera' });
+  const first = engine.getAudit({ pageSize: 2 });
+  assert.deepEqual(first.entries.map(entry => entry.version), [4, 3]);
+  assert.deepEqual(first.pagination, { page: 1, pageSize: 2, total: 3, totalPages: 2 });
+  assert.equal(first.entries[0].actor.name, 'Sam Rivera');
+  const older = engine.getAudit({ page: 2, pageSize: 2 });
+  assert.deepEqual(older.entries[0].before, original);
+  assert.equal(older.entries[0].after.threshold, 8000);
+  assert.equal(engine.getAudit({ ruleId: 'high_value' }).pagination.total, 2);
+  assert.throws(() => engine.updateRule('high_value', { threshold: 7000, version: 1 }, { id: 'reviewer-1' }), error => error.status === 409);
+  assert.equal(engine.getAudit().pagination.total, 3);
+  assert.throws(() => engine.getAudit({ page: '-1' }), error => error.status === 400);
+  assert.throws(() => engine.getAudit({ pageSize: '101' }), error => error.status === 400);
+  assert.throws(() => engine.getAudit({ ruleId: 'missing' }), error => error.status === 404);
+  engine.close(); engine = new FraudEngine({ dbPath });
+  assert.deepEqual(engine.getAudit({ pageSize: 2 }), first);
+  engine.close();
+});
+
+test('legacy fraud audit rows remain readable without inventing an administrator name', () => {
+  const engine = new FraudEngine();
+  engine.updateRule('new_payee', { enabled: false, version: 1 }, { id: 'old-reviewer' });
+  const row = engine.getAudit().entries[0];
+  assert.equal(row.actor.id, 'old-reviewer');
+  assert.equal(row.actor.name, 'User old-reviewer');
+  engine.close();
+});
+
 test('model provenance and held-out metrics explicitly describe the synthetic baseline', () => {
   assert.equal(model.training.synthetic, true);
   assert.equal(model.training.rows, model.training.trainRows + model.training.testRows);

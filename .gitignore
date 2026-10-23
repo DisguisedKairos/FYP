@@ -8,3 +8,10 @@ coverage/
 test-results/
 playwright-report/
 *.log
+releases/
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!*.tfvars.example

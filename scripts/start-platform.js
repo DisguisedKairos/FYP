@@ -57,6 +57,6 @@ process.once('SIGTERM', () => stop());
     const port = publicPort;
     start('services/gateway.js', port, { HOST: process.env.HOST || '127.0.0.1' });
     await waitFor(`http://127.0.0.1:${port}`, false);
-    console.log(`\nEvergreen platform ready: http://localhost:${port}\nDemo customer/admin: alex@evergreen.demo / Evergreen123!\nIndependent reviewer: reviewer@evergreen.demo / Evergreen123!\n`);
+    console.log(`\nGreenlink Digital Bank platform ready: http://localhost:${port}\nDemo customer/admin: alex@greenlink.demo / Greenlink123!\nIndependent reviewer: reviewer@greenlink.demo / Greenlink123!\n`);
   } catch (error) { console.error(error.message); stop(1); }
 })();

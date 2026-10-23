@@ -98,19 +98,24 @@ function closeAccount(db, userId, id) {
   });
 }
 
-function dashboard(db, userId) {
+function dashboard(db, userId, { now = Date.now } = {}) {
+  const history = require('./history');
+  return history.readSnapshot(db, () => {
+  const timestamp = new Date(now());
   const accounts = db.prepare("SELECT * FROM accounts WHERE user_id = ? AND status = 'active' ORDER BY id").all(userId).map(accountView);
   const closedAccounts = db.prepare("SELECT * FROM accounts WHERE user_id = ? AND status = 'closed' ORDER BY id").all(userId).map(accountView);
   const transactions = db.prepare(`SELECT t.*, a.name AS account_name, a.number AS account_number FROM transactions t JOIN accounts a ON a.id = t.account_id
-    WHERE a.user_id = ? ORDER BY t.created_at DESC, t.rowid DESC`).all(userId).map(transactionView);
-  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    WHERE a.user_id = ? ORDER BY t.created_at DESC, t.rowid DESC LIMIT 10`).all(userId).map(transactionView);
+  const since = new Date(timestamp.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const totals = db.prepare(`SELECT
     COALESCE(SUM(CASE WHEN t.amount_cents > 0 THEN t.amount_cents ELSE 0 END), 0) AS income,
     COALESCE(SUM(CASE WHEN t.amount_cents < 0 THEN -t.amount_cents ELSE 0 END), 0) AS outgoing
     FROM transactions t JOIN accounts a ON a.id = t.account_id
-    WHERE a.user_id = ? AND t.internal = 0 AND t.status = 'completed' AND t.created_at >= ?`).get(userId, since);
+    WHERE a.user_id = ? AND t.internal = 0 AND t.status = 'completed' AND t.created_at >= ? AND t.created_at <= ?`).get(userId, since, timestamp.toISOString());
   const billers = db.prepare('SELECT id, name, category, initials, color FROM billers ORDER BY rowid').all();
-  return { accounts, closedAccounts, transactions, billers, summary: { incomeCents: totals.income, outgoingCents: totals.outgoing } };
+  return { accounts, closedAccounts, transactions, billers, summary: { incomeCents: totals.income, outgoingCents: totals.outgoing },
+    insights: history.insights(db, userId, () => timestamp) };
+  });
 }
 
 function requestKey(value) {

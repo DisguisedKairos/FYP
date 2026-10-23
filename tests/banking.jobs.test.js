@@ -25,7 +25,7 @@ test('scheduled payments validate authorization, future dates and ownership with
   const client = fixture.client();
   const other = fixture.client();
   await client.login();
-  await other.login('jamie@evergreen.demo');
+  await other.login('jamie@greenlink.demo');
   const before = await client.dashboard();
   const payload = schedulePayload(before.accounts[0].id);
   assert.equal((await send(client, '/api/scheduled-payments', payload, 'POST', { authorize: false })).status, 403);
@@ -44,7 +44,7 @@ test('scheduled payments validate authorization, future dates and ownership with
   assert.equal((await send(other, `/api/scheduled-payments/${created.id}`, {}, 'DELETE')).status, 404);
   const storage = readStore(fixture.dbPath, 'SELECT authorization_json FROM scheduled_payments');
   assert.equal(storage.length, 1);
-  assert.equal(storage[0].authorization_json.includes('Evergreen123!'), false);
+  assert.equal(storage[0].authorization_json.includes('Greenlink123!'), false);
   assert.equal(JSON.parse(storage[0].authorization_json).scope, 'scheduled_payment');
 });
 
@@ -73,7 +73,7 @@ test('a one-time payment survives restart and concurrent ticks execute its due o
   assert.ok(finished.runs[0].transactionId);
   assert.equal(totalBalance(await returning.dashboard()), totalBalance(before) - 1000);
   const recipient = fixture.client();
-  await recipient.login('jamie@evergreen.demo');
+  await recipient.login('jamie@greenlink.demo');
   assert.equal(totalBalance(await recipient.dashboard()), 121000);
   assert.equal((await send(returning, `/api/scheduled-payments/${created.id}`, {}, 'DELETE')).status, 409);
 });
@@ -183,7 +183,7 @@ test('delivered notifications retain unread state across restart and cannot be r
   const sender = fixture.client();
   const recipient = fixture.client();
   await sender.login();
-  await recipient.login('jamie@evergreen.demo');
+  await recipient.login('jamie@greenlink.demo');
   const source = accountNamed(await sender.dashboard(), 'Main savings');
   success(await send(sender, '/api/transfers', { fromAccountId: source.id, toAccountNumber: '1020002001', amount: '3.21' }));
   await fixture.runJobs();
@@ -198,7 +198,7 @@ test('delivered notifications retain unread state across restart and cannot be r
   await fixture.stop();
   await fixture.start();
   const returning = fixture.client();
-  await returning.login('jamie@evergreen.demo');
+  await returning.login('jamie@greenlink.demo');
   assert.equal(success(await returning.request('/api/notifications')).unreadCount, 1);
   success(await send(returning, '/api/notifications/all', { read: true }, 'PATCH'));
   assert.equal(success(await returning.request('/api/notifications')).unreadCount, 0);

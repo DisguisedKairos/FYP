@@ -2,6 +2,7 @@
 
 const { randomBytes, createHash, scrypt, scryptSync, timingSafeEqual } = require('node:crypto');
 const { promisify } = require('node:util');
+const { DEMO_PASSWORD, LEGACY_DEMO_PASSWORD, isKnownDemo } = require('./demoIdentity');
 
 const deriveKey = promisify(scrypt);
 const SESSION_COOKIE = 'evergreen_session';
@@ -25,6 +26,21 @@ async function verifyPassword(password, stored) {
   const expected = Buffer.from(encoded, 'hex');
   const actual = await deriveKey(password, salt, 64);
   return actual.length === expected.length && timingSafeEqual(actual, expected);
+}
+
+function verifyPasswordSync(password, stored) {
+  if (typeof stored !== 'string' || !/^[a-f0-9]{32}:[a-f0-9]{128}$/.test(stored)) return false;
+  const [salt, encoded] = stored.split(':');
+  const actual = scryptSync(password, salt, 64), expected = Buffer.from(encoded, 'hex');
+  return timingSafeEqual(actual, expected);
+}
+
+async function verifyUserPassword(db, user, password) {
+  if (await verifyPassword(password, user?.password_hash)) return Boolean(user);
+  // Legacy compatibility is limited to the seeded identities while their
+  // current password is the public demo default. A custom password disables it.
+  return Boolean(user && password === LEGACY_DEMO_PASSWORD && isKnownDemo(db, user)
+    && await verifyPassword(DEMO_PASSWORD, user.password_hash));
 }
 
 function tokenHash(token) {
@@ -52,7 +68,7 @@ function loadSession(db, request) {
   return record;
 }
 
-function createSession(db, request, response, userId = null) {
+function createSession(db, request, response, userId = null, { secure = Boolean(request.socket.encrypted) } = {}) {
   const previous = readCookie(request);
   if (previous) db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(tokenHash(previous));
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now());
@@ -62,8 +78,8 @@ function createSession(db, request, response, userId = null) {
   const expiresAt = Date.now() + lifetime;
   db.prepare('INSERT INTO sessions (token_hash, user_id, csrf_token, expires_at) VALUES (?, ?, ?, ?)')
     .run(tokenHash(token), userId, csrfToken, expiresAt);
-  const secure = request.socket.encrypted ? '; Secure' : '';
-  response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(lifetime / 1000)}${secure}`);
+  const secureFlag = secure ? '; Secure' : '';
+  response.setHeader('Set-Cookie', `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(lifetime / 1000)}${secureFlag}`);
   return { token_hash: tokenHash(token), user_id: userId, csrf_token: csrfToken, expires_at: expiresAt };
 }
 
@@ -79,6 +95,6 @@ function csrfMatches(received, expected) {
 }
 
 module.exports = {
-  hashPasswordSync, hashPassword, verifyPassword, loadSession, createSession,
+  hashPasswordSync, hashPassword, verifyPassword, verifyPasswordSync, verifyUserPassword, loadSession, createSession,
   publicUser, csrfMatches
 };

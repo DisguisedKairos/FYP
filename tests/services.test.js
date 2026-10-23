@@ -25,8 +25,15 @@ test('fraud service enforces service authentication and preserves assessments ac
   assert.deepEqual(await client.assess(input), first);
   assert.equal((await client.getModelInfo()).training.synthetic, true);
   const rules = await client.getRules();
-  assert.equal((await client.updateRule('high_value', { threshold: 8000, version: rules.version }, { id: 'reviewer' })).version, rules.version + 1);
+  assert.equal((await client.updateRule('high_value', { threshold: 8000, version: rules.version }, { id: 'reviewer', name: 'Sam Rivera' })).version, rules.version + 1);
   await assert.rejects(client.updateRule('high_value', { threshold: 7000, version: rules.version }, { id: 'reviewer' }), e => e.status === 409);
+  const audit = await client.getAudit({ ruleId: 'high_value', pageSize: 1 });
+  assert.equal(audit.pagination.total, 1);
+  assert.equal(audit.entries[0].actor.name, 'Sam Rivera');
+  assert.equal(audit.entries[0].before.threshold, 10000);
+  assert.equal(audit.entries[0].after.threshold, 8000);
+  assert.equal((await fetch(base + '/internal/rules/audit')).status, 401);
+  await assert.rejects(client.getAudit({ page: 'invalid' }), error => error.status === 400);
 });
 
 test('notification HTTP consumer deduplicates events and the gateway hides private service endpoints', async t => {

@@ -22,7 +22,7 @@ function riskClientFor(decision = 'allow') {
 }
 
 async function createFixture(t, { seed = true, riskClient = riskClientFor(), ...options } = {}) {
-  const directory = mkdtempSync(join(tmpdir(), 'evergreen-integration-'));
+  const directory = mkdtempSync(join(tmpdir(), 'greenlink-integration-'));
   const dbPath = join(directory, 'bank.sqlite');
   let server;
   let baseUrl;
@@ -35,8 +35,8 @@ async function createFixture(t, { seed = true, riskClient = riskClientFor(), ...
     });
   }
 
-  async function start() {
-    server = createApplication({ dbPath, seed, riskClient, ...options });
+  async function start(restartOptions = {}) {
+    server = createApplication({ dbPath, seed, riskClient, ...options, ...restartOptions });
     await new Promise((resolve, reject) => {
       server.once('error', reject);
       server.listen(0, '127.0.0.1', resolve);
@@ -67,7 +67,7 @@ class Client {
     this.csrfToken = null;
   }
 
-  async request(path, { method = 'GET', body, csrf = true, authorize = true, headers = {} } = {}) {
+  async request(path, { method = 'GET', body, csrf = true, authorize = true, responseType = 'json', headers = {} } = {}) {
     if (authorize && method === 'POST' && ['/api/transfers', '/api/payments', '/api/scheduled-payments'].includes(path) && body) {
       body = { authorizationPassword: this.password, ...body };
     }
@@ -91,6 +91,7 @@ class Client {
       this.cookies.set(pair.slice(0, separator), pair.slice(separator + 1));
     }
     const text = await response.text();
+    if (responseType === 'text') return { status: response.status, data: text, headers: response.headers };
     let data;
     try {
       data = JSON.parse(text);
@@ -109,7 +110,7 @@ class Client {
     return result;
   }
 
-  async login(email = 'alex@evergreen.demo', password = 'Evergreen123!') {
+  async login(email = 'alex@greenlink.demo', password = 'Greenlink123!') {
     await this.session();
     const result = await this.request('/api/auth/login', { method: 'POST', body: { email, password } });
     assert.equal(result.status, 200, JSON.stringify(result.data));
@@ -122,6 +123,22 @@ class Client {
     const result = await this.request('/api/dashboard');
     assert.equal(result.status, 200, JSON.stringify(result.data));
     return result.data;
+  }
+
+  async history(filters = {}) {
+    const query = new URLSearchParams(Object.entries(filters).map(([key, value]) => [key, String(value)]));
+    const result = await this.request(`/api/transactions?${query}`);
+    assert.equal(result.status, 200, JSON.stringify(result.data));
+    return result.data;
+  }
+
+  async ledger(filters = {}) {
+    const transactions = [];
+    for (let page = 1; ; page++) {
+      const result = await this.history({ ...filters, page, pageSize: 100 });
+      transactions.push(...result.transactions);
+      if (page >= result.pagination.totalPages) return transactions;
+    }
   }
 }
 

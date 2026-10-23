@@ -28,6 +28,7 @@ function createRiskClient({ dbPath = ':memory:', url = process.env.FRAUD_SERVICE
     isRemote: true,
     async assess(input) { return (await request('/internal/assess', input)).risk; },
     async getRules() { return request('/internal/rules'); },
+    async getAudit(parameters = {}) { return request('/internal/rules/audit?' + new URLSearchParams(Object.entries(parameters).filter(([, value]) => value !== undefined && value !== null))); },
     async updateRule(id, patch, actor) { return request('/internal/rules/' + encodeURIComponent(id), { patch, actor }, 'PATCH'); },
     async getModelInfo() { return (await request('/internal/model')).model; },
     close() {},

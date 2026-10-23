@@ -11,10 +11,11 @@ const bank = require('./controllers/bankController');
 const services = require('./controllers/servicesController');
 const schedules = require('./models/schedules');
 const events = require('./models/events');
+const history = require('./models/history');
 const { createRiskClient, createNotificationClient } = require('./services/clients');
 
 const BODY_LIMIT = 16 * 1024;
-const FRONTEND_ROUTES = new Set(['/', '/login', '/register', '/dashboard', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements']);
+const FRONTEND_ROUTES = new Set(['/', '/login', '/register', '/dashboard', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant']);
 const CONTENT_TYPES = {
   '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
@@ -40,14 +41,27 @@ function sendJson(response, status, payload) {
   response.end(body);
 }
 
-function sameOrigin(request) {
+function normalizePublicOrigin(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string') throw new Error('PUBLIC_ORIGIN must be an HTTPS origin such as https://bank.example.com.');
+  const input = value.trim();
+  let parsed;
+  try { parsed = new URL(input); } catch { throw new Error('PUBLIC_ORIGIN must be a valid HTTPS origin.'); }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.pathname !== '/'
+    || parsed.search || parsed.hash || /[\u0000-\u0020\u007f]/.test(input)) {
+    throw new Error('PUBLIC_ORIGIN must be an HTTPS origin without credentials, path, query or fragment.');
+  }
+  return parsed.origin;
+}
+
+function sameOrigin(request, publicOrigin) {
   if (request.headers['sec-fetch-site'] === 'cross-site') throw new HttpError(403, 'Cross-site requests are not allowed.');
   const origin = request.headers.origin;
   if (!origin) return;
   let source;
   try { source = new URL(origin); } catch { throw new HttpError(403, 'Request origin is not allowed.'); }
-  const protocol = request.socket.encrypted ? 'https:' : 'http:';
-  if (source.protocol !== protocol || source.host !== request.headers.host) {
+  const expected = publicOrigin || `${request.socket.encrypted ? 'https:' : 'http:'}//${request.headers.host}`;
+  if (source.origin !== expected || source.username || source.password || source.pathname !== '/' || source.search || source.hash) {
     throw new HttpError(403, 'Request origin is not allowed.');
   }
 }
@@ -94,12 +108,18 @@ function route(pathname, method, response) {
   else if (pathname === '/api/auth/login') available = { POST: auth.login };
   else if (pathname === '/api/auth/logout') available = { POST: auth.logout };
   else if (pathname === '/api/dashboard') { available = { GET: bank.dashboard }; protectedRoute = true; }
+  else if (pathname === '/api/transactions') { available = { GET: bank.transactions }; protectedRoute = true; }
+  else if (pathname === '/api/transactions/export') { available = { GET: bank.exportTransactions }; protectedRoute = true; }
+  else if (/^\/api\/transactions\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { GET: bank.transactionDetails }; protectedRoute = true; }
+  else if (pathname === '/api/statements') { available = { GET: bank.statement }; protectedRoute = true; }
+  else if (pathname === '/api/assistant/messages') { available = { POST: context => require('./controllers/assistantController').messages(context) }; protectedRoute = true; }
   else if (pathname === '/api/accounts') { available = { POST: bank.createAccount }; protectedRoute = true; }
   else if (pathname === '/api/scheduled-payments') { available = { GET: services.listSchedules, POST: services.createSchedule }; protectedRoute = true; }
   else if (/^\/api\/scheduled-payments\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { DELETE: services.cancelSchedule }; protectedRoute = true; }
   else if (pathname === '/api/notifications') { available = { GET: services.notifications }; protectedRoute = true; }
   else if (/^\/api\/notifications\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { PATCH: services.markRead }; protectedRoute = true; }
   else if (pathname === '/api/fraud/rules') { available = { GET: services.rules }; protectedRoute = true; }
+  else if (pathname === '/api/fraud/rules/audit') { available = { GET: services.ruleAudit }; protectedRoute = true; }
   else if (/^\/api\/fraud\/rules\/[^/]+$/.test(pathname)) { resourceId = pathname.split('/').pop(); available = { PATCH: services.updateRule }; protectedRoute = true; }
   else if (pathname === '/api/fraud/model') { available = { GET: services.model }; protectedRoute = true; }
   else if (pathname === '/api/fraud/reviews') { available = { GET: services.reviews }; protectedRoute = true; }
@@ -153,8 +173,10 @@ async function serveFrontend(request, response, pathname) {
   response.end(request.method === 'HEAD' ? undefined : bytes);
 }
 
-function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'banking.sqlite'), seed = process.env.SEED_DEMO !== 'false', riskClient: suppliedRisk = null, notificationClient: suppliedNotifications = null, now = Date.now } = {}) {
+function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.join(__dirname, 'data'), 'banking.sqlite'), seed = process.env.SEED_DEMO !== 'false', riskClient: suppliedRisk = null, notificationClient: suppliedNotifications = null, now = Date.now, publicOrigin: configuredOrigin = process.env.PUBLIC_ORIGIN } = {}) {
+  const publicOrigin = normalizePublicOrigin(configuredOrigin);
   const db = openDatabase(dbPath, { seed });
+  history.ensureIndexes(db);
   const servicePath = name => dbPath === ':memory:' ? ':memory:' : path.join(path.dirname(path.resolve(dbPath)), `${name}.sqlite`);
   const riskClient = suppliedRisk || createRiskClient({ dbPath: servicePath('fraud') });
   const notificationClient = suppliedNotifications || createNotificationClient({ dbPath: servicePath('notifications') });
@@ -199,7 +221,7 @@ function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.joi
       if (selected.protectedRoute && !user) throw new HttpError(401, 'Sign in to continue.');
       const write = !['GET', 'HEAD'].includes(request.method);
       if (write) {
-        sameOrigin(request);
+        sameOrigin(request, publicOrigin);
         const authEntry = pathname === '/api/auth/login' || pathname === '/api/auth/register';
         if (!authEntry && (!currentSession || !csrfMatches(request.headers['x-csrf-token'], currentSession.csrf_token))) {
           throw new HttpError(403, 'Your security token has expired. Refresh the page and try again.');
@@ -209,9 +231,11 @@ function createApplication({ dbPath = path.join(process.env.DATA_DIR || path.joi
       const context = {
         db, request, response, body, session: currentSession, user,
         accountId: selected.accountId, resourceId: selected.resourceId, limitLogin, url: target,
-        riskClient, notificationClient, now, deliverNotifications: deliverImmediateNotifications
+        riskClient, notificationClient, now, secureCookies: Boolean(publicOrigin || request.socket.encrypted),
+        deliverNotifications: deliverImmediateNotifications
       };
       const result = await selected.handler(context);
+      if (response.writableEnded || response.destroyed) return;
       if (write) await deliverImmediateNotifications();
       sendJson(response, pathname === '/api/auth/register' || (['/api/accounts', '/api/scheduled-payments'].includes(pathname) && request.method === 'POST') ? 201 : 200, { ok: true, ...result });
     } catch (error) {
@@ -240,12 +264,12 @@ if (require.main === module) {
     const server = createApplication();
     const host = process.env.HOST || '127.0.0.1';
     server.on('error', error => {
-      console.error(`Unable to start Evergreen: ${error.message}`);
+      console.error(`Unable to start Greenlink Digital Bank: ${error.message}`);
       process.exitCode = 1;
     });
     server.listen(port, host, () => {
-      console.log(`Evergreen Banking demo is running at http://${host}:${port}`);
-      console.log('Demo sign in: alex@evergreen.demo / Evergreen123!');
+      console.log(`Greenlink Digital Bank is running at http://${host}:${port}`);
+      console.log('Demo sign in: alex@greenlink.demo / Greenlink123!');
     });
     const shutdown = () => server.close(() => process.exit(0));
     process.once('SIGINT', shutdown);

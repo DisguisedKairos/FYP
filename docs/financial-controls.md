@@ -24,6 +24,8 @@
 | Durable notifications | Transactional outbox, retry leases and consumer deduplication. |
 | Scheduled consent | The authorized source, recipient, amount, frequency and date are immutable; cancellation stops future occurrences. |
 | Statements | Filters and exports use real stored records and identify status. Pending/rejected records do not imply money moved. |
+| Statement reconciliation | Completed entries preserve settlement order for tied timestamps, including approved holds. Impossible legacy chronology, negative running balances or a closing mismatch stop statement issuance. |
+| Private assistant | Owned read queries and payment drafts only; chat cannot bypass password authorization, screening or independent review. |
 
 ## Fraud monitoring
 

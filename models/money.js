@@ -4,7 +4,7 @@ const { createHash, randomUUID } = require('node:crypto');
 const { transaction } = require('../db');
 const { HttpError } = require('./errors');
 const bank = require('./banking');
-const { verifyPassword } = require('./security');
+const { verifyUserPassword } = require('./security');
 const { enqueue, instant } = require('./events');
 
 const MAX_CENTS = 9000000000000;
@@ -19,8 +19,8 @@ function view(db, id) {
 
 async function authorize(db, user, password, clock = Date.now) {
   if (typeof password !== 'string' || !password || password.length > 128) throw new HttpError(403, 'Enter your current password to authorize this action.');
-  const record = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(user.id);
-  if (!record || !await verifyPassword(password, record.password_hash)) throw new HttpError(403, 'The authorization password is incorrect.');
+  const record = db.prepare('SELECT id, email, password_hash FROM users WHERE id = ?').get(user.id);
+  if (!record || !await verifyUserPassword(db, record, password)) throw new HttpError(403, 'The authorization password is incorrect.');
   return { method: 'password', authorizedAt: instant(clock).toISOString() };
 }
 
@@ -29,7 +29,7 @@ function normalize(kind, body) {
   if (kind === 'transfer') {
     if (typeof body.toAccountNumber !== 'string') throw new HttpError(400, 'Enter the recipient’s account number.');
     const number = body.toAccountNumber.replace(/[\s-]/g, '');
-    if (!/^\d{10}$/.test(number)) throw new HttpError(400, 'Enter a 10-digit Evergreen account number.');
+    if (!/^\d{10}$/.test(number)) throw new HttpError(400, 'Enter a 10-digit Greenlink account number.');
     const description = body.description === undefined ? '' : body.description;
     if (typeof description !== 'string' || description.trim().length > 100) throw new HttpError(400, 'Use a transfer note of 100 characters or fewer.');
     return { fromId, number, amountCents, note: description.trim() || 'Savings transfer' };
@@ -126,6 +126,11 @@ function insertIncoming(db, { source, target, amountCents, description, referenc
 function settle(db, user, kind, payload, resolved, id, reference, createdAt) {
   const { source, target, note, internal } = resolved;
   if (source.balance_cents < payload.amountCents) throw new HttpError(409, 'Insufficient funds in the selected account.');
+  // A held intent may predate other completed entries with the same timestamp.
+  // Move its internal ordering key to settlement time before adding the credit.
+  // Public transaction IDs and their references stay unchanged; this runs in
+  // the same write transaction as both balances and the review decision.
+  db.prepare("UPDATE transactions SET rowid = (SELECT COALESCE(MAX(rowid), 0) + 1 FROM transactions) WHERE id = ? AND status = 'pending_review'").run(id);
   db.prepare('UPDATE accounts SET balance_cents = balance_cents - ? WHERE id = ?').run(payload.amountCents, source.id);
   if (target) {
     db.prepare('UPDATE accounts SET balance_cents = balance_cents + ? WHERE id = ?').run(payload.amountCents, target.id);
@@ -184,7 +189,7 @@ async function submit(db, user, kind, body, { riskClient, now = Date.now, schedu
     if (violation) risk = { ...risk, assessedDecision: risk.decision, assessedScore: risk.score,
       decision: 'block', score: Math.max(95, risk.score), reasons: [...risk.reasons, violation], controlledAt: createdAt };
     const status = risk.decision === 'allow' ? 'completed' : risk.decision === 'review' ? 'pending_review' : 'rejected';
-    const reference = kind === 'bill' ? payload.reference : `EVG-${id.replace(/-/g, '').slice(0, 12).toUpperCase()}`;
+    const reference = kind === 'bill' ? payload.reference : `GLB-${id.replace(/-/g, '').slice(0, 12).toUpperCase()}`;
     db.prepare(`INSERT INTO transactions (id, account_id, type, description, amount_cents, counterparty,
       status, reference, internal, created_at, requested_at, completed_at, risk_json, authorization_json,
       to_account_id, biller_id, payee) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)

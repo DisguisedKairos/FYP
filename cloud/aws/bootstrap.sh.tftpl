@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# Rendered by Terraform. Configuration contains resource identifiers, never secrets.
+set -Eeuo pipefail
+umask 027
+exec > >(tee -a /var/log/greenlink-bootstrap.log | logger -t greenlink-bootstrap -s 2>/dev/console) 2>&1
+trap 'echo "Greenlink bootstrap failed at line $LINENO; inspect /var/log/greenlink-bootstrap.log" >&2' ERR
+
+config=$(printf '%s' '${bootstrap_config}' | base64 --decode)
+export DEBIAN_FRONTEND=noninteractive
+apt-get -o Acquire::Retries=5 -o DPkg::Lock::Timeout=180 update
+apt-get -o Acquire::Retries=5 -o DPkg::Lock::Timeout=180 install -y --no-install-recommends \
+  ca-certificates curl gnupg jq unzip awscli openssl python3 e2fsprogs util-linux
+
+region=$(printf '%s' "$config" | jq -er '.region')
+domain=$(printf '%s' "$config" | jq -er '.domain')
+release_bucket=$(printf '%s' "$config" | jq -er '.bucket')
+release_key=$(printf '%s' "$config" | jq -er '.key')
+release_sha=$(printf '%s' "$config" | jq -er '.sha256')
+volume_id=$(printf '%s' "$config" | jq -er '.data_volume_id')
+volume_serial=$(printf '%s' "$volume_id" | tr -d '-')
+export AWS_DEFAULT_REGION="$region"
+
+# Nitro NVMe enumeration is not stable. Locate only the configured EBS volume by
+# serial, and never format an unexpected disk or an existing filesystem.
+device=""
+for attempt in $(seq 1 120); do
+  device=$(lsblk -dnpo NAME,SERIAL | awk -v serial="$volume_serial" '$2 == serial {print $1; exit}')
+  if [ -n "$device" ]; then break; fi
+  sleep 5
+done
+if [ -z "$device" ] || [ ! -b "$device" ]; then
+  echo "Configured EBS data volume did not attach" >&2
+  exit 1
+fi
+if [ "$(lsblk -nrpo NAME "$device" | wc -l)" -ne 1 ]; then
+  echo "Refusing an unexpected partitioned data volume" >&2
+  exit 1
+fi
+filesystem=$(blkid -o value -s TYPE "$device" || true)
+if [ -z "$filesystem" ]; then
+  # A newly created AWS EBS volume is zeroed. wipefs is inspection only.
+  if [ -n "$(wipefs --noheadings --output TYPE "$device")" ]; then
+    echo "Refusing a data volume containing unknown signatures" >&2
+    exit 1
+  fi
+  mkfs.ext4 -L greenlink-data "$device"
+elif [ "$filesystem" != "ext4" ]; then
+  echo "Refusing a data volume that is not ext4" >&2
+  exit 1
+fi
+volume_uuid=$(blkid -o value -s UUID "$device")
+mkdir -p /srv/greenlink
+printf 'UUID=%s /srv/greenlink ext4 defaults,nofail,x-systemd.device-timeout=120 0 2\n' "$volume_uuid" >> /etc/fstab
+mount /srv/greenlink
+mountpoint -q /srv/greenlink
+install -d -m 0700 /srv/greenlink/config
+install -d -m 0711 /srv/greenlink/docker /srv/greenlink/containerd
+
+# Ubuntu 24.04 AWS images normally include SSM Agent. Fail explicitly if this
+# selected image cannot provide the only supported administrative access path.
+if systemctl list-unit-files snap.amazon-ssm-agent.amazon-ssm-agent.service --no-legend | grep -q amazon-ssm-agent; then
+  systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service
+elif systemctl list-unit-files amazon-ssm-agent.service --no-legend | grep -q amazon-ssm-agent; then
+  systemctl enable --now amazon-ssm-agent.service
+else
+  echo "SSM Agent missing from the selected Ubuntu AWS image" >&2
+  exit 1
+fi
+
+# Install exact official Docker packages. The repository is authenticated by its
+# signing key; every .deb is additionally checked against its signed APT SHA256.
+install -d -m 0755 /etc/apt/keyrings
+curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
+  https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod 0644 /etc/apt/keyrings/docker.asc
+cat > /etc/apt/sources.list.d/docker.sources <<'SOURCES'
+Types: deb
+URIs: https://download.docker.com/linux/ubuntu
+Suites: noble
+Components: stable
+Architectures: amd64
+Signed-By: /etc/apt/keyrings/docker.asc
+SOURCES
+apt-get -o Acquire::Retries=5 update
+workdir=$(mktemp -d /var/tmp/greenlink-install.XXXXXX)
+trap 'rm -rf -- "$workdir"' EXIT
+mkdir "$workdir/debs"
+install -d -m 0755 /opt/greenlink
+manifest=/opt/greenlink/runtime-sha256.txt
+: > "$manifest"
+for pinned_package in \
+  'docker-ce=5:29.9.2-1~ubuntu.24.04~noble|95ddf7a2d8b8c0eb82d8597d4d604e294dcf741081f2e228524d5ab9bfd7c8ae' \
+  'docker-ce-cli=5:29.9.2-1~ubuntu.24.04~noble|74747b5c99000279b9b2c7eb82543b4121d8436a58aa3be7e78ac6681d74794f' \
+  'containerd.io=2.4.2-3~ubuntu.24.04~noble|f811ab57d1f4bb0cce19df7d526da8c711d8ebea0447cc83da1999188e664122' \
+  'docker-buildx-plugin=0.38.1-1~ubuntu.24.04~noble|642e9a8a0d115a8a57ad7045a4c7c2561522331197f0c087a762de1b72591672'; do
+  specification=$(printf '%s' "$pinned_package" | cut -d '|' -f 1)
+  pinned_sha=$(printf '%s' "$pinned_package" | cut -d '|' -f 2)
+  package_info=$(apt-cache show "$specification")
+  expected=$(printf '%s\n' "$package_info" | awk '/^SHA256:/ {print $2; exit}')
+  package_path=$(printf '%s\n' "$package_info" | awk '/^Filename:/ {print $2; exit}')
+  if [ "$expected" != "$pinned_sha" ]; then
+    echo "Pinned package checksum differs from authenticated repository metadata: $specification" >&2
+    exit 1
+  fi
+  case "$package_path" in
+    dists/noble/pool/stable/amd64/*.deb) ;;
+    *) echo "Unexpected official repository package path" >&2; exit 1 ;;
+  esac
+  package_file="$workdir/debs/$(basename "$package_path")"
+  curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
+    "https://download.docker.com/linux/ubuntu/$package_path" -o "$package_file"
+  printf '%s  %s\n' "$expected" "$package_file" | sha256sum --check --status
+  printf '%s  %s\n' "$expected" "$specification" >> "$manifest"
+done
+apt-get -o Acquire::Retries=5 -o DPkg::Lock::Timeout=180 install -y --no-install-recommends "$workdir"/debs/*.deb
+apt-mark hold docker-ce docker-ce-cli containerd.io docker-buildx-plugin
+systemctl stop docker.service docker.socket containerd.service
+
+compose_sha=47737f4236e6d3ccea7291995203f8f018058783b4c3a9469119811a0b5db8c0
+curl --fail --silent --show-error --location --retry 5 --retry-all-errors \
+  https://github.com/docker/compose/releases/download/v5.6.1/docker-compose-linux-x86_64 \
+  -o "$workdir/docker-compose"
+printf '%s  %s\n' "$compose_sha" "$workdir/docker-compose" | sha256sum --check --status
+install -D -m 0755 "$workdir/docker-compose" /usr/local/libexec/docker/cli-plugins/docker-compose
+printf '%s  docker-compose-v5.6.1-linux-x86_64\n' "$compose_sha" >> "$manifest"
+
+# Put both Docker volumes and containerd's image store on the retained disk.
+install -d -m 0755 /etc/docker /etc/containerd
+cat > /etc/docker/daemon.json <<'DOCKER'
+{
+  "data-root": "/srv/greenlink/docker",
+  "log-driver": "local",
+  "log-opts": {"max-size": "20m", "max-file": "5"}
+}
+DOCKER
+python3 - <<'PYTHON'
+import pathlib, re
+path = pathlib.Path('/etc/containerd/config.toml')
+text = path.read_text() if path.exists() else 'version = 2\n'
+text, count = re.subn(r'(?m)^root\s*=.*$', 'root = "/srv/greenlink/containerd"', text)
+if count > 1:
+    raise SystemExit('Unexpected multiple containerd root settings')
+if not count:
+    text = 'root = "/srv/greenlink/containerd"\n' + text
+path.write_text(text)
+PYTHON
+for service in docker containerd; do
+  install -d -m 0755 "/etc/systemd/system/$service.service.d"
+  cat > "/etc/systemd/system/$service.service.d/greenlink-storage.conf" <<'UNIT'
+[Unit]
+RequiresMountsFor=/srv/greenlink
+UNIT
+done
+
+# Secret is generated on the host and preserved across instance replacements.
+# It is absent from Terraform, user data, logs, release archives, and Git.
+if [ ! -f /srv/greenlink/config/platform.env ]; then
+  token=$(openssl rand -hex 32)
+  printf 'SERVICE_TOKEN=%s\n' "$token" > /srv/greenlink/config/platform.env
+  unset token
+fi
+python3 - "$domain" <<'PYTHON'
+import os, pathlib, sys
+path = pathlib.Path('/srv/greenlink/config/platform.env')
+lines = [line for line in path.read_text().splitlines()
+         if not line.startswith(('DOMAIN=', 'GREENLINK_DOMAIN=', 'PUBLIC_ORIGIN=', 'SEED_DEMO='))]
+lines += ['GREENLINK_DOMAIN=' + sys.argv[1], 'PUBLIC_ORIGIN=https://' + sys.argv[1], 'SEED_DEMO=false']
+path.write_text('\n'.join(lines) + '\n')
+os.chmod(path, 0o600)
+PYTHON
+
+archive="$workdir/release.zip"
+aws s3api get-object --bucket "$release_bucket" --key "$release_key" "$archive" > /dev/null
+printf '%s  %s\n' "$release_sha" "$archive" | sha256sum --check --status
+release_dir="/opt/greenlink/releases/$release_sha"
+mkdir -p "$release_dir"
+python3 - "$archive" "$release_dir" <<'PYTHON'
+import pathlib, stat, sys, zipfile
+archive, target = sys.argv[1], pathlib.Path(sys.argv[2])
+with zipfile.ZipFile(archive) as source:
+    entries = source.infolist()
+    if len(entries) > 10000 or sum(item.file_size for item in entries) > 512 * 1024 * 1024:
+        raise SystemExit('Release archive exceeds the source package limit')
+    for item in entries:
+        path = pathlib.PurePosixPath(item.filename)
+        if path.is_absolute() or '..' in path.parts or '\\' in item.filename:
+            raise SystemExit('Unsafe archive path')
+        if stat.S_ISLNK(item.external_attr >> 16):
+            raise SystemExit('Symbolic links are not allowed in the release ZIP')
+        if any(part in ('.git', 'node_modules', 'data') for part in path.parts):
+            raise SystemExit('Release contains development state or application data')
+        if any(part == '.env' or (part.startswith('.env.') and part != '.env.example') for part in path.parts):
+            raise SystemExit('Release must not contain environment secrets')
+    names = {item.filename for item in entries}
+    required = {'Dockerfile', 'compose.yaml', 'compose.cloud.yaml', 'cloud/Caddyfile', 'app.js'}
+    if not required.issubset(names):
+        raise SystemExit('Release ZIP must contain project files at the archive root')
+    source.extractall(target)
+PYTHON
+chmod -R go-w "$release_dir"
+ln -sfn "$release_dir" /opt/greenlink/current
+
+cat > /etc/systemd/system/greenlink.service <<'UNIT'
+[Unit]
+Description=Greenlink Digital Bank single-host platform
+Requires=docker.service
+After=network-online.target docker.service
+Wants=network-online.target
+RequiresMountsFor=/srv/greenlink
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/greenlink/current
+ExecStart=/usr/bin/docker compose --env-file /srv/greenlink/config/platform.env --project-name greenlink -f compose.yaml -f compose.cloud.yaml up --build --detach --wait --wait-timeout 180
+ExecStop=/usr/bin/docker compose --env-file /srv/greenlink/config/platform.env --project-name greenlink -f compose.yaml -f compose.cloud.yaml down --timeout 30
+TimeoutStartSec=900
+TimeoutStopSec=180
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl daemon-reload
+systemctl enable --now containerd.service docker.service
+docker compose version
+systemctl enable --now greenlink.service
+echo "Greenlink containers started; set the DNS A record before expecting a trusted HTTPS certificate."

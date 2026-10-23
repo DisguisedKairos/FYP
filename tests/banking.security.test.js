@@ -6,7 +6,7 @@ const { createFixture, riskClientFor, accountNamed, totalBalance } = require('./
 const send = (client, path, body, options = {}) => client.request(path, { method: 'POST', body, ...options });
 function success(result) { assert.ok(result.status >= 200 && result.status < 300, JSON.stringify(result.data)); return result.data; }
 function outboxCount(path) { const db = new DatabaseSync(path); try { return db.prepare('SELECT COUNT(*) AS count FROM notification_outbox').get().count; } finally { db.close(); } }
-const reviewBody = (decision = 'approve') => ({ decision, reason: 'Independently verified the payment request.', authorizationPassword: 'Evergreen123!' });
+const reviewBody = (decision = 'approve') => ({ decision, reason: 'Independently verified the payment request.', authorizationPassword: 'Greenlink123!' });
 
 test('financial writes require the current password before screening or any balance, ledger or outbox change', async (t) => {
   const risk = riskClientFor();
@@ -35,7 +35,7 @@ test('financial writes require the current password before screening or any bala
   assert.equal(approved.authorization.method, 'password');
   assert.equal(approved.risk.score, 12);
   assert.equal(assessments, 1);
-  assert.equal(JSON.stringify(approved).includes('Evergreen123!'), false);
+  assert.equal(JSON.stringify(approved).includes('Greenlink123!'), false);
 });
 
 test('screening failure or an invalid score fails closed without a financial or notification event', async (t) => {
@@ -60,7 +60,7 @@ test('held and blocked transactions keep funds unchanged and preserve their risk
   const client = fixture.client();
   const recipient = fixture.client();
   await client.login();
-  await recipient.login('jamie@evergreen.demo');
+  await recipient.login('jamie@greenlink.demo');
   const before = await client.dashboard();
   const recipientBefore = await recipient.dashboard();
   const base = { fromAccountId: before.accounts[0].id, toAccountNumber: '1020002001', amount: '10.00' };
@@ -80,7 +80,7 @@ test('held and blocked transactions keep funds unchanged and preserve their risk
   assert.equal(repeat.id, blocked.id);
   assert.equal((await client.dashboard()).transactions.filter(transaction => transaction.id === blocked.id).length, 1);
   const reviewer = fixture.client();
-  await reviewer.login('reviewer@evergreen.demo');
+  await reviewer.login('reviewer@greenlink.demo');
   const reviews = success(await reviewer.request('/api/fraud/reviews')).reviews;
   assert.ok(reviews.some(transaction => transaction.id === held.id));
   assert.ok(!reviews.some(transaction => transaction.id === blocked.id));
@@ -93,8 +93,8 @@ test('only an independent administrator can approve a held payment, and repeated
   const reviewer = fixture.client();
   const customer = fixture.client();
   await maker.login();
-  await reviewer.login('reviewer@evergreen.demo');
-  await customer.login('jamie@evergreen.demo');
+  await reviewer.login('reviewer@greenlink.demo');
+  await customer.login('jamie@greenlink.demo');
   const before = await maker.dashboard();
   const recipientBefore = await customer.dashboard();
   const payload = { fromAccountId: before.accounts[0].id, toAccountNumber: '1020002001', amount: '12.34', requestId: 'independent-approval' };
@@ -130,7 +130,7 @@ test('rejecting a held bill preserves balances and returns its final state on a 
   const maker = fixture.client();
   const reviewer = fixture.client();
   await maker.login();
-  await reviewer.login('reviewer@evergreen.demo');
+  await reviewer.login('reviewer@greenlink.demo');
   const before = await maker.dashboard();
   const payload = { fromAccountId: before.accounts[0].id, billerId: 'sp-services', reference: 'REVIEW-BILL', amount: '20.00', requestId: 'reject-held-bill' };
   const held = success(await send(maker, '/api/payments', payload)).transaction;
@@ -149,7 +149,7 @@ test('approval checks available funds again and an unsuccessful approval stays a
   const maker = fixture.client();
   const reviewer = fixture.client();
   await maker.login();
-  await reviewer.login('reviewer@evergreen.demo');
+  await reviewer.login('reviewer@greenlink.demo');
   const main = accountNamed(await maker.dashboard(), 'Main savings');
   const budget = success(await send(maker, '/api/accounts', { name: 'Approval budget' })).account;
   success(await send(maker, '/api/transfers', { fromAccountId: main.id, toAccountNumber: budget.number, amount: '20.00' }));
@@ -172,7 +172,7 @@ test('concurrent payments cannot bypass a daily control assessed before the othe
   const sender = fixture.client();
   const recipient = fixture.client();
   await sender.login();
-  await recipient.login('jamie@evergreen.demo');
+  await recipient.login('jamie@greenlink.demo');
   const before = await sender.dashboard();
   const recipientBefore = await recipient.dashboard();
   const base = { fromAccountId: before.accounts[0].id, toAccountNumber: '1020002001', amount: '100.00' };
@@ -201,7 +201,7 @@ test('review approval applies current hard rules and a denied approval cannot al
   const maker = fixture.client();
   const reviewer = fixture.client();
   await maker.login();
-  await reviewer.login('reviewer@evergreen.demo');
+  await reviewer.login('reviewer@greenlink.demo');
   const before = await maker.dashboard();
   const held = success(await send(maker, '/api/transfers', { fromAccountId: before.accounts[0].id, toAccountNumber: '1020002001', amount: '10.00' })).transaction;
   assert.equal(held.status, 'pending_review');

@@ -4,7 +4,8 @@ const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
-const { hashPasswordSync } = require('./models/security');
+const { hashPasswordSync, verifyPasswordSync } = require('./models/security');
+const { DEMO_PASSWORD, LEGACY_DEMO_PASSWORD, DEMO_IDENTITIES } = require('./models/demoIdentity');
 
 function transaction(db, work) {
   db.exec('BEGIN IMMEDIATE');
@@ -122,7 +123,7 @@ function openDatabase(dbPath, { seed = true } = {}) {
   addBiller.run('pub', 'PUB', 'Water', 'P', '#dfeaf6');
 
   if (seed && db.prepare('SELECT COUNT(*) AS count FROM users').get().count === 0) seedDemo(db);
-  if (seed) ensureDemoReviewer(db);
+  if (seed) { ensureDemoReviewer(db); migrateDemoIdentities(db); }
   db.exec(`
     UPDATE transactions SET payee = CASE counterparty
       WHEN 'SP Services' THEN 'sp-services' WHEN 'Singtel' THEN 'singtel' WHEN 'PUB' THEN 'pub' END
@@ -136,22 +137,38 @@ function openDatabase(dbPath, { seed = true } = {}) {
 }
 
 function ensureDemoReviewer(db) {
-  const alex = db.prepare("SELECT u.id FROM users u JOIN accounts a ON a.user_id = u.id WHERE u.email = 'alex@evergreen.demo' AND a.number = '1020001001'").get();
+  const alex = db.prepare("SELECT u.id FROM users u JOIN accounts a ON a.user_id = u.id WHERE u.email IN ('alex@greenlink.demo', 'alex@evergreen.demo') AND a.number = '1020001001'").get();
   if (!alex) return;
   transaction(db, () => {
     db.prepare("UPDATE users SET role = 'admin' WHERE id = ?").run(alex.id);
-    let reviewer = db.prepare("SELECT id FROM users WHERE email = 'reviewer@evergreen.demo'").get();
+    let reviewer = db.prepare("SELECT u.id FROM users u JOIN accounts a ON a.user_id = u.id WHERE u.email IN ('reviewer@greenlink.demo', 'reviewer@evergreen.demo') AND a.number = '1020009001'").get();
     if (!reviewer) {
+      if (db.prepare("SELECT id FROM users WHERE email IN ('reviewer@greenlink.demo', 'reviewer@evergreen.demo')").get()
+        || db.prepare("SELECT id FROM accounts WHERE number = '1020009001'").get()) return;
       const result = db.prepare("INSERT INTO users (name, email, password_hash, role, created_at) VALUES (?, ?, ?, 'admin', ?)")
-        .run('Sam Rivera', 'reviewer@evergreen.demo', hashPasswordSync('Evergreen123!'), new Date().toISOString());
+        .run('Sam Rivera', 'reviewer@greenlink.demo', hashPasswordSync(DEMO_PASSWORD), new Date().toISOString());
       reviewer = { id: Number(result.lastInsertRowid) };
       db.prepare("INSERT INTO accounts (user_id, name, number, balance_cents, created_at) VALUES (?, 'Main savings', '1020009001', 0, ?)").run(reviewer.id, new Date().toISOString());
     }
   });
 }
 
+function migrateDemoIdentities(db) {
+  transaction(db, () => {
+    for (const identity of DEMO_IDENTITIES) {
+      const user = db.prepare('SELECT u.* FROM users u JOIN accounts a ON a.user_id = u.id WHERE a.number = ? AND u.email IN (?, ?)')
+        .get(identity.number, identity.email, identity.legacyEmail);
+      if (!user) continue;
+      const collision = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(identity.email, user.id);
+      if (collision) continue;
+      const passwordHash = verifyPasswordSync(LEGACY_DEMO_PASSWORD, user.password_hash) ? hashPasswordSync(DEMO_PASSWORD) : user.password_hash;
+      db.prepare('UPDATE users SET email = ?, password_hash = ? WHERE id = ?').run(identity.email, passwordHash, user.id);
+    }
+  });
+}
+
 function seedDemo(db) {
-  const passwordHash = hashPasswordSync('Evergreen123!');
+  const passwordHash = hashPasswordSync(DEMO_PASSWORD);
   const now = new Date();
   const daysAgo = (days, hour = 10) => {
     const date = new Date(now);
@@ -161,8 +178,8 @@ function seedDemo(db) {
   };
   transaction(db, () => {
     const addUser = db.prepare('INSERT INTO users (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)');
-    const alexId = Number(addUser.run('Alex Morgan', 'alex@evergreen.demo', passwordHash, daysAgo(100)).lastInsertRowid);
-    const jamieId = Number(addUser.run('Jamie Lee', 'jamie@evergreen.demo', passwordHash, daysAgo(90)).lastInsertRowid);
+    const alexId = Number(addUser.run('Alex Morgan', 'alex@greenlink.demo', passwordHash, daysAgo(100)).lastInsertRowid);
+    const jamieId = Number(addUser.run('Jamie Lee', 'jamie@greenlink.demo', passwordHash, daysAgo(90)).lastInsertRowid);
     const addAccount = db.prepare('INSERT INTO accounts (user_id, name, number, balance_cents, created_at) VALUES (?, ?, ?, ?, ?)');
     const mainId = Number(addAccount.run(alexId, 'Main savings', '1020001001', 2485050, daysAgo(100)).lastInsertRowid);
     const rainyId = Number(addAccount.run(alexId, 'Rainy day', '1020001002', 520000, daysAgo(80)).lastInsertRowid);

@@ -42,10 +42,16 @@ The banking database contains users, sessions, savings accounts, transactions, r
 
 SQLite uses foreign keys, WAL mode and a busy timeout. Ownership/date indexes support account history; unique account numbers and request keys enforce identity and deduplication; partial indexes support unread notifications. Worker queries use bounded batches and indexed due/delivery columns. Transactions keep network operations outside their write locks.
 
-This implementation is a single-writer ledger suitable for the project demonstration. Cloud deployment and an AWS database adapter are deferred at the user's request. An AWS migration must preserve conditional balance updates, idempotency, the outbox and maker-checker controls. DynamoDB is an option, with atomic writes across the relevant items through [`TransactWriteItems`](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html); it is not configured or claimed as this runtime's database.
+This implementation is a single-writer ledger suitable for the project demonstration. The cloud template keeps each SQLite file on one EC2 host's encrypted persistent storage and runs the same containers behind a TLS reverse proxy. It does not provide multi-host ledger availability. Actual provisioning and an AWS database adapter remain deferred. An AWS database migration must preserve conditional balance updates, idempotency, the outbox and maker-checker controls. DynamoDB is an option, with atomic writes across the relevant items through [`TransactWriteItems`](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html); it is not configured or claimed as this runtime's database.
+
+## Private assistant
+
+The banking service handles supported chat intents through a local parser. It reads only accounts and records owned by the session user, including when that user is an administrator. No external AI API is called and no chat database exists. The browser keeps the conversation in memory and clears it on logout/reload. Responses contain plain text, bounded result items and allowlisted navigation or draft actions. Payment draft actions fill the normal form; review, current-password authorization, fraud checks and settlement still occur through the financial endpoints. Chat has no write capability and cannot approve a held payment or alter a rule.
+
+The fraud scoring model is a separate trained statistical component; the banking assistant is not represented as a general-purpose language model. See [assistant examples and limits](assistant.md).
 
 ## Automated delivery
 
-The GitHub Actions workflow runs financial/API/service tests, desktop/mobile browser checks, and a Docker Compose smoke flow. Version tags publish the tested container to GHCR. Cloud provisioning and production rollout remain deferred. The image contains no database, `.env` or hosted prototype dependencies.
+The GitHub Actions workflow runs financial/API/service tests, desktop/mobile browser checks, package integrity verification, Terraform validation and a Docker Compose smoke flow. Version tags publish the tested container to GHCR. Cloud provisioning and production rollout remain deferred. The image and release archive contain no database, `.env` or hosted prototype dependencies.
 
 The workflow follows GitHub's [Node.js testing](https://docs.github.com/en/actions/tutorials/build-and-test-code/nodejs) and [container publishing](https://docs.github.com/en/actions/tutorials/publish-packages/publish-docker-images) patterns. Compose startup uses dependency [health checks](https://docs.docker.com/compose/how-tos/startup-order/).

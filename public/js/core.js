@@ -5,6 +5,7 @@ export const mobileQuery = matchMedia('(max-width: 760px)');
 export const ui = {};
 export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
+  assistant: { path: '/assistant', label: 'Greenlink Assistant', icon: 'chat' },
   accounts: { path: '/accounts', label: 'My accounts', icon: 'wallet' },
   transfers: { path: '/transfers', label: 'Transfers', icon: 'transfer' },
   payments: { path: '/payments', label: 'Bill payments', icon: 'bill' },
@@ -24,6 +25,7 @@ export const state = {
   data: null, user: null, csrf: '', route: routeFromLocation(), intendedRoute: null,
   authMode: location.pathname === '/register' ? 'register' : 'login', authNotice: '', authBusy: false, signingOut: false,
   hiddenBalance: false, refreshError: '', refreshing: false, filters: emptyFilters(), historyPage: 1, pageSize: 10,
+  history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null,
   menuOpen: false, modalBusy: false, modalOpener: null, pendingMoney: null,
   moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0,
 };
@@ -31,12 +33,13 @@ export const esc = value => String(value ?? '').replace(/[&<>"']/g, character =>
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
 export const icon = name => `<svg class="icon" aria-hidden="true"><use href="#i-${name}"/></svg>`;
-export const brand = () => `<div class="brand"><svg class="brand-mark" aria-hidden="true"><use href="#i-leaf"/></svg>evergreen<span>.</span></div>`;
+export const brand = () => `<div class="brand"><svg class="brand-mark" aria-hidden="true"><use href="#i-leaf"/></svg>Greenlink<span>.</span></div>`;
 const currency = new Intl.NumberFormat('en-SG', { style: 'currency', currency: 'SGD' });
 export const money = cents => currency.format(cents / 100);
 export const visibleMoney = cents => state.hiddenBalance ? '••••••' : money(cents);
-export const shortDate = value => new Date(value).toLocaleDateString('en-SG', { day: 'numeric', month: 'short' });
-export const fullDate = value => new Date(value).toLocaleString('en-SG', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+export const shortDate = value => new Date(value).toLocaleDateString('en-SG', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short' });
+export const fullDate = value => new Date(value).toLocaleString('en-SG', { timeZone: 'Asia/Singapore', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+export const singaporeDay = (value = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Singapore', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value));
 export const sameId = (a, b) => String(a) === String(b);
 export const allAccounts = () => [...(state.data?.accounts ?? []), ...(state.data?.closedAccounts ?? [])];
 export const accountById = id => allAccounts().find(account => sameId(account.id, id));
@@ -62,12 +65,13 @@ export async function api(path, body, method = 'POST', options = {}) {
   try {
     const response = await fetch(`/api${path}`, {
       method: body === undefined ? 'GET' : method, credentials: 'same-origin', signal: controller.signal,
-      headers: { Accept: 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(state.csrf ? { 'X-CSRF-Token': state.csrf } : {}) },
+      headers: { Accept: options.responseType === 'blob' ? 'text/csv' : 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(state.csrf ? { 'X-CSRF-Token': state.csrf } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
+    if (response.ok && options.responseType === 'blob') return { blob: await response.blob(), disposition: response.headers.get('Content-Disposition') || '' };
     let result;
     try { result = await response.json(); }
-    catch { throw new ApiError('The server returned an unexpected response. Please try again.', response.status); }
+    catch { if (options.signal?.aborted) throw new ApiError('Request cancelled.', -1); throw new ApiError('The server returned an unexpected response. Please try again.', response.status); }
     if (!response.ok) throw new ApiError(result.error || 'We could not complete the request.', response.status);
     if (result.csrfToken) state.csrf = result.csrfToken;
     return result;
@@ -98,6 +102,7 @@ export function formBusy(form, busy) {
   modal.querySelectorAll('[data-action="close-dialog"]').forEach(button => { button.disabled = busy; });
 }
 export function dialog(title, content, { wide = false } = {}) {
+  delete modal.dataset.detailRequest;
   if (!modal.open) state.modalOpener = document.activeElement;
   modal.classList.toggle('wide-dialog', wide);
   modal.innerHTML = `<div class="modal-heading"><h2 id="modal-title" tabindex="-1">${esc(title)}</h2><button type="button" class="icon-button" data-action="close-dialog" aria-label="Close dialog">${icon('close')}</button></div>${content}`;
@@ -106,8 +111,9 @@ export function dialog(title, content, { wide = false } = {}) {
 }
 export function closeDialog(force = false) { if ((!state.modalBusy || force) && modal.open) modal.close(); }
 export function clearBankingState() {
+  ui.cancelReads?.();
   closeDialog(true);
-  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, assistant:null, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
 }
 export async function recoverSession(error) {

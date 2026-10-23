@@ -10,6 +10,7 @@ function createFraudServer({ token = process.env.SERVICE_TOKEN, dbPath = process
   return createServiceServer({ name: 'fraud', token, close: () => engine.close(), handler: async (method, url, body) => {
     if (method === 'POST' && url.pathname === '/internal/assess') return { risk: engine.assess(body) };
     if (method === 'GET' && url.pathname === '/internal/rules') return engine.getRules();
+    if (method === 'GET' && url.pathname === '/internal/rules/audit') return engine.getAudit(Object.fromEntries(url.searchParams));
     if (method === 'GET' && url.pathname === '/internal/model') return { model: engine.getModelInfo() };
     const rule = /^\/internal\/rules\/([a-z_]+)$/.exec(url.pathname);
     if (method === 'PATCH' && rule) return engine.updateRule(rule[1], body.patch || {}, body.actor);

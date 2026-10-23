@@ -1,12 +1,14 @@
+import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
+import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 ﻿import { app, modal, state, ui, pages, api, esc, icon, money, sameId, accountById, transactionById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
-import { auth, render, connectionError, extraViews, updateMobileNavigation, historyResults } from './js/views.js';
+import { auth, render, connectionError, extraViews, updateMobileNavigation } from './js/views.js';
+import { loadHistory, loadAccountRecent, openTransaction, cancelHistoryReads, cancelDetailRead } from './js/history.js';
 import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, reviewMoney, transactionDetails, confirmMoney, updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './js/workflows.js';
 import { loadExtras, loadNotifications, stopBackgroundReads, notificationsPage, schedulesPage, markNotification, scheduleDialog, changeScheduleType, reviewSchedule, confirmSchedule, scheduleDetails, cancelScheduleDialog, cancelSchedule } from './js/services.js';
 import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview } from './js/admin.js';
 
-Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications });
-Object.assign(extraViews,{ schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage });
-let searchTimer;
+Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, cancelAssistant, transactionDetails, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); } });
+Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage });
 
 function switchAuth() {
   state.authMode = state.authMode === 'login' ? 'register' : 'login';
@@ -17,6 +19,7 @@ function switchAuth() {
 async function signOut(control) {
   control.disabled = true;
   state.signingOut = true;
+  ui.cancelReads();
   stopBackgroundReads();
   try {
     await api('/auth/logout',{});
@@ -42,6 +45,7 @@ document.addEventListener('submit',async event => {
   if (!form.reportValidity()) return;
   try {
     switch (form.id) {
+      case 'assistant-form': await sendAssistant(form.elements.message.value); break;
       case 'auth-form': {
         const values = Object.fromEntries(new FormData(form));
         if (state.authMode === 'register') {
@@ -54,7 +58,7 @@ document.addEventListener('submit',async event => {
       case 'close-account-form': await submitAccount(form,true); break;
       case 'money-form': reviewMoney(form); break;
       case 'confirm-money-form': await confirmMoney(form); break;
-      case 'statement-form': generateStatement(form); break;
+      case 'statement-form': await generateStatement(form); break;
       case 'schedule-form': reviewSchedule(form); break;
       case 'confirm-schedule-form': await confirmSchedule(form); break;
       case 'cancel-schedule-form': await cancelSchedule(form); break;
@@ -70,32 +74,29 @@ document.addEventListener('click',async event => {
   if (control.tagName === 'A' && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
   if (control.dataset.nav) { event.preventDefault(); return navigate(control.dataset.nav,{account:control.dataset.filterAccount || ''}); }
   if (control.dataset.account) { event.preventDefault(); return navigate('accounts',{account:control.dataset.account}); }
-  if (control.dataset.transaction) { const transaction = transactionById(control.dataset.transaction); return transaction ? transactionDetails(transaction) : toast('This transaction is not in your account history.'); }
+  if (control.dataset.transaction) return openTransaction(control.dataset.transaction);
+  if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
+    if (control.dataset.assistantAction) return assistantAction(control.dataset.assistantAction);
+    if (control.dataset.assistantSuggestion) return sendAssistant(control.dataset.assistantSuggestion);
     if (control.dataset.readNotification) { control.disabled = true; await markNotification(control.dataset.readNotification); return; }
-    if (control.dataset.notificationTransaction) {
-      const id = control.dataset.notificationTransaction;
-      await loadDashboard({render:false});
-      const transaction = transactionById(id);
-      if (transaction) transactionDetails(transaction);
-      else if (state.user?.role === 'admin') navigate('fraud');
-      else toast('This transaction is unavailable. Refresh account activity to try again.');
-      return;
-    }
+    if (control.dataset.notificationTransaction) return openTransaction(control.dataset.notificationTransaction,{adminFallback:true});
     if (control.dataset.scheduleDetail) return scheduleDetails(control.dataset.scheduleDetail);
     if (control.dataset.cancelSchedule) return cancelScheduleDialog(control.dataset.cancelSchedule);
     if (control.dataset.editRule) return ruleDialog(control.dataset.editRule);
     if (control.dataset.reviewTransaction) return reviewDialog(control.dataset.reviewTransaction);
     switch (control.dataset.action) {
       case 'auth-switch': switchAuth(); break;
+      case 'assistant-clear': clearAssistant(); break;
+      case 'assistant-retry': await retryAssistant(); break;
       case 'password': {
         const input = document.getElementById(control.dataset.input), show = input.type === 'password';
         input.type = show ? 'text' : 'password';
         control.setAttribute('aria-label',`${show ? 'Hide' : 'Show'} ${control.dataset.input === 'confirm-password' ? 'confirmation password' : 'password'}`);
         control.setAttribute('aria-pressed',String(show)); break;
       }
-      case 'demo': await authenticate({email:'alex@evergreen.demo',password:'Evergreen123!'},true); break;
+      case 'demo': await authenticate({email:'alex@greenlink.demo',password:'Greenlink123!'},true); break;
       case 'logout': await signOut(control); break;
       case 'balance': state.hiddenBalance = !state.hiddenBalance; render(); app.querySelector('[data-action="balance"]').focus(); break;
       case 'menu-open': state.menuOpen = true; updateMobileNavigation({focus:true}); break;
@@ -105,10 +106,15 @@ document.addEventListener('click',async event => {
       case 'rename-account': accountNameDialog(control.dataset.id); break;
       case 'close-account-review': closeAccountDialog(control.dataset.id); break;
       case 'account-transfer': state.moneyDraft.transfers.fromAccountId = control.dataset.id; navigate('transfers'); break;
-      case 'history-prev': state.historyPage = Math.max(1,state.historyPage-1); document.querySelector('#history-results').innerHTML = historyResults(); document.querySelector('[data-action="history-next"]')?.focus(); break;
-      case 'history-next': state.historyPage += 1; document.querySelector('#history-results').innerHTML = historyResults(); document.querySelector('[data-action="history-prev"]')?.focus(); break;
-      case 'clear-filters': state.filters = emptyFilters(); state.historyPage = 1; state.route.account = ''; history.replaceState({},'','/activity'); render(); document.querySelector('#transaction-search').focus(); break;
-      case 'export': exportActivity(); break;
+      case 'history-prev': state.historyPage = Math.max(1,state.historyPage-1); await loadHistory(); document.querySelector('[data-action="history-next"]')?.focus(); break;
+      case 'history-next': state.historyPage += 1; await loadHistory(); document.querySelector('[data-action="history-prev"]')?.focus(); break;
+      case 'clear-filters': state.filters = emptyFilters(); state.historyPage = 1; state.route.account = ''; history.replaceState({},'','/activity'); render(); document.querySelector('#transaction-search').focus(); loadHistory(); break;
+      case 'history-retry': await loadHistory(); break;
+      case 'audit-retry': await loadRuleAudit(); break;
+      case 'audit-prev': await loadRuleAudit({page:Math.max(1,(state.ruleAudit?.page || 1)-1)}); document.querySelector('[data-action="audit-next"]')?.focus(); break;
+      case 'audit-next': await loadRuleAudit({page:(state.ruleAudit?.page || 1)+1}); document.querySelector('[data-action="audit-prev"]')?.focus(); break;
+      case 'account-history-retry': await loadAccountRecent(control.dataset.id); break;
+      case 'export': await exportActivity(control); break;
       case 'statement': statementDialog(); break;
       case 'print-statement': window.print(); break;
       case 'new-schedule': scheduleDialog(); break;
@@ -124,16 +130,15 @@ document.addEventListener('click',async event => {
 });
 
 document.addEventListener('input',event => {
+  if(event.target.id==='assistant-message')rememberAssistantInput(event.target.value);
   const form = event.target.closest('form');
-  if (form?.id === 'history-filters') {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { if (form.isConnected) updateHistoryFilters(form); },event.target.type === 'search' ? 120 : 0);
-  }
+  if (form?.id === 'history-filters') updateHistoryFilters(form,{debounce:event.target.type === 'search'});
   if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
 });
 document.addEventListener('change',event => {
+  if (event.target.id === 'rule-audit-filter') return loadRuleAudit({ruleId:event.target.value,page:1});
   const form = event.target.closest('form');
-  if (form?.id === 'history-filters') { clearTimeout(searchTimer); return updateHistoryFilters(form); }
+  if (form?.id === 'history-filters') return updateHistoryFilters(form);
   if (form?.id === 'schedule-form' && event.target.name === 'type') return changeScheduleType(form);
   if (form?.id !== 'money-form') return;
   state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
@@ -155,7 +160,7 @@ document.addEventListener('keydown',event => {
   }
 });
 modal.addEventListener('cancel',event => { if (state.modalBusy) event.preventDefault(); });
-modal.addEventListener('close',() => { if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
+modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
 modal.addEventListener('click',event => {
   if (event.target !== modal || state.modalBusy) return;
   const bounds = modal.getBoundingClientRect();
@@ -187,6 +192,7 @@ setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !
 window.addEventListener('focus', async () => {
   if (!state.user || state.modalBusy || state.signingOut) return;
   await loadDashboard({ render: false });
+  if (document.activeElement?.closest('button,a,input,select,textarea,[role=button]')) return;
   if (state.data && ['overview', 'accounts', 'activity'].includes(state.route.page) && !modal.open && !document.activeElement?.matches('input,select,textarea')) render();
   if (state.user) loadExtras(state.route.page);
 });

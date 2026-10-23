@@ -25,12 +25,12 @@ test('an expired session cannot read balances and bootstrap creates a new anonym
   const fixture = await createFixture(t);
   const client = fixture.client();
   await client.login();
-  const oldCookie = client.cookies.get('evergreen_session');
+  const oldCookie = [...client.cookies.values()][0];
   const db = new DatabaseSync(fixture.dbPath);
   try { db.prepare('UPDATE sessions SET expires_at = 0').run(); } finally { db.close(); }
   assert.equal((await client.request('/api/dashboard')).status, 401);
   assert.equal((await client.session()).data.user, null);
-  assert.notEqual(client.cookies.get('evergreen_session'), oldCookie);
+  assert.notEqual([...client.cookies.values()][0], oldCookie);
   assert.equal((await send(client, '/api/accounts', { name: 'Unauthorized' })).status, 401);
 });
 
@@ -117,7 +117,7 @@ test('failure to create the durable notification rolls back the transfer and bot
   const sender = fixture.client();
   const recipient = fixture.client();
   await sender.login();
-  await recipient.login('jamie@evergreen.demo');
+  await recipient.login('jamie@greenlink.demo');
   const before = await sender.dashboard();
   const recipientBefore = await recipient.dashboard();
   const db = new DatabaseSync(fixture.dbPath);

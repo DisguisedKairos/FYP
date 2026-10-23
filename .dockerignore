@@ -10,3 +10,9 @@ datasets
 coverage
 *.sqlite*
 *.log
+releases
+cloud
+.terraform
+**/.terraform
+*.tfstate*
+*.tfvars

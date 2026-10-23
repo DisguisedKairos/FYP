@@ -3,7 +3,8 @@
 const { transaction } = require('../db');
 const { HttpError } = require('../models/errors');
 const { createAccount } = require('../models/banking');
-const { hashPassword, verifyPassword, createSession, publicUser } = require('../models/security');
+const { hashPassword, verifyUserPassword, createSession, publicUser } = require('../models/security');
+const { findLoginUser } = require('../models/demoIdentity');
 
 function emailAddress(value) {
   if (typeof value !== 'string') throw new HttpError(400, 'Enter your email address.');
@@ -38,7 +39,7 @@ function createLoginLimiter() {
 
 function session(context) {
   const { db, request, response } = context;
-  const current = context.session || createSession(db, request, response);
+  const current = context.session || createSession(db, request, response, null, { secure: context.secureCookies });
   return { user: publicUser(context.user), csrfToken: current.csrf_token };
 }
 
@@ -65,7 +66,7 @@ async function register(context) {
     const account = createAccount(db, user.id, 'Main savings');
     return { user, account };
   });
-  const current = createSession(db, request, response, result.user.id);
+  const current = createSession(db, request, response, result.user.id, { secure: context.secureCookies });
   return { ...result, csrfToken: current.csrf_token };
 }
 
@@ -75,17 +76,17 @@ async function login(context) {
   if (typeof body.password !== 'string' || body.password.length < 1 || body.password.length > 128) {
     throw new HttpError(400, 'Enter your password.');
   }
-  context.limitLogin(request, email);
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email);
-  const matches = await verifyPassword(body.password, user?.password_hash);
+  const user = findLoginUser(db, email);
+  context.limitLogin(request, user?.email || email);
+  const matches = await verifyUserPassword(db, user, body.password);
   if (!user || !matches) throw new HttpError(401, 'The email or password is incorrect.');
-  const current = createSession(db, request, response, user.id);
+  const current = createSession(db, request, response, user.id, { secure: context.secureCookies });
   return { user: publicUser(user), csrfToken: current.csrf_token };
 }
 
 function logout(context) {
   const { db, request, response } = context;
-  const current = createSession(db, request, response);
+  const current = createSession(db, request, response, null, { secure: context.secureCookies });
   return { user: null, csrfToken: current.csrf_token };
 }
 

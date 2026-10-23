@@ -19,14 +19,33 @@ Authenticated customers manage their own accounts and read their dashboard:
 
 | Method | Path | Request and result |
 | --- | --- | --- |
-| GET | `/api/dashboard` | `{ok, user, accounts, closedAccounts, transactions, billers, summary}`. |
+| GET | `/api/dashboard` | `{ok, user, accounts, closedAccounts, transactions, billers, summary, insights}`. |
 | POST | `/api/accounts` | `{name}` → `{ok, account}`. |
 | PATCH | `/api/accounts/:id` | `{name}` → `{ok, account}`. |
 | DELETE | `/api/accounts/:id` | Closes an account → `{ok, account}`. Requires a zero balance and another active account. |
 
 Account names contain 2–40 characters. A customer can keep up to eight active accounts. An account contains `{id, name, number, balanceCents, status, createdAt}`; its status is `active` or `closed`.
 
-The dashboard returns the complete transaction collection for the customer's active and closed accounts. Frontend history filters, search, CSV exports and printable statements consume that collection. `summary` contains `{incomeCents, outgoingCents}` for completed external activity during the last 30 days; transfers between the customer's own accounts are excluded. Billers contain `{id, name, category, initials, color}`; supported IDs are `sp-services`, `singtel` and `pub`.
+The dashboard returns the ten most recent transactions across the customer's active and closed accounts. History, search and statements use the endpoints below rather than this preview. `summary` contains `{incomeCents, outgoingCents}` for completed external activity during the last 30 days; transfers between the customer's own accounts are excluded. `insights` contains six monthly completed external activity totals and `timeZone: "Asia/Singapore"`, calculated over the complete ledger. Billers contain `{id, name, category, initials, color}`; supported IDs are `sp-services`, `singtel` and `pub`.
+
+| Method | Path | Contract |
+| --- | --- | --- |
+| GET | `/api/transactions` | `{ok, transactions, pagination, totals}`; parameters `accountId`, `q` (up to 120 literal characters), `type` (`transfer`, `bill`, `incoming`), `status` (`completed`, `pending_review`, `rejected`), `from`, `to`, `page` and `pageSize` (1–100, default 10). |
+| GET | `/api/transactions/:id` | `{ok, transaction}` for an owned transaction, including records outside the dashboard preview. |
+| GET | `/api/transactions/export` | CSV attachment with the same filters, across all matching rows. Text cells are protected against spreadsheet formula interpretation. |
+| GET | `/api/statements` | Required `accountId`; optional `from` and `to`, defaulting to the current Singapore month. Returns `{ok, statement}`. |
+
+History dates use `YYYY-MM-DD`, inclusive in Singapore time. Pagination is stable by timestamp and recorded settlement order; a held intent receives its final ordering position when approved. `totals` describes all matching rows, independently of the page: `{incomeCents, outgoingCents, netCents, completedCount, pendingCount, rejectedCount}`. Only completed records affect money totals. Every query checks account ownership, including closed accounts.
+
+A statement contains `{account, user, period, openingBalanceCents, closingBalanceCents, baselineCents, adjustmentCents, transactions, generatedAt, currency}`. `period` has `{from, to, timeZone}`. Ascending statement rows include `runningBalanceCents`; held/rejected rows leave it unchanged. The browser offers print/save as PDF. Older imported balances with a positive ledger gap are explicitly identified as a carried-forward opening balance, without altering the ledger. A negative unexplained gap, completed activity before account creation, impossible negative running balance or inconsistent closing balance returns 409 instead of issuing an unreconciled statement.
+
+The private assistant has one authenticated, CSRF-protected endpoint:
+
+| Method | Path | Contract |
+| --- | --- | --- |
+| POST | `/api/assistant/messages` | `{message}` (1–1,000 characters) returns `{ok, intent, reply, items?, actions, suggestions, privacy, requiresAuthorization?, sensitiveInput?}`. |
+
+The assistant uses a bounded local intent parser and owned banking records. It neither saves conversations nor calls external AI services. `privacy` is `{sessionOnly: true, externalServices: false}`. Read intents cover balances, recent/searched activity, schedules, notifications and fraud explanations. Actions are allowlisted navigation links or payment drafts; drafts contain no password or authorization. All financial actions continue through the existing review and password controls. Sensitive messages receive a privacy response with `sensitiveInput: true` and no input echo. The browser clears its in-memory conversation on logout/reload or an explicit clear action. No account directory or other-customer read access is provided, including to admin chat sessions.
 
 Submit an internal transfer or bill payment with the current login password:
 
@@ -50,7 +69,7 @@ X-CSRF-Token: <current-csrf-token>
   "billerId": "sp-services",
   "reference": "SP-123456789",
   "amount": "123.45",
-  "authorizationPassword": "Evergreen123!",
+  "authorizationPassword": "Greenlink123!",
   "requestId": "bill-example-001"
 }
 ```
@@ -100,11 +119,12 @@ The following routes require an `admin` role:
 | --- | --- | --- |
 | GET | `/api/fraud/rules` | `{ok, rules, version, updatedAt, reviewThreshold, blockThreshold}`. |
 | PATCH | `/api/fraud/rules/:id` | `{version, enabled?, threshold?, action?}` → updated rules/version. Actions are `review` or `block`. A stale version returns 409. |
+| GET | `/api/fraud/rules/audit` | Optional `ruleId`, `page`, `pageSize` (1–100, default 10). Returns `{ok, entries, pagination}`. Each entry contains immutable `before`, `after`, `actor: {id, name}`, `ruleId`, `version`, `createdAt` and `id`. |
 | GET | `/api/fraud/model` | `{ok, model}` with algorithm, features, training/validation metrics, policy and limitations. |
 | GET | `/api/fraud/reviews` | `{ok, reviews}` containing pending transactions from other customers, including `maker: {id, name, email}`. |
 | POST | `/api/fraud/reviews/:transactionId` | `{decision: "approve" or "reject", reason, authorizationPassword}` → `{ok, transaction}`. |
 
-Review reasons contain 3–500 characters. Administrators cannot review their own transactions. Approval rechecks funds, accounts and current hard financial limits; a failed approval leaves the payment held. Rejection never debits funds. A completed review cannot settle again on retry. Demo administrators are `alex@evergreen.demo` and the independent reviewer `reviewer@evergreen.demo`, both with password `Evergreen123!`.
+Review reasons contain 3–500 characters. Administrators cannot review their own transactions. Approval rechecks funds, accounts and current hard financial limits; a failed approval leaves the payment held. Rejection never debits funds. A completed review cannot settle again on retry. Demo administrators are `alex@greenlink.demo` and the independent reviewer `reviewer@greenlink.demo`, both with password `Greenlink123!`.
 
 Common error statuses are 400 for invalid input, 401 for missing/expired login or incorrect login credentials, 403 for CSRF/role/authorization-password failures, 404 for missing or inaccessible resources, 409 for financial/state/idempotency/version conflicts, 413 for excessive payloads, 415 for unsupported content type, 429 for login throttling, and 503 for unavailable screening/services. Unsupported methods return 405 with `Allow`. Responses containing account data use `Cache-Control: no-store`.
 

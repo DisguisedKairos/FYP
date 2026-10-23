@@ -1,4 +1,4 @@
-name: Banking platform checks and container delivery
+name: Greenlink checks, application package and container delivery
 
 on:
   push:
@@ -54,9 +54,50 @@ jobs:
         if: always()
         run: docker compose down --volumes
 
+  package:
+    needs: [test, containers]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build portable application package
+        run: npm run package
+      - name: Verify release archive and manifest
+        run: npm run package:verify -- releases/greenlink-digital-bank-1.1.0.zip
+      - name: Package archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: greenlink-digital-bank-1.1.0
+          path: releases/
+          if-no-files-found: error
+
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.13.5'
+      - name: Format infrastructure source
+        run: terraform fmt -check -recursive cloud/aws
+      - name: Validate deployment template without provisioning
+        run: |
+          terraform -chdir=cloud/aws init -backend=false -input=false
+          terraform -chdir=cloud/aws validate
+      - name: Validate TLS Compose overlay
+        env:
+          SERVICE_TOKEN: ci-template-validation-token-never-used
+          GREENLINK_DOMAIN: bank.example.com
+          PUBLIC_ORIGIN: https://bank.example.com
+        run: docker compose -f compose.yaml -f compose.cloud.yaml config --quiet
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, containers]
+    needs: [test, containers, package, infrastructure]
     runs-on: ubuntu-latest
     permissions:
       contents: read

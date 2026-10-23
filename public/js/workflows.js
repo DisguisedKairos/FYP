@@ -1,5 +1,4 @@
 ﻿import { app, modal, state, ui, api, esc, icon, brand, money, fullDate, sameId, allAccounts, accountById, amountDecimal, parseAmount, formBusy, formError, dialog, closeDialog, toast, loadDashboard, recoverSession, navigate, routeUrl, statusPill, statusLabel, authorizationField } from './core.js';
-import { filteredTransactions, historyResults } from './views.js';
 
 export function accountNameDialog(id = '') {
   const account = id ? accountById(id) : null;
@@ -78,10 +77,10 @@ export function reviewMoney(form) {
     recipient = biller.name;
   } else {
     values.toAccountNumber = String(values.toAccountNumber ?? '').replace(/[\s-]/g, '');
-    if (!/^\d{10}$/.test(values.toAccountNumber)) throw new Error('Enter a 10-digit Evergreen account number.');
+    if (!/^\d{10}$/.test(values.toAccountNumber)) throw new Error('Enter a 10-digit Greenlink account number.');
     if (values.toAccountNumber === source.number) throw new Error('Choose a different destination account.');
     const own = state.data.accounts.find(a => a.number === values.toAccountNumber);
-    recipient = own ? own.name : values.toAccountNumber === '1020002001' ? 'Jamie Lee' : 'Evergreen account';
+    recipient = own ? own.name : values.toAccountNumber === '1020002001' ? 'Jamie Lee' : 'Greenlink account';
     values.description = String(values.description ?? '').trim();
     if (values.description.length > 100) throw new Error('Use a transfer note of 100 characters or fewer.');
   }
@@ -124,48 +123,4 @@ export async function confirmMoney(form) {
     if (!await recoverSession(error)) formError(form, error.status === 0 ? 'Confirmation was interrupted. Retry this confirmation to check the same transaction safely; it will not be charged twice.' : error.message);
   } finally { state.modalBusy = false; formBusy(form, false); }
 }
-export function updateHistoryFilters(form) {
-  const filters = Object.fromEntries(new FormData(form));
-  if (Object.entries(filters).every(([key, value]) => state.filters[key] === value)) return;
-  state.filters = filters;
-  state.historyPage = 1;
-  const invalid = filters.from && filters.to && filters.from > filters.to;
-  document.querySelector('#filter-error').textContent = invalid ? 'The end date must be on or after the start date.' : '';
-  if (!invalid) document.querySelector('#history-results').innerHTML = historyResults();
-}
-export function exportActivity() {
-  const entries = state.route.page === 'activity' ? filteredTransactions() : state.data.transactions;
-  if (!entries.length) return toast('There are no transactions to export.');
-  const rows = [['Date','Account','Account number','Type','Description','Counterparty','Amount SGD','Status','Reference','Transaction ID'], ...entries.map(t => [t.createdAt, t.accountName || accountById(t.accountId)?.name, t.accountNumber || accountById(t.accountId)?.number, t.type, t.description, t.counterparty, amountDecimal(t.amountCents), t.status, t.reference, t.id])];
-  const cell = value => { let text = String(value ?? ''); if (/^\s*[=+\-@\t\r]/.test(text)) text = `'${text}`; return `"${text.replace(/"/g, '""')}"`; };
-  const url = URL.createObjectURL(new Blob(['\uFEFF' + rows.map(row => row.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
-  const link = document.createElement('a');
-  Object.assign(link, { href: url, download: `evergreen-activity-${new Date().toISOString().slice(0,10)}.csv` });
-  document.body.append(link); link.click(); link.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-  toast(`${entries.length} transactions exported.`);
-}
-export function statementDialog() {
-  const today = new Date(), first = new Date(today.getFullYear(), today.getMonth(), 1);
-  const day = value => `${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,'0')}-${String(value.getDate()).padStart(2,'0')}`;
-  dialog('Download an account statement.', `<p class="modal-intro">Choose an account and date range. Preview a statement, then print or save it as PDF using your browser.</p><form id="statement-form"><div class="field"><label for="statement-account">Account</label><select id="statement-account" name="account" required>${allAccounts().map(a => `<option value="${esc(a.id)}" ${sameId(a.id,state.filters.account) ? 'selected' : ''}>${esc(a.name)} · ${esc(a.number)}${a.status === 'closed' ? ' (closed)' : ''}</option>`).join('')}</select></div><div class="form-row"><div class="field"><label for="statement-from">From date</label><input id="statement-from" name="from" type="date" value="${esc(state.filters.from || day(first))}" required></div><div class="field"><label for="statement-to">To date</label><input id="statement-to" name="to" type="date" value="${esc(state.filters.to || day(today))}" max="${day(today)}" required></div></div><div class="error-message" role="alert"></div><button type="submit" class="button full">Preview statement ${icon('statement')}</button></form>`);
-}
-export function generateStatement(form) {
-  const values = Object.fromEntries(new FormData(form)), account = accountById(values.account);
-  if (!account) throw new Error('Choose a valid account.');
-  const start = new Date(`${values.from}T00:00:00`), end = new Date(`${values.to}T23:59:59.999`);
-  if (!Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end < start) throw new Error('Choose a valid date range.');
-  if (end.getTime() > new Date().setHours(23,59,59,999)) throw new Error('The end date cannot be in the future.');
-  const entries = state.data.transactions.filter(t => sameId(t.accountId, account.id));
-  const selected = entries.filter(t => new Date(t.createdAt) >= start && new Date(t.createdAt) <= end).reverse().sort((a,b) => new Date(a.createdAt) - new Date(b.createdAt));
-  const after = entries.filter(t => t.status === 'completed' && new Date(t.createdAt) > end).reduce((sum,t) => sum + t.amountCents,0);
-  const ending = account.balanceCents - after;
-  const periodChange = selected.filter(t => t.status === 'completed').reduce((sum,t) => sum + t.amountCents,0);
-  const opening = ending - periodChange;
-  let running = opening;
-  const rows = selected.map(t => {
-    if (t.status === 'completed') running += t.amountCents;
-    return `<tr><td>${new Date(t.createdAt).toLocaleDateString('en-SG')}</td><td>${esc(t.description)}<small>${esc(t.reference)}</small></td><td>${esc(statusLabel(t.status))}</td><td>${money(t.amountCents)}</td><td>${money(running)}</td></tr>`;
-  }).join('');
-  dialog('Your account statement.', `<section class="print-statement"><div class="statement-heading">${brand()}<div><h2>Account statement</h2><p>${esc(values.from)} to ${esc(values.to)}</p></div></div><dl class="statement-identity"><div><dt>Account holder</dt><dd>${esc(state.user.name)}</dd></div><div><dt>Account</dt><dd>${esc(account.name)} · ${esc(account.number)}</dd></div><div><dt>Currency</dt><dd>SGD</dd></div><div><dt>Generated</dt><dd>${fullDate(new Date().toISOString())}</dd></div></dl><div class="statement-balances"><div><span>Opening balance</span><strong>${money(opening)}</strong></div><div><span>Closing balance</span><strong>${money(ending)}</strong></div></div><div class="table-scroll"><table class="statement-table"><thead><tr><th>Date</th><th>Description / reference</th><th>Status</th><th>Amount</th><th>Balance</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No transactions in this date range.</td></tr>'}</tbody></table></div><p class="statement-note">Only completed transactions affect balances. Pending or rejected requests are shown for your records. This is an educational banking demo with sample funds and is not an official bank statement.</p></section><div class="modal-actions no-print"><button type="button" class="button secondary" data-action="close-dialog">Done</button><button type="button" class="button" data-action="print-statement">Print / save PDF ${icon('statement')}</button></div>`, { wide: true });
-}
+export { updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './history.js';

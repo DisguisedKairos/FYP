@@ -27,8 +27,9 @@ test('anonymous sessions protect account data and issue a safe session cookie', 
   rejected(await client.request('/api/dashboard'), 401);
   assert.equal(session.data.user, null);
   assert.ok(session.data.csrfToken.length >= 24);
-  const cookie = session.headers.getSetCookie().find((item) => item.startsWith('evergreen_session='));
+  const cookie = session.headers.getSetCookie()[0];
   assert.ok(cookie);
+  assert.match(cookie, /^[A-Za-z0-9_]+=[a-f0-9]{64};/);
   assert.match(cookie, /;\s*HttpOnly/i);
   assert.match(cookie, /;\s*SameSite=Lax/i);
   assert.match(cookie, /;\s*Path=\//i);
@@ -95,7 +96,7 @@ test('CSRF and Origin checks reject writes without changing account state', asyn
   await client.session();
   rejected(await client.request('/api/auth/login', {
     method: 'POST', csrf: false, headers: { Origin: 'https://untrusted.example' },
-    body: { email: 'alex@evergreen.demo', password: 'Evergreen123!' },
+    body: { email: 'alex@greenlink.demo', password: 'Greenlink123!' },
   }), 403);
   await client.login();
   const before = await client.dashboard();
@@ -117,6 +118,7 @@ test('an internal transfer updates both balances and creates matching debit and 
   const before = await client.dashboard();
   const source = accountNamed(before, 'Main savings');
   const destination = accountNamed(before, 'Rainy day');
+  const ledgerBefore = await client.ledger();
   const result = successful(await transfer(client, source.id, destination.number, '123.45', 'internal-transfer-1'));
   assert.equal(result.transaction.type, 'transfer');
   assert.equal(result.transaction.amountCents, -12345);
@@ -125,7 +127,7 @@ test('an internal transfer updates both balances and creates matching debit and 
   assert.equal(accountNamed(after, source.name).balanceCents, source.balanceCents - 12345);
   assert.equal(accountNamed(after, destination.name).balanceCents, destination.balanceCents + 12345);
   assert.equal(totalBalance(after), totalBalance(before));
-  const newTransactions = after.transactions.filter((entry) => !before.transactions.some((old) => old.id === entry.id));
+  const newTransactions = (await client.ledger()).filter((entry) => !ledgerBefore.some((old) => old.id === entry.id));
   assert.equal(newTransactions.length, 2);
   assert.deepEqual(newTransactions.map((entry) => entry.amountCents).sort((a, b) => a - b), [-12345, 12345]);
   assert.ok(newTransactions.every((entry) => entry.status === 'completed'));
@@ -136,7 +138,7 @@ test('transfers between users persist recipient funds without exposing either us
   const alex = fixture.client();
   const jamie = fixture.client();
   await alex.login();
-  await jamie.login('jamie@evergreen.demo');
+  await jamie.login('jamie@greenlink.demo');
   const alexBefore = await alex.dashboard();
   const jamieBefore = await jamie.dashboard();
   const source = accountNamed(alexBefore, 'Main savings');
@@ -226,7 +228,7 @@ test('users cannot rename, close, spend or pay bills from somebody else account'
   const alex = fixture.client();
   const jamie = fixture.client();
   await alex.login();
-  await jamie.login('jamie@evergreen.demo');
+  await jamie.login('jamie@greenlink.demo');
   const alexBefore = await alex.dashboard();
   const jamieBefore = await jamie.dashboard();
   const victim = alexBefore.accounts[0];
@@ -276,7 +278,7 @@ test('concurrent distinct requests cannot overspend an account', async (t) => {
   assert.equal(requests.filter((result) => result.status === 409).length, 1);
   assert.equal(accountNamed(await client.dashboard(), budget.name).balanceCents, 0);
   const recipient = fixture.client();
-  await recipient.login('jamie@evergreen.demo');
+  await recipient.login('jamie@greenlink.demo');
   assert.equal(totalBalance(await recipient.dashboard()), 130000);
 });
 
@@ -293,6 +295,7 @@ test('balances, transaction history, account names and registrations survive a r
   }));
   successful(await client.request(`/api/accounts/${rainy.id}`, { method: 'PATCH', body: { name: 'Emergency savings' } }));
   const expected = await client.dashboard();
+  const expectedLedger = await client.ledger();
   const newcomer = fixture.client();
   await newcomer.session();
   successful(await newcomer.request('/api/auth/register', {
@@ -305,6 +308,7 @@ test('balances, transaction history, account names and registrations survive a r
   const actual = await returning.dashboard();
   assert.deepEqual(actual.accounts, expected.accounts);
   assert.deepEqual(actual.transactions, expected.transactions);
+  assert.deepEqual(await returning.ledger(), expectedLedger);
   const repeated = successful(await transfer(returning, main.id, rainy.number, '2.34', 'persist-transfer'));
   assert.ok(expected.transactions.some((entry) => entry.id === repeated.transaction.id));
   assert.deepEqual((await returning.dashboard()).accounts, expected.accounts);

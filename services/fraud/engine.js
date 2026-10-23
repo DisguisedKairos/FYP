@@ -38,9 +38,13 @@ class FraudEngine {
       CREATE TABLE IF NOT EXISTS fraud_rules (id TEXT PRIMARY KEY, value_json TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS fraud_settings (id INTEGER PRIMARY KEY CHECK (id=1), version INTEGER NOT NULL, updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS fraud_rule_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, rule_id TEXT NOT NULL, actor_id TEXT NOT NULL, before_json TEXT NOT NULL, after_json TEXT NOT NULL, version INTEGER NOT NULL, created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS fraud_rule_audit_rule_id ON fraud_rule_audit(rule_id,id DESC);
       CREATE TABLE IF NOT EXISTS fraud_assessments (id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result_json TEXT NOT NULL, created_at TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS fraud_assessments_date ON fraud_assessments(created_at);
     `);
+    if (!this.db.prepare('PRAGMA table_info(fraud_rule_audit)').all().some(column => column.name === 'actor_name')) {
+      this.db.exec('ALTER TABLE fraud_rule_audit ADD COLUMN actor_name TEXT');
+    }
     const insert = this.db.prepare('INSERT OR IGNORE INTO fraud_rules(id,value_json) VALUES(?,?)');
     for (const rule of DEFAULT_RULES) insert.run(rule.id, JSON.stringify(rule));
     this.db.prepare('INSERT OR IGNORE INTO fraud_settings(id,version,updated_at) VALUES(1,1,?)').run(new Date().toISOString());
@@ -49,6 +53,30 @@ class FraudEngine {
   getRules() {
     const settings = this.db.prepare('SELECT version,updated_at FROM fraud_settings WHERE id=1').get();
     return { rules: this.db.prepare('SELECT value_json FROM fraud_rules ORDER BY rowid').all().map(r => JSON.parse(r.value_json)), version: settings.version, updatedAt: settings.updated_at, reviewThreshold: 65, blockThreshold: 95 };
+  }
+
+  getAudit(parameters = {}) {
+    if (!parameters || typeof parameters !== 'object' || Array.isArray(parameters)) throw new HttpError(400, 'Supply audit filters as an object.');
+    const integer = (value, fallback, maximum, label) => {
+      if (value === undefined || value === '') return fallback;
+      if (!/^[1-9]\d*$/.test(String(value)) || !Number.isSafeInteger(Number(value)) || Number(value) > maximum) throw new HttpError(400, `${label} must be a whole number from 1 to ${maximum}.`);
+      return Number(value);
+    };
+    const page = integer(parameters.page, 1, 1000000, 'Page');
+    const pageSize = integer(parameters.pageSize, 10, 100, 'Page size');
+    let ruleId = parameters.ruleId;
+    if (ruleId !== undefined && ruleId !== '') {
+      if (typeof ruleId !== 'string' || !/^[a-z_]{1,80}$/.test(ruleId)) throw new HttpError(400, 'Choose a valid fraud rule.');
+      if (!this.db.prepare('SELECT id FROM fraud_rules WHERE id=?').get(ruleId)) throw new HttpError(404, 'Fraud rule not found.');
+    } else ruleId = null;
+    const filter = ruleId ? 'WHERE rule_id=?' : '';
+    const values = ruleId ? [ruleId] : [];
+    const total = this.db.prepare(`SELECT COUNT(*) AS total FROM fraud_rule_audit ${filter}`).get(...values).total;
+    const entries = this.db.prepare(`SELECT * FROM fraud_rule_audit ${filter} ORDER BY id DESC LIMIT ? OFFSET ?`).all(...values, pageSize, (page - 1) * pageSize).map(row => ({
+      id: row.id, ruleId: row.rule_id, actor: { id: row.actor_id, name: row.actor_name || `User ${row.actor_id}` },
+      before: JSON.parse(row.before_json), after: JSON.parse(row.after_json), version: row.version, createdAt: row.created_at,
+    }));
+    return { entries, pagination: { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) } };
   }
 
   updateRule(id, patch, actor) {
@@ -69,7 +97,8 @@ class FraudEngine {
       const updated = this.db.prepare('UPDATE fraud_settings SET version=version+1, updated_at=? WHERE id=1 AND version=?').run(now, patch.version);
       if (!updated.changes) throw new HttpError(409, 'Fraud rules changed. Refresh and try again.');
       this.db.prepare('UPDATE fraud_rules SET value_json=? WHERE id=?').run(JSON.stringify(next), id);
-      this.db.prepare('INSERT INTO fraud_rule_audit(rule_id,actor_id,before_json,after_json,version,created_at) VALUES(?,?,?,?,?,?)').run(id, String(actor.id || actor.userId || actor), JSON.stringify(rule), JSON.stringify(next), patch.version + 1, now);
+      const actorName = typeof actor.name === 'string' ? actor.name.trim().slice(0, 120) : null;
+      this.db.prepare('INSERT INTO fraud_rule_audit(rule_id,actor_id,actor_name,before_json,after_json,version,created_at) VALUES(?,?,?,?,?,?,?)').run(id, String(actor.id || actor.userId || actor), actorName, JSON.stringify(rule), JSON.stringify(next), patch.version + 1, now);
       this.db.exec('COMMIT');
     } catch (error) { this.db.exec('ROLLBACK'); throw error; }
     return this.getRules();

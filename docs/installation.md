@@ -1,0 +1,17 @@
+# Installation, release and upgrades
+
+Install Node.js 22.13 or later. Extract a verified release ZIP into a new directory, open a terminal there and run `npm start`. Visit `http://localhost:3000`. The five services start together and stop with Ctrl+C. No `npm install` is required. Registration, demo credentials and workflow details are in the [README](../README.md).
+
+For Docker, run `npm run setup` followed by `docker compose up --build`. Persistent named volumes hold the three separate stores. `docker compose down` retains them. The default published port is loopback only. [Cloud instructions](../cloud/README.md) describe the optional TLS reverse proxy and AWS host; provisioning is an operator task.
+
+Configuration is loaded from the ignored `.env`. `DATA_DIR` selects native SQLite storage, default `./data`; `PORT` selects the gateway port and `INTERNAL_BASE_PORT` selects four consecutive private ports. `SERVICE_TOKEN` is generated per native run when omitted and persisted by `npm run setup` for Compose. `SEED_DEMO=false` prevents demo identities on a fresh database. `PUBLIC_ORIGIN`, when set, must be your exact HTTPS origin and enables Secure session cookies. Do not set it for plain HTTP localhost development.
+
+An empty installation starts with zero-balance customer accounts. Demo funding exists only with demo seeding; this application has no external deposit or real biller settlement integration. The local `admin:grant` command grants an existing registered account administrator access without setting or revealing a password. Grant a separate reviewer account for maker-checker testing.
+
+Build from a clean source checkout with `npm run package`. Verify the resulting ZIP and companion checksum using `npm run package:verify -- releases/greenlink-digital-bank-1.1.0.zip`. Review its `PACKAGE-MANIFEST.json` for source commit and per-file hashes. The checksum detects corruption; it is not a publisher signature. CI also builds and verifies the release archive.
+
+Before an upgrade, stop all five services and take a consistent backup of all three database directories/volumes. Copy an extracted release into a separate application directory and retain `.env` and data outside the application tree. Point `DATA_DIR` at the existing native directory. Schema migrations are additive and tested against legacy demo data. Keep the matching previous application and database backup for rollback; do not run two application versions against the same ledger simultaneously.
+
+Existing Evergreen Docker installations used Compose project `evergreen`. Continue with `docker compose -p evergreen up --build` to attach the same named volumes after the Greenlink rebrand. The new default project name `greenlink` creates different volumes. Native installations keep the same `data/` path. Known seeded demo emails migrate to `@greenlink.demo`; balances, IDs, ledger history and custom passwords are retained. The old session-cookie name remains an internal compatibility detail. Arbitrary registered customer identities are not renamed.
+
+Database backups must be taken with services stopped or a SQLite-aware backup procedure, including any WAL content. Store backups securely and practice restoring them into an isolated directory. The cloud template is a single-host demonstration deployment: high availability, disaster recovery automation, real payment rails and real-world model validation require further work.

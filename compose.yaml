@@ -1,7 +1,7 @@
-name: evergreen
+name: greenlink
 
 x-service: &service
-  image: evergreen-banking:local
+  image: greenlink-digital-bank:local
   build: .
   init: true
   restart: unless-stopped
