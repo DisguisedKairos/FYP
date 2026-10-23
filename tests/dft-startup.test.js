@@ -4,9 +4,17 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const {parseEnv}=require('node:util');
-const {configuration,pythonExecutable}=require('../scripts/start-platform');
+const {configuration,pythonExecutable,childEnvironment}=require('../scripts/start-platform');
 const {configureEnvironment}=require('../scripts/setup');
 const env=()=>({DATABASE_URL:'postgresql://example:example@127.0.0.1:5432/example',AUTH_ENCRYPTION_KEY:'a'.repeat(64),PUBLIC_ORIGIN:'http://localhost:3000'});
+test('DFT children exclude operator secrets and the scorer receives no database or MFA credentials',()=>{
+  const supplied={...env(),PATH:'native-path',SERVICE_TOKEN:'private-shared-service-token',ADMIN_DATABASE_URL:'private-bootstrap',MIGRATION_DATABASE_URL:'private-owner',APPLICATION_DATABASE_URL:'private-setup-copy',TEST_DATABASE_URL:'private-test',GREENLINK_STAFF_PASSWORD:'private-staff',PGPASSWORD:'private-pg-password',PGSERVICE:'private-service-file',PGHOST:'localhost'};
+  const banking=childEnvironment(supplied,'banking'),fraud=childEnvironment(supplied,'fraud');
+  for(const key of ['ADMIN_DATABASE_URL','MIGRATION_DATABASE_URL','APPLICATION_DATABASE_URL','TEST_DATABASE_URL','GREENLINK_STAFF_PASSWORD','PGPASSWORD','PGSERVICE']){assert.equal(banking[key],undefined);assert.equal(fraud[key],undefined);assert.ok(supplied[key]);}
+  assert.equal(banking.DATABASE_URL,supplied.DATABASE_URL);assert.equal(banking.AUTH_ENCRYPTION_KEY,supplied.AUTH_ENCRYPTION_KEY);
+  assert.equal(fraud.DATABASE_URL,undefined);assert.equal(fraud.AUTH_ENCRYPTION_KEY,undefined);assert.equal(fraud.PGHOST,undefined);
+  assert.equal(fraud.PATH,supplied.PATH);assert.equal(fraud.SERVICE_TOKEN,supplied.SERVICE_TOKEN);
+});
 function temporary(t){const parent=path.resolve(__dirname,'..','test-results');fs.mkdirSync(parent,{recursive:true});const directory=fs.mkdtempSync(path.join(parent,'dft-configuration-'));t.after(()=>{assert.equal(path.dirname(directory),parent);assert.match(path.basename(directory),/^dft-configuration-/);assert.equal(fs.lstatSync(directory).isSymbolicLink(),false);fs.rmSync(directory,{recursive:true,force:true});});return directory;}
 
 test('DFT launcher requires PostgreSQL and persistent encryption configuration, and gives both children one token',()=>{

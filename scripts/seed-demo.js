@@ -1,6 +1,6 @@
 'use strict';
 const { randomUUID } = require('node:crypto');
-const { createDatabase } = require('../database');
+const { createOperatorDatabase: createDatabase } = require('../database');
 const { hashPassword } = require('../banking/security');
 const businesses = require('../banking/business');
 

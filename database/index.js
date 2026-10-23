@@ -27,13 +27,19 @@ function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptio
   async function migrate() {
     return transaction(async client => {
       await client.query("SELECT pg_advisory_xact_lock(783456120)");
-      await client.query('CREATE TABLE IF NOT EXISTS schema_migrations(name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
+      // A restricted application login can verify an installed schema without DDL.
+      if (!(await client.query("SELECT to_regclass('schema_migrations') AS relation")).rows[0].relation) {
+        await client.query('CREATE TABLE schema_migrations(name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
+      }
       const directory = path.join(__dirname, 'migrations');
       for (const name of (await readdir(directory)).filter(name => /^\d+.*\.sql$/.test(name)).sort()) {
         const sql = (await readFile(path.join(directory, name), 'utf8')).replace(/\r\n/g, '\n');
         const checksum = createHash('sha256').update(sql).digest('hex');
         const previous = (await client.query('SELECT checksum FROM schema_migrations WHERE name=$1', [name])).rows[0];
         if (previous) { if (previous.checksum !== checksum) throw new Error(`Applied migration changed: ${name}`); continue; }
+        if (!(await client.query("SELECT has_schema_privilege(current_user,current_schema(),'CREATE') AS allowed")).rows[0].allowed) {
+          throw new Error(`Database migration required: ${name}. Run npm run db:migrate with the migration credentials first.`);
+        }
         await client.query(sql);
         await client.query('INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)', [name, checksum]);
       }
@@ -42,4 +48,7 @@ function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptio
   return { pool, query, transaction, migrate, close: () => pool.end() };
 }
 
-module.exports = { createDatabase };
+function createOperatorDatabase(options = {}) {
+  return createDatabase({ ...options, connectionString: options.connectionString || process.env.MIGRATION_DATABASE_URL || process.env.DATABASE_URL });
+}
+module.exports = { createDatabase, createOperatorDatabase };

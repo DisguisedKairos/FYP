@@ -5,7 +5,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
-const { createDatabase } = require('../database');
+const { createOperatorDatabase: createDatabase } = require('../database');
 const { canonicalHash, transactionView } = require('../banking/ledger');
 const iso = value => value === null || value === undefined ? null : new Date(value).toISOString();
 const parse = value => value === null || value === undefined ? null : typeof value === 'string' ? JSON.parse(value) : value;

@@ -3,7 +3,7 @@
 const express = require('express');
 const http = require('node:http');
 const path = require('node:path');
-const { createDatabase } = require('./database');
+const { createDatabase } = require('./db');
 const { createAuth } = require('./banking/auth');
 const security = require('./banking/security');
 const ledger = require('./banking/ledger');

@@ -51,7 +51,7 @@ function fixture(t) {
   };
   for (const required of REQUIRED_FILES) if (!(required in source)) source[required] = required.endsWith('.py') ? '# Python source fixture\n' : 'DFT source fixture\n';
   const excluded = {
-    'db.js': 'DO_NOT_PACKAGE_LEGACY_DB',
+    'legacy/sqlite-db.js': 'DO_NOT_PACKAGE_LEGACY_DB',
     'Dockerfile': 'DO_NOT_PACKAGE_DOCKER',
     'compose.yaml': 'DO_NOT_PACKAGE_COMPOSE',
     'compose.cloud.yaml': 'DO_NOT_PACKAGE_COMPOSE_CLOUD',

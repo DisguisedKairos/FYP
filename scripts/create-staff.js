@@ -1,6 +1,6 @@
 'use strict';
 
-const {createDatabase}=require('../database');
+const { createOperatorDatabase: createDatabase } = require('../database');
 const security=require('../banking/security');
 async function createStaff({db:suppliedDatabase,email,name,password,connectionString}={}){
   email=security.emailAddress(email);name=security.fullName(name);password=security.password(password);

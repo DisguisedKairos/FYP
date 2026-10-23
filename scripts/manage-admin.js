@@ -1,5 +1,5 @@
 'use strict';
-const { createDatabase } = require('../database');
+const { createOperatorDatabase: createDatabase } = require('../database');
 
 // Local database operator only; creates no user, password, or HTTP endpoint.
 async function grant({ db: suppliedDatabase, email, connectionString } = {}) {

@@ -6,7 +6,7 @@ Registration collects business details and submits them for independent bank rev
 
 ## Run locally
 
-Install PostgreSQL and create an empty database for this project. Then:
+Install PostgreSQL, Node.js and Python. Then:
 
 ```sh
 npm ci
@@ -19,15 +19,16 @@ Install Python dependencies using `.venv\Scripts\python -m pip install -r requir
 npm run setup
 ```
 
-Edit the generated, ignored `.env`: set `DATABASE_URL` to your PostgreSQL connection string and keep the generated `SERVICE_TOKEN` and `AUTH_ENCRYPTION_KEY` private. Use the exact `PUBLIC_ORIGIN` you open in your browser, normally `http://localhost:3000`.
+Keep the generated `SERVICE_TOKEN` and `AUTH_ENCRYPTION_KEY` private in `.env`. Use the exact `PUBLIC_ORIGIN` you open in your browser, normally `http://localhost:3000`. Start your PostgreSQL server, copy `database/admin.env.example` to ignored `.env.database-admin` and set its administrator connection URL. Database setup creates the database, migrations and separate restricted runtime/migration logins. See the [database guide](docs/database.md) for local server initialization, pgAdmin and the full data model.
 
 ```sh
-npm run db:migrate
+npm run db:setup
+npm run db:check
 npm run db:seed
 npm start
 ```
 
-Open **http://localhost:3000**. Startup launches the private Python scoring service and the Express banking application. PostgreSQL must already be running. Stop the application with Ctrl+C. Demo seeding is explicit and only inserts into an empty customer database.
+Open **http://localhost:3000**. Startup launches the private Python scoring service and the Express banking application. PostgreSQL must already be running. On this machine, `npm run db:start` starts the project-owned server at `127.0.0.1:55432`; its existing `greenlink_dft` database is ready and needs no seeding. Stop the application with Ctrl+C. Demo seeding is explicit and only inserts into an empty customer database. Future schema changes use `npm run db:migrate` with the separately saved migration credentials.
 
 | Demo identity | Email | Password | Purpose |
 | --- | --- | --- | --- |
@@ -63,14 +64,14 @@ The importer reads the source without modifying it, validates balances and chron
 
 ## Verification and package
 
-Point `TEST_DATABASE_URL` to a separate local PostgreSQL database whose owner can create/drop test schemas. Tests create unique schemas and remove only those schemas.
+Put `TEST_DATABASE_URL` in ignored `.env.test`, pointing to a separate local PostgreSQL test/maintenance database. Most tests create/drop unique schemas; provisioning tests additionally create/drop uniquely named disposable databases and roles and require local database/role creation privileges. Test and operator credentials are never loaded by `npm start`.
 
 ```sh
-node --env-file=.env --test tests/dft-*.test.js
-node --env-file=.env --test tests/browser.e2e.js tests/dft-security-browser.js
+npm test
+npm run test:browser
 ```
 
-Run Python tests with the virtual environment interpreter: `python -m unittest discover -s tests_python -v` (install `tests_python/requirements.txt` for test dependencies). `PYTHON` may select that interpreter for the launcher or platform smoke test. Run `node --env-file=.env scripts/platform-smoke.js` for an actual Express/PostgreSQL/FastAPI integration check. Browser checks need Chrome, Chromium or Edge; `CHROME_PATH` can select it. PostgreSQL-dependent tests explicitly skip when `TEST_DATABASE_URL` is missing; such a run does not validate financial persistence.
+Run Python tests with the virtual environment interpreter: `python -m unittest discover -s tests_python -v` (install `tests_python/requirements.txt` for test dependencies). `PYTHON` may select that interpreter for the launcher or platform smoke test. Run `node --env-file=.env --env-file=.env.test scripts/platform-smoke.js` for an actual Express/PostgreSQL/FastAPI integration check. Browser checks need Chrome, Chromium or Edge; `CHROME_PATH` can select it. PostgreSQL-dependent tests explicitly skip when `TEST_DATABASE_URL` is missing; such a run does not validate financial persistence.
 
 ```sh
 npm run package
@@ -83,8 +84,9 @@ The source archive includes a locked npm dependency manifest, Python requirement
 
 ```text
 app.js                  Express HTTP routes and application lifecycle
+db.js                   Canonical PostgreSQL adapter entry point
 banking/                Auth, ledger, risk, history, assistant, schedules and outbox
-database/               PostgreSQL pool, transactions and versioned migrations
+database/               PostgreSQL provisioning, permissions, checks and migrations
 main.py, fraud_service/ FastAPI model assessment service
 public/, views/         Browser application
 scripts/                Local setup, seed/import/admin, model training and packaging

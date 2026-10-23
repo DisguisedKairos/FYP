@@ -17,6 +17,15 @@ function pythonExecutable(env = process.env, root = ROOT, platform = process.pla
   const candidates = platform === 'win32' ? [path.join(root, '.venv', 'Scripts', 'python.exe')] : [path.join(root, '.venv', 'bin', 'python')];
   return candidates.find(filename => existsSync(filename)) || 'python';
 }
+function childEnvironment(env, service) {
+  const result = { ...env };
+  // Local operator/test credentials never belong in either service process.
+  for (const key of Object.keys(result)) {
+    if (/^(?:ADMIN_DATABASE_URL|MIGRATION_DATABASE_URL|APPLICATION_DATABASE_URL|TEST_DATABASE_URL|GREENLINK_STAFF_PASSWORD|PGPASSWORD|PGPASSFILE|PGSERVICE|PGSERVICEFILE)$/i.test(key)
+      || (service === 'fraud' && /^(?:DATABASE_URL|AUTH_ENCRYPTION_KEY|PG[A-Z_]*)$/i.test(key))) delete result[key];
+  }
+  return result;
+}
 function configuration(env = process.env, root = ROOT) {
   let database;
   try { database = new URL(env.DATABASE_URL); } catch { throw new Error('Set DATABASE_URL to your PostgreSQL connection before starting the application.'); }
@@ -46,8 +55,8 @@ async function startPlatform({ env = process.env, root = ROOT } = {}) {
     const force = setTimeout(() => { for (const child of children) if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); }, 5000);
     force.unref();
   }
-  function start(label, executable, args, additions = {}) {
-    const child = spawn(executable, args, { cwd: root, env: { ...config.shared, ...additions }, windowsHide: true, shell: false, stdio: ['ignore', 'inherit', 'inherit'] });
+  function start(label, executable, args, additions = {}, service = 'banking') {
+    const child = spawn(executable, args, { cwd: root, env: childEnvironment({ ...config.shared, ...additions }, service), windowsHide: true, shell: false, stdio: ['ignore', 'inherit', 'inherit'] });
     children.push(child);
     child.once('error', error => { console.error(`${label} could not start: ${error.message}`); stop(1); });
     child.once('exit', (code, signal) => { if (!stopping) { console.error(`${label} stopped unexpectedly (${signal || code}).`); stop(code || 1); } });
@@ -66,7 +75,7 @@ async function startPlatform({ env = process.env, root = ROOT } = {}) {
   }
   process.once('SIGINT', () => stop()); process.once('SIGTERM', () => stop());
   try {
-    start('Python fraud service', config.python, ['-B', 'main.py']);
+    start('Python fraud service', config.python, ['-B', 'main.py'], {}, 'fraud');
     await ready(config.fraudUrl, '/internal/health', 'fraud', true);
     start('Express banking', process.execPath, ['app.js'], { HOST: env.HOST || '127.0.0.1', PORT: String(config.publicPort) });
     await ready(`http://127.0.0.1:${config.publicPort}`, '/health', 'banking', false);
@@ -76,5 +85,5 @@ async function startPlatform({ env = process.env, root = ROOT } = {}) {
   } catch (error) { stop(1); throw error; }
 }
 
-module.exports = { configuration, pythonExecutable, startPlatform };
+module.exports = { configuration, pythonExecutable, childEnvironment, startPlatform };
 if (require.main === module) startPlatform().catch(error => { console.error(error.message); process.exitCode = 1; });
