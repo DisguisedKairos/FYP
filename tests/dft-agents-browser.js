@@ -57,13 +57,19 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(page.errors,[]);
 });
 
-test('Model answers show citations and open the saved owned evidence',async t=>{
-  const agentModel={mode:'ollama',model:'controlled-local',inspect:async()=>({mode:'ollama',available:true,configured:true,model:'controlled-local'}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
+test('Model connection checks show help, while banking answers link saved owned evidence',async t=>{
+  const agentModel={mode:'ollama',model:'controlled-local',inspect:async()=>({mode:'ollama',available:true,configured:true,model:'controlled-local'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
   const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Local model ready")');
   await visit(page,f.baseUrl,'/assistant');await page.select('#assistant-engine','ollama');
+  await page.fill('#assistant-message','test');await page.click('#assistant-form button[type=submit]');
+  await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("Assistant is responding")');
+  assert.equal(await page.evaluate('document.querySelector("#assistant-error").textContent'),'');
+  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/no banking records retrieved/);
+  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence").length'),0);
+  assert.equal(await page.evaluate('document.querySelectorAll("[data-assistant-suggestion]").length'),4);
   await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".assistant-evidence")');
   assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E1\]/);
   assert.match(await page.evaluate('document.querySelector(".assistant-evidence").textContent'),/Owned account balances/);

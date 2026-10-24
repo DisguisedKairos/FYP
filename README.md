@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.9.0**
+**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.9.1**
 
 Republic Polytechnic C300 Final Year Project based on **Green Link Digital Bank (GLDB)**, a digital wholesale bank. The application serves registered businesses and institutions through authorized business operators and bank staff. Screens and statements identify it as a student project using sample funds. See [branding sources](docs/branding.md) and [wholesale banking scope](docs/wholesale-banking.md).
 
@@ -21,6 +21,10 @@ The stack is **Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML an
 There are two permission roles: **`customer`** (authorized business operator) and **`admin`** (administrator). Registration creates a customer with a pending business application and a zero-balance savings record. Bank approval is required for account changes and sending/receiving payments. Each business currently has one primary operator.
 
 High-risk instructions are held or rejected without a debit; an independent administrator must authorize an approval. Scoring failures fail closed. The AI model is a reproducible **synthetic-data baseline**, not validated production fraud detection. The private assistant reads owned data and prepares form drafts; payments use the ordinary authorization flow. See [financial controls](docs/financial-controls.md) and [model documentation](docs/fraud-model.md).
+
+## Assistant connection-check fix (2.9.1)
+
+Sending **test**, **Hello** or a similar connection check to GLDB Assistant now returns help and suggested tasks without requiring banking evidence. The UI identifies that no banking records were retrieved. Ungrounded model text is discarded; banking questions receive one bounded tool retry before a safe clarification. Account facts still require tool evidence, and unavailable models and revoked sessions remain explicit errors. See [assistant modes and safeguards](docs/banking-agents.md).
 
 ## AI suspicious-activity monitoring (2.9.0)
 

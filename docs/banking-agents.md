@@ -30,7 +30,9 @@ Start `npm run agent:start` in a separate terminal if Ollama is not running. The
 
 For another checkout, install Ollama and a local model supporting tools, set the three values above in ignored `.env`, then restart the banking application. The URL must be a plain HTTP loopback origin; remote endpoints, redirects, cloud model names and remotely backed models are refused. The helper needs `ollama` on PATH. Reference: [Ollama tool calling](https://docs.ollama.com/capabilities/tool-calling).
 
-The UI reports whether the configured model is available. Choose offline workflow explicitly when it is unavailable. An Ollama request never silently changes to a deterministic response. Docker delivery uses offline mode by default; connecting an additional model service is a separate delivery configuration.
+The UI reports whether the configured model is available. Choose offline workflow explicitly when it is unavailable. An Ollama request never silently switches banking engines. Docker delivery uses offline mode by default; connecting an additional model service is a separate delivery configuration.
+
+Version 2.9.1 fixes greetings and connection checks such as **test** or **Hello**. They offer no banking tools to the model and return trusted application help after the local model responds. The UI labels this **Help only; no banking records retrieved** and offers suggested tasks. Ungrounded model prose is discarded. A banking question that initially returns no tools gets one corrective attempt within the existing deadline/round budget; if it still retrieves nothing, the assistant asks for clarification without asserting account facts or fabricating citations. Model outages and authorization failures remain explicit errors.
 
 ## Demonstrate each feature
 
@@ -51,7 +53,7 @@ Reports, permitted tool arguments/results and structured draft context are saved
 
 The runtime role cannot rewrite/delete tool evidence, delete runs or change a run's owner. Role and ownership checks are repeated inside tools. HTTP execution rechecks the session between tool calls and before completion. Changed security versions invalidate draft continuations/results; a continuation expires after fifteen minutes. Tools accept strict argument allowlists. There is no arbitrary SQL, shell, URL fetching or payment execution tool.
 
-Limits: forty starts per user and 120 per IP per fifteen minutes, two concurrent recent runs across the database, eight tool calls, four model rounds and a sixty-second model deadline. Each model request has a bounded timeout/response size. Unknown tools, unsupported arguments, missing evidence, unavailable inference and stale authorization produce explicit failures. A failed run records only a bounded error code.
+Limits: forty starts per user and 120 per IP per fifteen minutes, two concurrent recent runs across the database, eight tool calls, four model rounds and a sixty-second model deadline. Each model request has a bounded timeout/response size. Unknown tools, unsupported arguments, unavailable inference and stale authorization produce explicit failures. Banking interpretations require retrieved evidence; trusted help/clarification contains no banking facts and has no evidence links. A failed run records only a bounded error code.
 
 Financial calculations, scores and lifecycle statuses are application facts. Model prose is interpretation. Local trials exposed numerical mistakes; validation now withholds numerical narrative claims and invalid score scales while retaining tool evidence. Human review and the existing independent approval/password controls remain necessary. These controls are consistent with [OWASP excessive-agency guidance](https://genai.owasp.org/llmrisk/llm062025-excessive-agency/).
 

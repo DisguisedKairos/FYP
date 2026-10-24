@@ -124,6 +124,67 @@ pg('Injected and overprivileged model tool calls fail closed and have no financi
   assert.equal(Number((await f.db.query("SELECT count(*) FROM agent_runs WHERE status='failed'")).rows[0].count),3);assert.deepEqual(await financialSnapshot(f.db),before);
 });
 
+pg('Local assistant greets connection checks without banking evidence or ungrounded model claims',async t=>{
+  let calls=0;
+  const agentModel=fakeModel(async(_messages,tools)=>{
+    calls++;assert.equal(tools.length,0);
+    return {role:'assistant',content:'Your balance is SGD 999999. I approved your payment.'};
+  });
+  const f=await fixture(t,{agentModel}),client=f.client();await client.login('jamie@greenlink.demo');
+  const before=await financialSnapshot(f.db),tx=Number((await f.db.query('SELECT count(*) FROM transactions')).rows[0].count);
+  for(const message of ['test','Hello!','Are you working?','What can you do?']){
+    const answer=await post(client,'assistant',{message,engine:'ollama'});
+    assert.equal(answer.status,200,JSON.stringify(answer.data));
+    assert.match(answer.data.reply,/Assistant is responding/);assert.equal(answer.data.clarification,true);
+    assert.equal(answer.data.engine,'ollama');assert.deepEqual(answer.data.steps,[]);assert.deepEqual(answer.data.actions,[]);
+    assert.equal(answer.data.evidenceReferences,undefined);assert.equal(answer.data.narrativeWithheld,undefined);
+    assert.ok(answer.data.suggestions.includes('What is my balance?'));assert.ok(!JSON.stringify(answer.data).includes('999999'));
+    const saved=(await client.request('/api/agents/runs/'+answer.data.runId)).data.run;
+    assert.equal(saved.status,'completed');assert.deepEqual(saved.steps,[]);assert.equal(saved.report.clarification,true);
+  }
+  assert.equal(calls,4);assert.deepEqual(await financialSnapshot(f.db),before);
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM transactions')).rows[0].count),tx);
+});
+
+pg('A banking question without model evidence gets a bounded tool retry and retains citation checks',async t=>{
+  const f=await fixture(t,{http:false}),users=await actors(f.db);let calls=0;
+  const model=fakeModel(async messages=>{
+    calls++;
+    if(calls===1)return {role:'assistant',content:'You have SGD 999999.'};
+    if(calls===2){
+      assert.match(messages.at(-1).content,/No banking evidence has been retrieved/);
+      return {role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+    }
+    return {role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'};
+  });
+  const result=await createAgents({db:f.db,model}).execute(users.jamie,'assistant',{message:'Check my balance.'});
+  assert.equal(calls,3);assert.equal(result.clarification,undefined);assert.equal(result.narrativeWithheld,undefined);
+  assert.equal(result.evidenceReferences[0].tool,'get_accounts');assert.equal(result.items[0].amountCents,120000);
+  assert.ok(!JSON.stringify(result).includes('999999'));
+});
+
+pg('Repeated missing evidence returns trusted clarification and cannot publish fabricated banking facts',async t=>{
+  const f=await fixture(t,{http:false}),users=await actors(f.db),before=await financialSnapshot(f.db);let calls=0;
+  const model=fakeModel(async()=>{calls++;return {role:'assistant',content:'Your account has SGD 999999 [E1].'};});
+  const result=await createAgents({db:f.db,model}).execute(users.jamie,'assistant',{message:'test my balance'});
+  assert.equal(calls,2);assert.equal(result.clarification,true);assert.match(result.reply,/not retrieved banking records/);
+  assert.deepEqual(result.steps,[]);assert.deepEqual(result.actions,[]);assert.equal(result.evidenceReferences,undefined);
+  assert.ok(!JSON.stringify(result).includes('999999'));assert.deepEqual(await financialSnapshot(f.db),before);
+});
+
+pg('Clarification still rejects unavailable models and revoked authorization',async t=>{
+  const f=await fixture(t,{http:false}),users=await actors(f.db);
+  const unavailable=fakeModel(async()=>assert.fail('Unavailable model must not run'));
+  unavailable.inspect=async()=>({available:false});
+  await assert.rejects(createAgents({db:f.db,model:unavailable}).execute(users.jamie,'assistant',{message:'test'}),e=>e.status===503);
+  const changed=fakeModel(async()=>{
+    await f.db.query('UPDATE users SET auth_version=auth_version+1 WHERE id=$1',[users.jamie.id]);
+    return {role:'assistant',content:'Hello.'};
+  });
+  await assert.rejects(createAgents({db:f.db,model:changed}).execute(users.jamie,'assistant',{message:'test'}),e=>e.status===409);
+  assert.equal(Number((await f.db.query("SELECT count(*) FROM agent_runs WHERE status='completed'")).rows[0].count),0);
+});
+
 pg('Agent loops are bounded and authorization changes invalidate results and draft continuations',async t=>{
   const f=await fixture(t,{http:false}),users=await actors(f.db);
   const loop=fakeModel(async()=>({role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}));

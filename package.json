@@ -1,6 +1,6 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.9.0",
+  "version": "2.9.1",
   "private": true,
   "description": "Republic Polytechnic C300 business banking prototype based on Green Link Digital Bank, using Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
