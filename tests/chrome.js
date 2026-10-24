@@ -172,7 +172,9 @@ async function launchChrome(t, { width = 1440, height = 1000, mobile = false, do
   });
   const endpoint = await new Promise((resolve, reject) => {
     let output = '';
-    const timeout = setTimeout(() => reject(new Error(`Chrome did not start: ${output.slice(-1500)}`)), 15000);
+    // A cold hosted runner can take most of fifteen seconds just to start the
+    // browser process. Keep startup bounded without changing page assertions.
+    const timeout = setTimeout(() => reject(new Error(`Chrome did not start: ${output.slice(-1500)}`)), 30000);
     processHandle.once('error', error => { clearTimeout(timeout); reject(error); });
     processHandle.once('exit', code => { clearTimeout(timeout); reject(new Error(`Chrome exited ${code}: ${output.slice(-1500)}`)); });
     processHandle.stderr.on('data', chunk => {
