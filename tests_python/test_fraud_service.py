@@ -1,244 +1,216 @@
-﻿"""HTTP contract, fail-closed validation, artifact integrity and JS parity tests."""
+"""Service security and local Ollama contracts. Controlled transport is test-only."""
 from __future__ import annotations
-
 import copy
-import csv
-import hashlib
 import json
-import math
-import random
-import subprocess
-import tempfile
 import unittest
-from pathlib import Path
 from unittest.mock import patch
-
 from fastapi.testclient import TestClient
-
 from fraud_service.application import BODY_LIMIT, create_app
-from fraud_service.model import DEFAULT_MODEL, FEATURE_NAMES, FraudModel
+from fraud_service.model import OllamaFraudModel
 from fraud_service.schemas import AssessmentRequest
 
-ROOT = Path(__file__).resolve().parent.parent
 TOKEN = "python-fraud-contract-test-token-123456789"
 HEADERS = {"Authorization": "Bearer " + TOKEN}
 
 
 def payload(**changes):
-    value = {
-        "transactionId": "txn-001", "userId": "customer-001", "sourceAccountId": "savings-001",
-        "payloadHash": "a" * 64, "type": "transfer", "amountCents": 2500,
-        "accountBalanceCents": 2485050, "payee": "1020002001", "isInternal": False,
-        "createdAt": "2026-10-23T06:00:00.000Z",
-        "historySummary": {"averageOutgoingCents": 20000, "outgoingCount10m": 0,
-            "outgoingAmount10m": 0, "dailyOutgoingCents": 50000, "historyCount": 10, "knownPayee": True},
-    }
+    value = {"transactionId": "txn-private", "userId": "user-private", "sourceAccountId": "source-private",
+             "payloadHash": "a" * 64, "type": "transfer", "amountCents": 2500, "accountBalanceCents": 2485050,
+             "payee": "1020002001", "isInternal": False, "createdAt": "2026-10-23T06:00:00.000Z",
+             "historySummary": {"averageOutgoingCents": 20000.0, "outgoingCount10m": 0,
+                                "outgoingAmount10m": 0, "dailyOutgoingCents": 50000, "historyCount": 10, "knownPayee": True}}
     value.update(changes)
     return value
 
 
-class ServiceContractTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.client = TestClient(create_app(token=TOKEN))
+class ControlledTransport:
+    def __init__(self):
+        self.calls = []
+        self.output = {"modelScore": 12, "reasonCodes": ["model_context"]}
+        self.digest = "a" * 64
+        self.remote = False
+        self.fail = False
+        self.mutate_digest = False
+        self.done_reason = "stop"
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.client.close()
+    def __call__(self, method, url, body, timeout):
+        self.calls.append((method, url, copy.deepcopy(body), timeout))
+        if self.fail:
+            raise OSError("Do not expose connection diagnostics or secrets")
+        if url.endswith("/api/show"):
+            return {"capabilities": ["completion", "tools"], **({"remote_host": "https://remote.example"} if self.remote else {})}
+        if url.endswith("/api/tags"):
+            return {"models": [{"name": "controlled-local", "digest": self.digest}]}
+        if url.endswith("/api/chat"):
+            if self.mutate_digest:
+                self.digest = "b" * 64
+            return {"model": "controlled-local", "done": True, "done_reason": self.done_reason,
+                    "message": {"role": "assistant", "content": self.output if isinstance(self.output, str) else json.dumps(self.output)}}
+        raise AssertionError("Unexpected model endpoint")
 
-    def post(self, body):
-        return self.client.post("/internal/assess", json=body, headers=HEADERS)
 
-    def test_all_routes_require_service_authentication_before_body_validation(self):
+class ServiceTests(unittest.TestCase):
+    def setUp(self):
+        self.transport = ControlledTransport()
+        self.model = OllamaFraudModel(model_name="controlled-local", request=self.transport)
+        self.client = TestClient(create_app(token=TOKEN, model=self.model))
+        self.addCleanup(self.client.close)
+
+    def post(self, value):
+        return self.client.post("/internal/assess", json=value, headers=HEADERS)
+
+    def test_authentication_precedes_input_and_all_routes_are_private(self):
         for path in ("/internal/health", "/internal/model", "/docs", "/openapi.json"):
-            with self.subTest(path=path):
-                response = self.client.get(path)
-                self.assertEqual(response.status_code, 401)
-                self.assertEqual(response.headers["cache-control"], "no-store")
-        self.assertEqual(self.client.post("/internal/assess", content=b"x" * (BODY_LIMIT + 1)).status_code, 401)
-        self.assertEqual(self.client.get("/internal/health", headers={"Authorization": "Bearer wrong"}).status_code, 401)
-        self.assertEqual(self.client.get("/internal/health", headers=[("Authorization", "Bearer " + TOKEN), ("Authorization", "Bearer " + TOKEN)]).status_code, 401)
+            self.assertEqual(self.client.get(path).status_code, 401)
+        self.assertEqual(self.client.post("/internal/assess", content="not-json").status_code, 401)
+        self.assertEqual(len(self.transport.calls), 0)
 
-    def test_health_and_model_are_private_and_truthful(self):
+    def test_metadata_reports_actual_local_provenance_without_simulated_metrics(self):
         health = self.client.get("/internal/health", headers=HEADERS)
-        self.assertEqual(health.status_code, 200)
-        self.assertEqual(health.json()["service"], "fraud")
+        self.assertEqual(health.json()["provider"], "ollama")
         metadata = self.client.get("/internal/model", headers=HEADERS).json()["model"]
-        self.assertTrue(metadata["training"]["synthetic"])
-        self.assertEqual(metadata["reviewThreshold"], 65)
-        self.assertEqual(metadata["evaluationThreshold"], 65)
-        self.assertEqual(metadata["evaluationThresholdType"], "rounded_model_score")
-        self.assertEqual(metadata["diagnostics"]["probabilityThreshold0_5"]["threshold"], 0.5)
-        self.assertEqual(metadata["modelSha256"], health.json()["modelSha256"])
-        self.assertNotIn("weights", metadata)
-        self.assertEqual(self.client.get("/docs", headers=HEADERS).status_code, 404)
+        self.assertTrue(metadata["localOnly"])
+        self.assertEqual(metadata["modelName"], "controlled-local")
+        self.assertEqual(metadata["modelSha256"], "a" * 64)
+        self.assertNotIn("metrics", metadata)
+        self.assertNotIn("training", metadata)
 
-    def test_assessment_is_bound_to_all_canonical_payment_identifiers(self):
-        request = payload()
-        response = self.post(request)
-        self.assertEqual(response.status_code, 200, response.text)
-        risk = response.json()["risk"]
-        for field in ("transactionId", "userId", "sourceAccountId", "payloadHash", "type", "amountCents", "payee", "isInternal"):
-            self.assertEqual(risk[field], request[field])
-        self.assertEqual(risk["modelScore"], risk["score"])
-        self.assertTrue(0 <= risk["score"] <= 94)
-        self.assertEqual(risk["decision"], "review" if risk["score"] >= 65 else "allow")
-        self.assertTrue(risk["synthetic"])
-        self.assertEqual(set(risk["features"]), set(FEATURE_NAMES))
-        self.assertTrue(risk["reasons"])
-        self.assertNotIn("controls", risk)
-        self.assertNotIn("ruleVersion", risk)
-        self.assertEqual(response.headers["cache-control"], "no-store")
+    def test_bound_output_comes_from_model_and_has_no_logistic_fallback(self):
+        self.transport.output["modelScore"] = 28
+        source = payload()
+        risk = self.post(source).json()["risk"]
+        for key in ("transactionId", "userId", "sourceAccountId", "payloadHash", "type", "amountCents", "payee", "isInternal"):
+            self.assertEqual(risk[key], source[key])
+        self.assertEqual(risk["modelScore"], 28)
+        self.assertEqual(risk["decision"], "allow")
+        self.assertEqual(risk["provider"], "ollama")
+        self.assertNotIn("synthetic", risk)
 
-    def test_no_cached_assessment_can_cross_a_source_or_payload_change(self):
-        original = payload(amountCents=80000, accountBalanceCents=1000000)
-        first = self.post(original).json()["risk"]
-        changed = payload(amountCents=80000, accountBalanceCents=80000, sourceAccountId="savings-002", payloadHash="b" * 64)
-        second = self.post(changed).json()["risk"]
-        self.assertEqual(second["transactionId"], first["transactionId"])
-        self.assertEqual(second["sourceAccountId"], "savings-002")
-        self.assertEqual(second["payloadHash"], "b" * 64)
-        self.assertGreater(second["features"]["balanceUtilization"], first["features"]["balanceUtilization"])
-        self.assertGreater(second["score"], first["score"])
-        self.assertEqual(self.post(original).json()["risk"], first)
+    def test_prompt_omits_customer_identifiers_and_uses_schema_and_bounded_generation(self):
+        self.post(payload())
+        _, _, request, timeout = next(c for c in self.transport.calls if c[1].endswith("/api/chat"))
+        prompt = json.dumps(request["messages"])
+        for private in ("txn-private", "user-private", "source-private", "1020002001", "payloadHash"):
+            self.assertNotIn(private, prompt)
+        self.assertEqual(request["format"]["properties"]["modelScore"]["maximum"], 94)
+        self.assertEqual(request["options"]["temperature"], 0)
+        self.assertFalse(request["stream"])
+        self.assertFalse(request["think"])
+        self.assertEqual(timeout, 45)
 
-    def test_strict_types_ranges_identifiers_and_dates_fail_closed(self):
-        invalid = [
-            {"amountCents": True}, {"amountCents": "2500"}, {"amountCents": 1.5},
-            {"amountCents": 0}, {"amountCents": -1}, {"amountCents": 9000000000001},
-            {"accountBalanceCents": -1}, {"isInternal": "false"}, {"type": "deposit"},
-            {"sourceAccountId": 123}, {"payloadHash": "x" * 64}, {"payee": "../accounts"},
-            {"createdAt": "2026-10-23T06:00:00"}, {"createdAt": "2026-10-23T06:00:00+08:99"}, {"createdAt": "2026-02-30T06:00:00Z"},
-            {"authorizationPassword": "A-Private-Password-987!"}, {"history": []},
-        ]
-        for changes in invalid:
-            with self.subTest(changes=changes):
-                response = self.post(payload(**changes))
-                self.assertEqual(response.status_code, 422, response.text)
-                self.assertNotIn("A-Private-Password-987!", response.text)
-        missing = payload()
-        del missing["payloadHash"]
-        self.assertEqual(self.post(missing).status_code, 422)
+    def test_high_score_needs_grounded_pattern_and_requests_human_review(self):
+        self.transport.output = {"modelScore": 82, "reasonCodes": ["amount_deviation", "balance_share"]}
+        risk = self.post(payload(amountCents=2000000)).json()["risk"]
+        self.assertEqual(risk["decision"], "review")
+        self.assertEqual(risk["score"], 82)
+        self.assertEqual(len(risk["reasons"]), 2)
+        self.transport.output = {"modelScore": 82, "reasonCodes": ["model_context"]}
+        self.assertEqual(self.post(payload()).status_code, 503)
 
-    def test_nonfinite_duplicate_malformed_oversized_and_wrong_media_json_are_rejected(self):
+    def test_unsupported_reason_cannot_be_published(self):
+        self.transport.output = {"modelScore": 20, "reasonCodes": ["recent_activity"]}
+        self.assertEqual(self.post(payload()).status_code, 503)
+
+    def test_changed_digest_during_inference_is_refused(self):
+        self.transport.mutate_digest = True
+        self.assertEqual(self.post(payload()).status_code, 503)
+
+    def test_remote_backed_model_and_outage_fail_closed(self):
+        for flag in ("remote", "fail"):
+            setattr(self.transport, flag, True)
+            response = self.post(payload())
+            self.assertEqual(response.status_code, 503)
+            self.assertNotIn("diagnostics", response.text)
+            setattr(self.transport, flag, False)
+
+    def test_invalid_scores_duplicate_json_and_extra_fields_fail_closed(self):
+        for output in ({"modelScore": True, "reasonCodes": ["model_context"]},
+                       {"modelScore": 95, "reasonCodes": ["model_context"]},
+                       {"modelScore": -1, "reasonCodes": ["model_context"]},
+                       {"modelScore": 10.5, "reasonCodes": ["model_context"]},
+                       {"modelScore": 10, "reasonCodes": []},
+                       {"modelScore": 10, "reasonCodes": ["model_context", "model_context"]},
+                       {"modelScore": 10, "reasonCodes": ["model_context"], "execute": True},
+                       '{"modelScore":10,"modelScore":20,"reasonCodes":["model_context"]}',
+                       '{"modelScore":NaN,"reasonCodes":["model_context"]}'):
+            with self.subTest(output=output):
+                self.transport.output = output
+                self.assertEqual(self.post(payload()).status_code, 503)
+
+    def test_truncated_generation_is_not_used(self):
+        self.transport.done_reason = "length"
+        self.assertEqual(self.post(payload()).status_code, 503)
+
+    def test_scoring_concurrency_is_bounded_without_inference_fallback(self):
+        self.model.slot.acquire()
+        self.model.slot.acquire()
+        try:
+            self.assertEqual(self.post(payload()).status_code, 503)
+            self.assertFalse(any(c[1].endswith("/api/chat") for c in self.transport.calls))
+        finally:
+            self.model.slot.release()
+            self.model.slot.release()
+
+    def test_strict_inputs_reject_wrong_types_unknown_fields_and_ambiguous_dates(self):
+        for changes in ({"amountCents": "2500"}, {"amountCents": True}, {"amountCents": 0},
+                        {"authorizationPassword": "Never-expose-this"}, {"isInternal": 1},
+                        {"createdAt": "2026-02-31T00:00:00Z"}, {"createdAt": "2026-01-01"},
+                        {"transactionId": "../bad"}, {"payloadHash": "bad"}):
+            response = self.post(payload(**changes))
+            self.assertEqual(response.status_code, 422)
+            self.assertNotIn("Never-expose-this", response.text)
+
+    def test_inconsistent_history_is_not_silently_coerced(self):
+        for history in ({"averageOutgoingCents": 0.0, "outgoingCount10m": 1, "outgoingAmount10m": 1, "dailyOutgoingCents": 0, "historyCount": 0, "knownPayee": False},
+                        {"averageOutgoingCents": 0.0, "outgoingCount10m": 0, "outgoingAmount10m": 1, "dailyOutgoingCents": 0, "historyCount": 0, "knownPayee": False}):
+            self.assertEqual(self.post(payload(historySummary=history)).status_code, 422)
+
+    def test_malformed_duplicate_nonfinite_and_oversized_http_json_are_refused(self):
         headers = {**HEADERS, "Content-Type": "application/json"}
-        for raw in (b'{"amountCents":NaN}', b'{"amountCents":Infinity}', b'{"a":1,"a":2}', b'[]', b'{', b'\xff'):
-            with self.subTest(raw=raw):
-                self.assertEqual(self.client.post("/internal/assess", content=raw, headers=headers).status_code, 400)
-        self.assertEqual(self.client.post("/internal/assess", content=b"x" * (BODY_LIMIT + 1), headers=headers).status_code, 413)
-        self.assertEqual(self.client.post("/internal/assess", content=iter([b"x" * BODY_LIMIT, b"x"]), headers=headers).status_code, 413)
+        for body in ('{"amountCents":1,"amountCents":2}', '{"amountCents":NaN}', '[1]', 'not-json'):
+            self.assertEqual(self.client.post("/internal/assess", content=body, headers=headers).status_code, 400)
+        self.assertEqual(self.client.post("/internal/assess", content="x" * (BODY_LIMIT + 1), headers=headers).status_code, 413)
         self.assertEqual(self.client.post("/internal/assess", content="{}", headers=HEADERS).status_code, 415)
 
-    def test_invalid_historical_aggregates_are_not_silently_coerced(self):
-        for update in ({"knownPayee": 1}, {"outgoingCount10m": 1.5}, {"outgoingCount10m": 11}, {"outgoingAmount10m": 100}, {"averageOutgoingCents": "20000"}, {"historyCount": 0}, {"dailyOutgoingCents": -1}, {"balanceCents": 999}):
-            with self.subTest(update=update):
-                body = payload()
-                body["historySummary"].update(update)
-                self.assertEqual(self.post(body).status_code, 422)
-        empty = {"averageOutgoingCents": 0, "outgoingCount10m": 0, "outgoingAmount10m": 0, "dailyOutgoingCents": 0, "historyCount": 0, "knownPayee": False}
-        self.assertEqual(self.post(payload(historySummary=empty)).status_code, 200)
-
-    def test_singapore_hour_uses_the_instant_not_server_timezone(self):
-        midnight = self.post(payload(createdAt="2026-10-22T17:00:00.000Z")).json()["risk"]
-        equivalent = self.post(payload(createdAt="2026-10-23T01:00:00+08:00")).json()["risk"]
-        daytime = self.post(payload(createdAt="2026-10-23T06:00:00.000Z")).json()["risk"]
-        self.assertEqual(midnight, equivalent)
-        self.assertEqual(midnight["features"]["unusualHour"], 1)
-        self.assertEqual(daytime["features"]["unusualHour"], 0)
-
-    def test_high_model_probability_requires_review_and_never_auto_blocks(self):
-        summary = {"averageOutgoingCents": 1000, "outgoingCount10m": 50, "outgoingAmount10m": 9000000, "dailyOutgoingCents": 9000000, "historyCount": 50, "knownPayee": False}
-        risk = self.post(payload(amountCents=900000, accountBalanceCents=900000, historySummary=summary, createdAt="2026-10-22T17:00:00Z")).json()["risk"]
-        self.assertEqual(risk["score"], 94)
-        self.assertEqual(risk["decision"], "review")
-        self.assertTrue(all(math.isfinite(reason["contribution"]) for reason in risk["reasons"]))
-
-    def test_inference_failure_is_unavailable_without_echoing_inputs(self):
-        with patch.object(FraudModel, "assess", side_effect=ValueError("do not expose customer data")):
-            response = self.post(payload())
-        self.assertEqual(response.status_code, 503)
-        self.assertNotIn("customer data", response.text)
+    def test_singapore_hour_uses_the_timestamp_instant(self):
+        self.post(payload(createdAt="2026-10-24T17:00:00.000Z"))
+        request = next(c[2] for c in self.transport.calls if c[1].endswith("/api/chat"))
+        facts = json.loads(request["messages"][-1]["content"])
+        self.assertEqual(facts["singaporeHour"], 1)
+        self.assertIn("unusual_hour", facts["evidenceCodes"])
 
 
-class ModelIntegrityTests(unittest.TestCase):
-    def test_missing_or_weak_service_token_prevents_application_creation(self):
-        for token in ("", "short", " " * 32, "x" * 513):
-            with self.subTest(token=token):
-                with self.assertRaises(ValueError):
-                    create_app(token=token)
-
-    def test_checksum_and_model_shape_are_verified_before_startup(self):
-        source = DEFAULT_MODEL.read_bytes().replace(b"\r\n", b"\n")
-        with tempfile.TemporaryDirectory(prefix="greenlink-model-") as temporary:
-            location = Path(temporary) / "model.json"
-            location.write_bytes(source + b" ")
-            with self.assertRaisesRegex(ValueError, "checksum"):
-                FraudModel.load(location)
-            artifact = json.loads(source)
-            artifact["weights"].pop()
-            changed = json.dumps(artifact).encode()
-            location.write_bytes(changed)
-            with self.assertRaisesRegex(ValueError, "weight"):
-                FraudModel.load(location, hashlib.sha256(changed).hexdigest())
-            artifact = json.loads(source)
-            artifact["features"].reverse()
-            changed = json.dumps(artifact).encode()
-            location.write_bytes(changed)
-            with self.assertRaisesRegex(ValueError, "feature order"):
-                FraudModel.load(location, hashlib.sha256(changed).hexdigest())
-            changed = source.replace(b'"intercept": -3.905', b'"intercept": NaN')
-            location.write_bytes(changed)
+class ConfigurationTests(unittest.TestCase):
+    def test_missing_or_weak_service_token_prevents_startup(self):
+        for token in ("", "short", "a b" * 20):
             with self.assertRaises(ValueError):
-                FraudModel.load(location, hashlib.sha256(changed).hexdigest())
+                create_app(token=token)
 
-    def test_windows_and_linux_checkout_newlines_have_the_same_approved_model(self):
-        source = DEFAULT_MODEL.read_bytes().replace(b"\r\n", b"\n")
-        with tempfile.TemporaryDirectory(prefix="greenlink-model-") as temporary:
-            location = Path(temporary) / "model.json"
-            location.write_bytes(source.replace(b"\n", b"\r\n"))
-            self.assertEqual(FraudModel.load(location).sha256, FraudModel.load().sha256)
+    def test_external_urls_cloud_names_and_offline_mode_are_refused(self):
+        for url in ("https://example.com", "http://example.com", "http://u:p@localhost", "http://localhost/path", "http://localhost?x=1"):
+            with self.assertRaises(ValueError):
+                OllamaFraudModel(url=url)
+        with self.assertRaises(ValueError):
+            OllamaFraudModel(model_name="qwen-cloud")
+        with patch.dict("os.environ", {"AGENT_MODE": "workflow"}):
+            with self.assertRaises(ValueError):
+                OllamaFraudModel()
 
-    def test_published_metrics_measure_the_exact_live_review_policy(self):
-        with (ROOT / "datasets" / "fraud-history.csv").open(encoding="utf-8", newline="") as source:
-            rows = [{key: int(value) for key, value in row.items()} for row in csv.DictReader(source)]
-        state = 98245
-        for index in range(len(rows) - 1, 0, -1):
-            state = (1664525 * state + 1013904223) & 0xFFFFFFFF
-            selected = math.floor(state / 4294967296 * (index + 1))
-            rows[index], rows[selected] = rows[selected], rows[index]
-        heldout = rows[math.floor(len(rows) * 0.8):]
-        confusion = {"truePositive": 0, "falsePositive": 0, "trueNegative": 0, "falseNegative": 0}
-        model = FraudModel.load()
-        for index, row in enumerate(heldout):
-            summary = {"averageOutgoingCents": row["averageOutgoingCents"], "outgoingCount10m": row["outgoingCount10m"], "outgoingAmount10m": row["outgoingAmount10m"], "dailyOutgoingCents": 0, "historyCount": max(1, row["outgoingCount10m"]), "knownPayee": bool(row["knownPayee"])}
-            request = payload(transactionId=f"evaluation-{index}", amountCents=row["amountCents"], accountBalanceCents=row["balanceCents"], historySummary=summary, createdAt=f"2026-10-23T{row['hour']:02d}:00:00+08:00")
-            predicted = model.assess(AssessmentRequest.model_validate(request))["score"] >= 65
-            name = ("truePositive" if row["label"] else "falsePositive") if predicted else ("falseNegative" if row["label"] else "trueNegative")
-            confusion[name] += 1
-        metrics = model.info()["metrics"]
-        for name, value in confusion.items():
-            self.assertEqual(metrics[name], value)
-        self.assertEqual(sum(confusion.values()), model.metadata["training"]["testRows"])
-        self.assertEqual(metrics["threshold"], 65)
-        self.assertEqual(metrics["precision"], round(confusion["truePositive"] / max(1, confusion["truePositive"] + confusion["falsePositive"]), 4))
-        self.assertEqual(metrics["recall"], round(confusion["truePositive"] / max(1, confusion["truePositive"] + confusion["falseNegative"]), 4))
-        self.assertEqual(metrics["falsePositiveRate"], round(confusion["falsePositive"] / max(1, confusion["falsePositive"] + confusion["trueNegative"]), 4))
-
-    def test_inference_matches_existing_javascript_features_and_score(self):
-        randomizer = random.Random(73121)
-        cases = [payload(), payload(isInternal=True), payload(createdAt="2026-10-23T00:00:00+08:00")]
-        for index in range(60):
-            count = randomizer.randrange(0, 30)
-            cases.append(payload(transactionId=f"parity-{index}", amountCents=randomizer.randrange(1, 9000000), accountBalanceCents=randomizer.randrange(1, 9000000), createdAt=f"2026-10-23T{index % 24:02d}:00:00.000Z", historySummary={"averageOutgoingCents": randomizer.randrange(1, 900000), "outgoingCount10m": count, "outgoingAmount10m": randomizer.randrange(1, 9000000) if count else 0, "dailyOutgoingCents": randomizer.randrange(1, 20000000), "historyCount": max(1, count), "knownPayee": bool(index % 2)}))
-        script = "const fs=require('node:fs');const {historicalFeatures,sigmoid,FEATURE_NAMES}=require('./services/fraud/features');const model=require('./services/fraud/model.json');const cases=JSON.parse(fs.readFileSync(0,'utf8'));process.stdout.write(JSON.stringify(cases.map(input=>{const {values}=historicalFeatures(input);return {score:Math.min(94,Math.round(sigmoid(model.intercept+values.reduce((s,x,i)=>s+x*model.weights[i],0))*100)),features:Object.fromEntries(FEATURE_NAMES.map((k,i)=>[k,Number(values[i].toFixed(4))]))}})));"
-        completed = subprocess.run(["node", "-e", script], cwd=ROOT, input=json.dumps(cases), text=True, capture_output=True, check=True, timeout=20)
-        expected = json.loads(completed.stdout)
-        model = FraudModel.load()
-        for request, javascript in zip(cases, expected):
-            with self.subTest(transactionId=request["transactionId"]):
-                actual = model.assess(AssessmentRequest.model_validate(request))
-                self.assertEqual(actual["score"], javascript["score"])
-                self.assertEqual(actual["features"], javascript["features"])
+    def test_missing_installed_model_digest_and_malformed_metadata_are_refused(self):
+        fake = ControlledTransport()
+        fake.digest = "missing"
+        with self.assertRaises(ValueError):
+            OllamaFraudModel(model_name="controlled-local", request=fake).info()
+        for endpoint, result in (("/api/show", {"capabilities": None}),
+                                 ("/api/show", {"capabilities": "completion"}),
+                                 ("/api/show", {"capabilities": [["completion"]]}),
+                                 ("/api/tags", {"models": [{"name": [], "model": {}, "digest": "a" * 64}]})):
+            with self.subTest(result=result):
+                base = ControlledTransport()
+                def malformed(method, url, body, timeout):
+                    return result if url.endswith(endpoint) else base(method, url, body, timeout)
+                with self.assertRaises(ValueError):
+                    OllamaFraudModel(model_name="controlled-local", request=malformed).info()
 
 
 if __name__ == "__main__":

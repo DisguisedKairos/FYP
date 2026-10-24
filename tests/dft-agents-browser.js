@@ -14,7 +14,7 @@ async function open(t,width,email){
 async function visit(page,base,route){await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');}
 test('Business users project liquidity, inspect reconciliation and build a multi-turn draft on mobile',async t=>{
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
-  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Offline workflows")');
+  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Local model ready")');
   assert.equal(await page.evaluate('!!document.querySelector("#agent-fraud-form,#agent-simulation-form")'),false);
   await page.fill('#agent-days','14');
   await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
@@ -26,9 +26,9 @@ test('Business users project liquidity, inspect reconciliation and build a multi
   await visit(page,f.baseUrl,'/assistant');
   await page.evaluate(`window.originalAgentFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))await new Promise(resolve=>{window.releaseAgentResponse=resolve;});return window.originalAgentFetch(...args);};`);
   await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
-  await page.waitFor('document.querySelector("#assistant-engine").disabled===true && !!window.releaseAgentResponse');
+  await page.waitFor('document.querySelector("#assistant-form button[type=submit]").disabled===true && !!window.releaseAgentResponse');
   await page.evaluate('window.releaseAgentResponse();window.fetch=window.originalAgentFetch;');
-  await page.waitFor('document.querySelector("#assistant-form").getAttribute("aria-busy")==="false" && !document.querySelector("#assistant-engine").disabled');
+  await page.waitFor('document.querySelector("#assistant-form").getAttribute("aria-busy")==="false" && !document.querySelector("#assistant-form button[type=submit]").disabled');
   async function ask(message){const n=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+n+' && document.querySelector("#assistant-form").getAttribute("aria-busy")==="false"');}
   await ask('Transfer');assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/amount/);
   await ask('SGD 1');await ask('1020001001');
@@ -45,11 +45,11 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelectorAll("#agent-rule option").length===5');
   await page.fill('#agent-transaction',paid.data.transaction.id);await page.click('#agent-fraud-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Fraud investigation brief")');
   await visit(page,f.baseUrl,'/fraud-monitoring');await page.waitFor('!!document.querySelector("[data-investigate-transaction]")');
-  await page.waitFor('!!document.querySelector("[data-model-evaluation]")');
-  assert.match(await page.evaluate('document.querySelector("[data-model-evaluation]").textContent'),/Chronological evaluation/);
-  assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/Insufficient data/);
+  await page.waitFor('!!document.querySelector("[data-model-activity]")');
+  assert.match(await page.evaluate('document.querySelector("[data-model-activity]").textContent'),/Local Ollama activity/);
+  assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/current local model/);
   await page.click('[data-investigate-transaction]');await page.waitFor('location.pathname==="/banking-insights" && document.querySelector("[data-agent-report]")?.textContent.includes("'+held.data.transaction.id+'")');
-  await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule simulation")');
+  await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/changed decisions/);
   assert.equal(await page.evaluate('document.querySelector("#agent-threshold").value'),'50');
   await page.waitFor('document.querySelectorAll("[data-agent-run]").length>=2');
@@ -63,7 +63,7 @@ test('Model connection checks show help, while banking answers link saved owned 
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Local model ready")');
-  await visit(page,f.baseUrl,'/assistant');await page.select('#assistant-engine','ollama');
+  await visit(page,f.baseUrl,'/assistant');assert.equal(await page.evaluate('!!document.querySelector("#assistant-engine")'),false);
   await page.fill('#assistant-message','test');await page.click('#assistant-form button[type=submit]');
   await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("Assistant is responding")');
   assert.equal(await page.evaluate('document.querySelector("#assistant-error").textContent'),'');

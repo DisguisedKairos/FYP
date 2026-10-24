@@ -29,15 +29,25 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   const pythonHealth = await fetch(new URL('/internal/health',fraudUrl),{headers:pythonHeaders});
   assert.equal(pythonHealth.status,200);
   assert.equal((await pythonHealth.json()).service,'fraud');
+  const modelInfoResponse=await fetch(new URL('/internal/model',fraudUrl),{headers:pythonHeaders});
+  const modelAvailable=modelInfoResponse.status===200;
   const bound = {transactionId:randomUUID(),userId:'smoke-user',sourceAccountId:'smoke-source',payloadHash:'a'.repeat(64),type:'transfer',amountCents:100,accountBalanceCents:10000,payee:'1020002001',isInternal:false,createdAt:new Date().toISOString(),historySummary:{averageOutgoingCents:0,outgoingCount10m:0,outgoingAmount10m:0,dailyOutgoingCents:0,historyCount:0,knownPayee:false}};
   const modelResponse=await fetch(new URL('/internal/assess',fraudUrl),{method:'POST',headers:pythonHeaders,body:JSON.stringify(bound)});
+  if(!modelAvailable){
+    assert.equal(modelResponse.status,503);
+    const client=new BrowserSession();await client.login('alex@greenlink.demo');const before=await client.request('/api/dashboard');
+    await client.request('/api/agents/assistant',{message:'test'},'POST',503);
+    await client.request('/api/transfers',{fromAccountId:before.accounts[0].id,toAccountNumber:'1020002001',amount:'1.25',authorizationPassword:password,requestId:randomUUID()},'POST',503);
+    assert.deepEqual((await client.request('/api/dashboard')).accounts.map(a=>a.balanceCents),before.accounts.map(a=>a.balanceCents));
+    console.log('No local model in this fixture: Ollama-only assistant and payment screening fail closed; account reads remain available and balances are unchanged. Run with installed Ollama for real inference coverage.');return;
+  }
   assert.equal(modelResponse.status,200);
   const rawModel=(await modelResponse.json()).risk;
   for(const field of ['transactionId','userId','sourceAccountId','payloadHash','type','amountCents','payee','isInternal'])assert.equal(rawModel[field],bound[field]);
   assert.ok(Number.isInteger(rawModel.score) && rawModel.score>=0 && rawModel.score<=94);
   assert.equal(rawModel.modelScore,rawModel.score);
   assert.equal(rawModel.decision,rawModel.score>=65?'review':'allow');
-  assert.equal(rawModel.synthetic,true);
+  assert.equal(rawModel.provider,'ollama');assert.equal(rawModel.synthetic,undefined);assert.match(rawModel.modelSha256,/^[a-f0-9]{64}$/);
   assert.equal(rawModel.ruleVersion,undefined);
   const malformed=await fetch(new URL('/internal/assess',fraudUrl),{method:'POST',headers:pythonHeaders,body:JSON.stringify({...bound,amountCents:'100',authorizationPassword:'Never-echo-this-secret-123!'})});
   assert.equal(malformed.status,422);
@@ -49,17 +59,32 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   assert.equal((await fetch(new URL('/health', base))).status, 200);
   assert.equal((await fetch(new URL('/internal/jobs/tick', base), { method: 'POST' })).status, 404);
   const alex = new BrowserSession(), recipient = new BrowserSession(), reviewer = new BrowserSession();
+  async function settleHeld(transaction){
+    if(transaction.status!=='pending_review')return transaction;
+    await reviewer.login('reviewer@greenlink.demo');
+    return (await reviewer.request('/api/fraud/reviews/'+transaction.id,{decision:'approve',reason:'Independent authorization in a disposable real-model integration fixture.',authorizationPassword:password})).transaction;
+  }
   await alex.login('alex@greenlink.demo');
   const original = await alex.request('/api/dashboard');
   const source = original.accounts.find(a => a.name === 'Operating savings') || original.accounts[0];
-  const assistantBalance = await alex.request('/api/assistant/messages', { message: 'What is my balance?' });
-  assert.equal(assistantBalance.intent, 'balance');
-  assert.equal(assistantBalance.privacy.externalServices, false);
-  const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 to Harbour Supplies Pte. Ltd.' });
-  assert.equal(assistantDraft.actions[0].type, 'draft_transfer');
-  assert.equal(assistantDraft.requiresAuthorization, true);
+  const localAgent=(await alex.request('/api/agents/status')).agent;
+  if(localAgent.available){
+    const assistantBalance = await alex.request('/api/assistant/messages', { message: 'What is my balance?' });
+    assert.equal(assistantBalance.engine, 'ollama');
+    assert.ok(assistantBalance.evidenceReferences.some(e=>e.tool==='get_accounts'));
+    assert.equal(assistantBalance.privacy.externalServices, false);
+    const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 to 1020002001' });
+    assert.equal(assistantDraft.actions[0].type, 'draft_transfer');
+    assert.equal(assistantDraft.requiresAuthorization, true);
+    console.log('Local Ollama assistant evidence and draft checks passed.');
+  }else{
+    await alex.request('/api/assistant/messages', { message: 'What is my balance?' }, 'POST', 503);
+    await alex.request('/api/agents/reconciliation', {}, 'POST', 503);
+    console.log('Ollama is not installed in this fixture: verified explicit AI unavailability with no offline fallback. Run demo:agents locally for real model coverage.');
+  }
   assert.equal((await alex.request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, source.balanceCents);
   const first = await alex.request('/api/transfers', { fromAccountId: source.id, toAccountNumber: '1020002001', amount: '1.25', description: 'Service smoke transfer', authorizationPassword: password, requestId: randomUUID() });
+  first.transaction=await settleHeld(first.transaction);
   assert.equal(first.transaction.status, 'completed');
   assert.equal(typeof first.transaction.risk.score, 'number');
   const afterFirst = await alex.request('/api/dashboard');
@@ -81,12 +106,13 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   assert.equal((await recipient.request('/api/dashboard')).accounts[0].balanceCents, 200000);
 
   const bill = await alex.request('/api/payments', { fromAccountId: source.id, billerId: 'sp-services', reference: 'SMOKE-UTILITY-001', amount: '0.75', authorizationPassword: password, requestId: randomUUID() });
+  bill.transaction=await settleHeld(bill.transaction);
   assert.equal(bill.transaction.status, 'completed');
   const schedule = await alex.request('/api/scheduled-payments', { type: 'bill', fromAccountId: source.id, billerId: 'pub', reference: 'SMOKE-SCHEDULE-001', amount: '1.00', scheduledAt: new Date(Date.now() + 3600000).toISOString(), frequency: 'once', authorizationPassword: password, requestId: randomUUID() }, 'POST', 201);
   assert.equal(schedule.schedule.status, 'active');
   await alex.request(`/api/scheduled-payments/${schedule.schedule.id}`, {}, 'DELETE');
   assert.equal((await alex.request('/api/fraud/rules')).rules.length, 5);
-  assert.equal((await alex.request('/api/fraud/model')).model.training.synthetic, true);
+  assert.equal((await alex.request('/api/fraud/model')).model.provider, 'ollama');
   const history = await alex.request('/api/transactions?q=Service%20smoke%20transfer&pageSize=1');
   assert.equal(history.transactions[0].id, first.transaction.id);
   assert.equal(history.pagination.total, 1);
@@ -113,7 +139,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   }
   assert.ok(notifications.notifications.some(n => n.transactionId === first.transaction.id));
   assert.equal((await alex.request('/api/notifications/all', { read: true }, 'PATCH')).unreadCount, 0);
-  console.log('DFT smoke passed: authenticated FastAPI contracts, Express/PostgreSQL banking, private assistant, screening/review, transfers/bills, schedules, notifications, history/statements and rule audit.');
+  console.log('DFT smoke passed: authenticated FastAPI contracts, Express/PostgreSQL banking, local-model availability boundary, screening/review, transfers/bills, schedules, notifications, history/statements and rule audit.');
 }
 
 async function unusedPort() {

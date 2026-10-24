@@ -6,7 +6,7 @@ const { assertActor } = require('./agents/reports');
 const { readPolicy, evaluateRules } = require('./risk');
 const { enqueue, assertAuthorization } = require('./ledger');
 const iso = value => new Date(value).toISOString();
-const VERSION = 'surveillance-v1';
+const VERSION = 'surveillance-v2-ollama';
 const reviewCodes = new Set(['confirmed_fraud', 'legitimate', 'inconclusive']);
 function batchSize(value = 25) { if (!Number.isInteger(value) || value < 1 || value > 25) throw new HttpError(400, 'Scan between 1 and 25 payments per batch.'); return value; }
 function signal(code, message, source) { return { code, message, source }; }
@@ -16,7 +16,7 @@ function bindingMatches(input, row) {
 function finding(row, { model = null, policy, prior, now = Date.now } = {}) {
   const signals = [], amount = -Number(row.amount_cents), original = row.result_json || row.risk_json;
   if (['review', 'block'].includes(original?.decision)) signals.push(signal('original_' + original.decision, 'The original payment screening requested ' + (original.decision === 'block' ? 'a block' : 'independent review') + '.', 'recorded_screening'));
-  if (model?.modelScore >= 65) signals.push(signal('ai_risk', 'The AI model identified an unusual transaction pattern above its review threshold.', 'python_ai'));
+  if (model?.modelScore >= 65) signals.push(signal('ai_risk', 'The AI model identified an unusual transaction pattern above its review threshold.', 'ollama_ai'));
   let matched = [];
   if (model) {
     matched = evaluateRules(policy.rules, row.input_json);
@@ -29,10 +29,10 @@ function finding(row, { model = null, policy, prior, now = Date.now } = {}) {
   const score = matched.some(r => r.action === 'block') || original?.decision === 'block' ? 95 : signals.some(s => s.code !== 'missing_context') ? Math.max(70, base || 0) : base;
   return { analyzedAt: iso(now()), detector: VERSION, transactionId: row.id, amountCents: amount, transactionStatusAtScan: row.status,
     flagged: signals.length > 0, score, scoreScale: 100, signals,
-    model: model ? { score: model.modelScore, version: model.modelVersion, sha256: model.modelSha256 || null, reasons: model.reasons, features: model.features, snapshotAt: row.input_json.createdAt } : null,
+    model: model ? { score: model.modelScore, provider:model.provider,modelName:model.modelName,promptSha256:model.promptSha256,version: model.modelVersion, sha256: model.modelSha256 || null, reasons: model.reasons, features: model.features, snapshotAt: row.input_json.createdAt } : null,
     original: original ? { modelScore: original.modelScore ?? null, combinedScore: original.score ?? null, decision: original.decision, reasons: original.reasons || [] } : null,
     history: prior, policyVersion: policy.version, policy: policy.rules,
-    limitations: ['A flag is a request for human investigation, not proof of fraud.', 'AI uses the recorded pre-payment context; later transactions do not enter this model snapshot.', 'Pattern comparisons use earlier completed outgoing payments on the source account; equal-time entries are conservatively excluded.', 'Scores use a synthetic educational model. A low score does not establish safety.', 'Case decisions do not approve, reverse, refund or change any payment.'] };
+    limitations: ['A flag is a request for human investigation, not proof of fraud.', 'AI uses the recorded pre-payment context; later transactions do not enter this model snapshot.', 'Pattern comparisons use earlier completed outgoing payments on the source account; equal-time entries are conservatively excluded.', 'Scores are local Ollama risk indicators without validated real-world fraud performance. A low score does not establish safety.', 'Case decisions do not approve, reverse, refund or change any payment.'] };
 }
 async function historyBefore(db, row, policy) {
   const threshold = Math.round((policy.rules.find(r => r.id === 'high_value')?.threshold || 90000000000) * 100);
@@ -87,7 +87,7 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
   try {
     const active = await riskClient.getModelInfo(), policy = await readPolicy(db);
     const digest = active.modelSha256 || createHash('sha256').update(JSON.stringify(active)).digest('hex');
-    const detector = `${VERSION}:${active.version}:${digest}:policy-${policy.version}`;
+    const detector = `${VERSION}:${active.version}:${digest}:prompt-${active.promptSha256 || "unknown"}:policy-${policy.version}`;
     const rows = (await db.query(`SELECT t.*,a.user_id,f.input_json,f.result_json FROM transactions t JOIN accounts a ON a.id=t.account_id
       LEFT JOIN fraud_assessments f ON f.id=t.id WHERE t.amount_cents<0 AND t.type IN ('transfer','bill') AND t.requested_at<=$2
       AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1) AND ($4::text IS NULL OR t.id=$4)
@@ -96,7 +96,7 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
       if (Date.now() + 8000 > deadline) break;
       await validateSession();
       if (actor) await assertActor(db, actor, { admin: true });
-      const model = bindingMatches(row.input_json, row) ? await riskClient.analyze(row.input_json) : null;
+      const model = bindingMatches(row.input_json, row) ? await riskClient.analyze(row.input_json,{timeoutMs:Math.min(50000,deadline-Date.now())}) : null;
       if (model && active.modelSha256 && model.modelSha256 !== active.modelSha256) throw new HttpError(503, 'The scorer changed during analysis. Retry after verifying the model.');
       const evidence = finding(row, { model, policy, prior: await historyBefore(db, row, policy), now });
       const saved = await saveFinding(db, row, evidence, detector, lease, { actor, now, validateSession });

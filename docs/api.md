@@ -37,7 +37,7 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | PATCH | `/api/fraud/rules/:id` | Admin `{enabled?,threshold?,action?,version,authorizationPassword}` |
 | GET | `/api/fraud/rules/audit` | Admin paginated policy history |
 | GET | `/api/fraud/model` | Admin model provenance and evaluation |
-| GET | `/api/fraud/evaluation` | Staff-only model diagnostics and recent feature shift; optional `days=1..90` |
+| GET | `/api/fraud/model-activity` | Staff-only recorded current Ollama activity, with no synthetic metrics; optional `days=1..90` |
 | POST | `/api/fraud/scan` | Staff-only bounded monitoring scan; `{limit?:1..25,transactionId?}` |
 | GET | `/api/fraud/analysis/:id` | Staff-only saved monitoring analysis for an outgoing transaction |
 | GET | `/api/fraud/cases` | Staff-only suspicious cases, counts and scan status; `status`, `page` |
@@ -48,7 +48,7 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 
 ## Private banking agents (2.7.0)
 
-All routes require the existing session. POST routes additionally require CSRF and the same-origin guard. Run records are private to their initiating user. `engine` is `workflow` or `ollama`; report forms default to workflow, and assistant requests default to configured `AGENT_MODE`.
+All routes require the existing session. POST routes additionally require CSRF and the same-origin guard. Run records are private to their initiating user. All generation requests require the local Ollama model. The optional `engine` field accepts only `ollama`; `workflow` and other providers are rejected with 400. Local-model unavailability returns 503 with no alternate response engine. `/api/assistant/messages` is a compatibility URL for this same model-backed assistant.
 
 | Method | Path | Payload/result |
 | --- | --- | --- |
@@ -79,4 +79,4 @@ Errors return `{error}` with an appropriate HTTP status. MFA login challenges ad
 
 ## Private scoring contract
 
-Python exposes `/internal/health`, `/internal/model` and `POST /internal/assess` on its separate loopback address. Every endpoint requires `Authorization: Bearer <SERVICE_TOKEN>`. Express never serves those private routes publicly. Assessment input binds `transactionId,userId,sourceAccountId,payloadHash,type,amountCents,payee,accountBalanceCents,isInternal,createdAt` and a validated `historySummary`. The scorer returns the same bindings with bounded score, decision, seven features, historical context, reasons and model provenance. It owns no ledger writes or fraud-rule administration.
+The local Python model exposes `/internal/health`, `/internal/model` and `POST /internal/assess` on its separate loopback address. Every endpoint requires `Authorization: Bearer <SERVICE_TOKEN>`. Express never serves those private routes publicly. Assessment input binds `transactionId,userId,sourceAccountId,payloadHash,type,amountCents,payee,accountBalanceCents,isInternal,createdAt` and a validated `historySummary`. The scorer returns the same bindings with bounded score, decision, seven features, historical context, reasons and model provenance. It owns no ledger writes or fraud-rule administration.

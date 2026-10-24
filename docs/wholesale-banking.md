@@ -28,6 +28,6 @@ The private assistant shows only the signed-in business operator's owned records
 
 ## Remaining project limitations
 
-Funds, bill settlement, business verification and the synthetic fraud model are educational project flows. Official business registry integration, document-based KYB, sanctions/AML screening, beneficial owner verification, representative authority checks, real payment rails and corporate-model validation are not implemented. DIT infrastructure responsibilities remain outside this DFT package.
+Funds, bill settlement, business verification and experimental local Ollama scoring are educational project flows. Official business registry integration, document-based KYB, sanctions/AML screening, beneficial owner verification, representative authority checks, real payment rails and corporate-model validation are not implemented. DIT infrastructure responsibilities remain outside this DFT package.
 
 `tests/dft-business.test.js` checks entity validation, registration eligibility, rejected/pending restrictions, approved source/recipient ownership, company uniqueness, takeover prevention, independent review, stale authorization, corrected applications, staff provisioning and schedule waiting. Browser tests cover the registration-to-bank-review flow and a dedicated mobile staff workspace.

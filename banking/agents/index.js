@@ -4,7 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { HttpError } = require('../../models/errors');
 const { consumeLimits } = require('../auth');
 const { bucketKey } = require('../security');
-const legacy = require('../assistant');
+const SENSITIVE = /\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i;
 const history = require('../history');
 const reports = require('./reports');
 const { prepareDraft, extractDraft } = require('./drafts');
@@ -86,7 +86,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
     let message=body.message, previous={};
     if(kind==='assistant'){
       if(typeof message!=='string' || !message.trim() || message.length>1000)throw new HttpError(400,'Enter a message of 1-1,000 characters.');
-      if(legacy.SENSITIVE.test(message))return {reply:'Keep passwords and security codes out of chat. Use the ordinary authorization screen.',sensitiveInput:true,actions:[],privacy:{externalServices:false}};
+      if(SENSITIVE.test(message))return {reply:'Keep passwords and security codes out of chat. Use the ordinary authorization screen.',sensitiveInput:true,actions:[],privacy:{externalServices:false}};
       if(body.previousRunId){
         if(typeof body.previousRunId!=='string')throw new HttpError(400,'Invalid conversation reference.');
         const saved=(await db.query("SELECT context_json,auth_version,created_at FROM agent_runs WHERE id=$1 AND user_id=$2 AND kind='assistant' AND status='completed'",[body.previousRunId,user.id])).rows[0];
@@ -96,9 +96,9 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
       }
     }
     const conversational=kind==='assistant' && CONVERSATIONAL.test(message.trim());
-    const engine=body.engine || (kind==='assistant'?model.mode:'workflow');
-    if(!['workflow','ollama'].includes(engine))throw new HttpError(400,'Choose offline workflow or local Ollama.');
-    if(engine==='ollama' && !(await model.inspect()).available)throw new HttpError(503,'The local tool-capable model is unavailable. Choose offline workflow or start Ollama.');
+    const engine=body.engine===undefined?'ollama':body.engine;
+    if(engine!=='ollama')throw new HttpError(400,'Only the local Ollama model is supported.');
+    if(!(await model.inspect()).available)throw new HttpError(503,'The local tool-capable model is unavailable. Start Ollama with the configured model and retry.');
     await consumeLimits(db,[{key:bucketKey('agents:user',String(user.id)),maximum:40},{key:bucketKey('agents:ip',ip),maximum:120}],new Date(now()));
     const id=randomUUID();
     await db.transaction(async client=>{
@@ -118,8 +118,12 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
         if(!DRAFT_INTENT.test(message) && !object(previous.pendingDraft))throw new HttpError(400,'Ask explicitly for a payment draft before preparing a form.');
         const own=await accounts(acting),billers=(await db.query('SELECT id,name FROM billers')).rows;
         const expected=extractDraft(message,DRAFT_INTENT.test(message)?{}:previous.pendingDraft,own.accounts,billers,{now});
+        // Models sometimes repeat defaults applied by prepareDraft itself.
+        // Accept only those exact defaults; missing amount/payee details and
+        // a different source account must never be inferred by the model.
+        const comparable={...expected,fromAccountId:expected.fromAccountId || own.accounts[0]?.id,type:expected.type || (expected.kind==='schedule'?'transfer':expected.kind)};
         for(const [key,value] of Object.entries(args)){
-          const matches=key==='amount' && /^\d+(?:\.\d{1,2})?$/.test(value) && expected.amount!==undefined?Number(value)===Number(expected.amount):value===expected[key];
+          const matches=key==='amount' && /^\d+(?:\.\d{1,2})?$/.test(value) && expected.amount!==undefined?Number(value)===Number(expected.amount):value===comparable[key];
           if(!matches)throw new HttpError(400,'The model draft differs from the details you provided. Use the banking form or clarify the draft.');
         }
         args=expected;
@@ -149,7 +153,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
         const deadline=Date.now()+60000;
         let modelRequests=0,evidenceRetried=false;
         for(let round=0;round<4;round++){
-          const remaining=deadline-Date.now();if(remaining<=0)throw new HttpError(504,'The local agent time limit was reached. Use the offline workflow.');
+          const remaining=deadline-Date.now();if(remaining<=0)throw new HttpError(504,'The local agent time limit was reached. Start Ollama and retry.');
           // A local model may need to load its weights on the first request.
           // Give that call more of the same bounded total task budget.
           const response=await model.chat(messages,toolNames.map(toolSchema),{signal:AbortSignal.timeout(Math.min(round===0?45000:30000,remaining))});
@@ -165,7 +169,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
               // needing clarification can use trusted application wording
               // without retrieving unrelated private banking records.
               clarification=true;
-              reply=conversational?'GLDB Assistant is responding. Ask about your account balances, transaction history or scheduled payments, or prepare a payment draft.':'I have not retrieved banking records for this request. Choose a suggested task or provide more specific payment details. You can also select Offline evidence workflow.';
+              reply=conversational?'GLDB Assistant is responding. Ask about your account balances, transaction history or scheduled payments, or prepare a payment draft.':'I have not retrieved banking records for this request. Choose a suggested task or provide more specific payment details. Try again after checking the local model.';
               break;
             }
             reply=response.content.slice(0,5000);break;
@@ -180,7 +184,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
           messages.push({role:'assistant',content:'',tool_calls:normalized});
           for(const c of normalized){const output=await call(c.function.name,c.function.arguments);messages.push({role:'tool',tool_name:c.function.name,content:JSON.stringify({evidenceId:`E${step}`,data:small(output)}).slice(0,18000)});}
         }
-        if(!reply)throw new HttpError(422,'The agent round limit was reached. Use a narrower question or offline workflow.');
+        if(!reply)throw new HttpError(422,'The agent round limit was reached. Use a narrower question and retry.');
         // One bounded rewrite can remove an unsafe narrative without trusting
         // it as financial evidence or changing any authoritative tool facts.
         if(!clarification && narrativeIssue(reply,report,{results,evidence:references(id,results),requireCitations:true}) && modelRequests<4 && deadline-Date.now()>1000){
@@ -191,31 +195,6 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
             // An optional wording repair must not discard a valid evidence
             // report. The original unsafe narrative is withheld below.
           }
-        }
-      }else if(kind==='assistant'){
-        const drafting=/^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b/i.test(message) || /\b(?:create|set up).*\b(?:payment|transfer|schedule)\b/i.test(message);
-        const readQuestion=!drafting && /\b(?:balance|history|recent|liquidity|cash.?flow|reconcil|privacy|notification|transactions?|upcoming|flagged)\b/i.test(message);
-        const continuing=object(previous.pendingDraft) && !readQuestion && !drafting;
-        if(/\b(?:start over|discard draft|forget draft)\b/i.test(message)){context={};reply='The draft conversation is cleared. No banking instruction was created.';}
-        else if(/\b(?:privacy|private|data sharing|external|store.*chat|save.*chat)\b/i.test(message)){reply='Raw messages are not saved by the banking service. Investigation reports, tool evidence and draft context are retained privately in PostgreSQL. In Ollama mode, prompts and permitted banking results are sent only to the configured local model. Clearing this conversation clears browser messages; it does not delete investigation records.';}
-        else if(continuing || drafting){
-          const own=await call('get_accounts',{});
-          const billers=(await db.query('SELECT id,name FROM billers')).rows;
-          const draft=extractDraft(message,continuing?previous.pendingDraft:{},own.accounts,billers,{now});
-          const output=await call('prepare_payment_draft',draft);
-          reply=output.complete?'Your draft is ready. Review its details and authorize in the ordinary banking form. No instruction has been submitted.':`Please provide ${output.missing.join(', ')}. You can name an owned source account using "from Operating savings". For schedules use a future UTC timestamp and once, weekly or monthly.`;
-          report={title:'Business payment planning',reply,items:output.warnings,actions:output.actions,requiresAuthorization:true};
-        }else if(/\b(?:liquidity|cash.?flow|afford|shortfall|projection)\b/i.test(message)){
-          await call('get_accounts',{});const projection=await call('project_liquidity',{days:30});
-          reply=`The 30-day scheduled-payment scenario contains ${projection.shortfalls.length} account shortfalls. It assumes scheduled instructions settle and predicts no unscheduled income.`;
-          report={title:'Business liquidity planning',reply,items:projection.accounts.map(a=>({title:a.name,amountCents:a.projectedCents,subtitle:'Projected balance'})),actions:projection.actions};
-        }else if(/\b(?:reconcil|exceptions?|failed schedules?)\b/i.test(message)){
-          const check=await call('reconcile_accounts',{});reply=check.findings.join(' ');report={title:check.title,reply,items:check.findings,actions:[]};
-        }else{
-          // Preserve the existing tested single-intent interface for simple enquiries.
-          const answer=await legacy.answer({db,user:acting,body:{message},now,notificationClient:{list:id=>require('../workflows').notifications(db,{id})}});
-          await db.query('INSERT INTO agent_tool_calls(run_id,step,tool_name,arguments_json,result_json,created_at) VALUES($1,1,$2,$3,$4,$5)',[id,'bounded_assistant',{},answer,iso(now())]);
-          step=1;report={title:'Private banking enquiry',...answer};reply=answer.reply;
         }
       }
       const narrativeProblem=engine==='ollama' && !clarification?(kind==='assistant'?relevanceIssue(message,results):null) || narrativeIssue(reply || '',report,{results,evidence:references(id,results),requireCitations:true}):null;

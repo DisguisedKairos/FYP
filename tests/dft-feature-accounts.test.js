@@ -66,7 +66,7 @@ pgTest('Feature tour prepares real guarded banking lifecycles, schedules and MFA
   const filename = path.resolve(__dirname, '..', 'test-results', 'feature-credentials-' + randomUUID() + '.json');
   t.after(() => { if (fs.existsSync(filename)) fs.unlinkSync(filename); });
   const credentials = { password: PASSWORD };
-  const verified = await prepareMfaAndVerify(f.db, manifest, credentials, filename, f.riskClient, 'a'.repeat(64));
+  const verified = await prepareMfaAndVerify(f.db, manifest, credentials, filename, f.riskClient, 'a'.repeat(64), undefined, { agentModel:f.agentModel });
   assert.equal(verified.length, 10);
   assert.equal(credentials.mfa.recoveryCodes.length, 9);
   const row = (await f.db.query('SELECT secret_encrypted FROM user_mfa WHERE user_id=$1', [manifest.users.mfa])).rows[0];

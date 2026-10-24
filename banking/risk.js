@@ -31,7 +31,9 @@ function validateInput(input) {
 function validateModel(risk, input) {
   const invalid = () => new HttpError(503, 'The fraud model returned an invalid or unbound assessment. No funds moved.');
   if (!object(risk) || !sameBinding(risk, input) || !integer(risk.score, 94) || risk.modelScore !== risk.score
-    || risk.decision !== (risk.score >= MODEL_REVIEW_THRESHOLD ? 'review' : 'allow') || risk.synthetic !== true
+    || risk.decision !== (risk.score >= MODEL_REVIEW_THRESHOLD ? 'review' : 'allow') || risk.provider !== 'ollama'
+    || typeof risk.modelName !== 'string' || !/^[A-Za-z0-9._:/-]{1,100}$/.test(risk.modelName) || /cloud/i.test(risk.modelName)
+    || !/^[a-f0-9]{64}$/.test(risk.modelSha256 || '') || !/^[a-f0-9]{64}$/.test(risk.promptSha256 || '')
     || typeof risk.modelVersion !== 'string' || risk.modelVersion.length < 1 || risk.modelVersion.length > 150
     || typeof risk.assessedAt !== 'string' || !Number.isFinite(Date.parse(risk.assessedAt))
     || !object(risk.features) || !object(risk.context) || !Array.isArray(risk.reasons) || risk.reasons.length > 100
@@ -81,21 +83,21 @@ function positivePage(value, fallback, maximum) {
 function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://127.0.0.1:4011', token = process.env.SERVICE_TOKEN, assessModel = null, modelInfo = null } = {}) {
   if (!db?.transaction || !db?.query) throw new Error('A PostgreSQL database is required for risk orchestration.');
   const origin = new URL(url);
-  if (!['http:', 'https:'].includes(origin.protocol) || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('FRAUD_SERVICE_URL must be an HTTP(S) origin.');
-  async function call(pathname, body) {
+  if (origin.protocol !== 'http:' || !['127.0.0.1','localhost','[::1]','fraud'].includes(origin.hostname) || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('FRAUD_SERVICE_URL must use loopback or the private Compose fraud service; remote model endpoints are refused.');
+  async function call(pathname, body, {timeoutMs=pathname==='/internal/assess'?50000:8000}={}) {
     if (!token || token.length < 24) throw new HttpError(503, 'The fraud service is not securely configured.');
     try {
-      const response = await fetch(new URL(pathname, origin), { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(8000),
+      const response = await fetch(new URL(pathname, origin), { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
       const result = await response.json();
       if (!response.ok || result.ok !== true) throw new Error('Fraud service rejected the assessment.');
       return result;
-    } catch { throw new HttpError(503, 'Transaction screening is unavailable. Your balance has not changed.'); }
+    } catch { throw new HttpError(503, 'Local Ollama transaction screening is unavailable. Your balance has not changed.'); }
   }
   async function getRules() { return db.transaction(client => readPolicy(client), { isolation: 'REPEATABLE READ', readOnly: true }); }
-  async function analyze(input) {
+  async function analyze(input,options={}) {
     validateInput(input);
-    return validateModel(assessModel ? await assessModel(input) : (await call('/internal/assess', input)).risk, input);
+    return validateModel(assessModel ? await assessModel(input) : (await call('/internal/assess', input,options)).risk, input);
   }
   async function assess(input) {
     validateInput(input);

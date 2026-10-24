@@ -1,6 +1,6 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.9.1",
+  "version": "2.10.0",
   "private": true,
   "description": "Republic Polytechnic C300 business banking prototype based on Green Link Digital Bank, using Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
@@ -11,7 +11,6 @@
     "setup": "node scripts/setup.js",
     "test": "node --env-file-if-exists=.env.test --test --test-concurrency=4 tests/dft-*.test.js",
     "test:browser": "node --env-file-if-exists=.env.test --test --test-concurrency=1 tests/browser.e2e.js tests/dft-security-browser.js tests/dft-agents-browser.js tests/dft-fraud-cases-browser.js",
-    "train:fraud": "node scripts/train-fraud.js",
     "package": "node scripts/package.js",
     "package:verify": "node scripts/verify-package.js",
     "admin:grant": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/manage-admin.js",
@@ -25,8 +24,6 @@
     "db:start": "node --env-file-if-exists=.env database/local.js start",
     "db:stop": "node --env-file-if-exists=.env database/local.js stop",
     "db:status": "node --env-file-if-exists=.env database/local.js status",
-    "demo:fraud": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-fraud.js",
-    "demo:fraud:serve": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-fraud.js --serve",
     "check": "node scripts/check-source.js",
     "devops:setup": "node deploy/configuration.js",
     "devops:up": "docker compose up --build --wait --wait-timeout 180",
@@ -36,9 +33,7 @@
     "test:accounts:otp": "node --env-file-if-exists=.env scripts/feature-accounts.js --otp",
     "demo:agents": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-agents.js",
     "agent:start": "node --env-file-if-exists=.env scripts/start-agent.js",
-    "evaluate:fraud": "node scripts/evaluate-fraud.js",
-    "evaluate:assistant": "node --env-file-if-exists=.env.test --test --test-concurrency=1 tests/dft-assistant-evaluation.test.js",
-    "demo:fraud-monitor": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-fraud-monitor.js"
+    "evaluate:assistant": "node --env-file-if-exists=.env.test --test --test-concurrency=1 tests/dft-assistant-evaluation.test.js"
   },
   "engines": {
     "node": ">=22.13.0"

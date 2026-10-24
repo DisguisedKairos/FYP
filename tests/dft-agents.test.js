@@ -28,6 +28,20 @@ pg('Banking agents enforce authentication, CSRF, customer ownership and staff-on
   assert.equal((await post(other,'liquidity',{days:30,userId:'2'})).status,400);
 });
 
+pg('Every AI endpoint requires the local model and rejects removed offline engines',async t=>{
+  let attempts=0;
+  const agentModel=fakeModel(async()=>assert.fail('Unavailable model cannot generate a report'));
+  agentModel.inspect=async()=>{attempts++;return {available:false,mode:'ollama'};};
+  const f=await fixture(t,{agentModel}),client=f.client();await client.login();
+  for(const [kind,body] of [['assistant',{message:'test'}],['liquidity',{days:7}],['fraud_investigation',{transactionId:randomUUID()}],['rule_simulation',{ruleId:'high_value',threshold:5000}],['reconciliation',{}]]){
+    const result=await post(client,kind,body);assert.equal(result.status,503,JSON.stringify(result.data));assert.doesNotMatch(JSON.stringify(result.data),/offline workflow/i);
+    for(const engine of ['workflow','openai',false,null,''])assert.equal((await post(client,kind,{...body,engine})).status,400);
+  }
+  assert.equal((await client.request('/api/assistant/messages',{method:'POST',body:{message:'What is my balance?'}})).status,503);
+  assert.equal(attempts,6);assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_runs')).rows[0].count),0);
+  assert.throws(()=>createLocalModel({mode:'workflow'}),/must be ollama/);
+});
+
 pg('Multi-turn payment planning asks for missing details and creates only authorized-form drafts',async t=>{
   const f=await fixture(t),client=f.client();await client.login();
   const before=await financialSnapshot(f.db),tx=Number((await f.db.query('SELECT count(*) FROM transactions')).rows[0].count);
@@ -42,7 +56,7 @@ pg('Multi-turn payment planning asks for missing details and creates only author
   const bill=await post(client,'assistant',{message:'Pay SGD 2 to PUB reference AGENT-BILL'});assert.equal(bill.status,200);assert.equal(bill.data.actions[0].type,'draft_payment');
   const pending=await post(client,'assistant',{message:'Transfer SGD 25'});
   const balance=await post(client,'assistant',{message:'What balance is available to me?',previousRunId:pending.data.runId});
-  assert.equal(balance.status,200);assert.equal(balance.data.intent,'balance');
+  assert.equal(balance.status,200);assert.equal(balance.data.evidenceReferences[0].tool,'get_accounts');
   const switched=await post(client,'assistant',{message:'Pay SGD 2 to PUB reference NEW-TASK',previousRunId:balance.data.runId});
   assert.equal(switched.status,200);assert.equal(switched.data.actions[0].type,'draft_payment');
   assert.equal(switched.data.actions[0].draft.toAccountNumber,undefined);
@@ -75,7 +89,8 @@ pg('Fraud investigation and rule simulation retain recorded evidence without cha
   const id=paid.data.transaction.id,before=await financialSnapshot(f.db),policy=await f.riskClient.getRules();
   const report=await post(client,'fraud_investigation',{transactionId:id});assert.equal(report.status,200,JSON.stringify(report.data));
   assert.equal(report.data.run.report.assessment.available,true);assert.equal(report.data.run.report.transaction.id,id);assert.ok(report.data.run.report.evidence.some(e=>e.type==='assessment'));
-  const simulation=await post(client,'rule_simulation',{ruleId:'high_value',threshold:50,days:30});assert.equal(simulation.status,200,JSON.stringify(simulation.data));assert.ok(simulation.data.run.report.changed>=1);assert.ok(simulation.data.run.report.after.review>=1);
+  await f.db.query('INSERT INTO fraud_assessments(id,user_id,source_account_id,payload_hash,policy_version,policy_json,input_json,result_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[randomUUID(),1,source.id,'f'.repeat(64),policy.version,policy,{}, {provider:'retired',modelScore:90}]);
+  const simulation=await post(client,'rule_simulation',{ruleId:'high_value',threshold:50,days:30});assert.equal(simulation.status,200,JSON.stringify(simulation.data));assert.equal(simulation.data.run.report.skipped,1);assert.ok(simulation.data.run.report.changed>=1);assert.ok(simulation.data.run.report.after.review>=1);
   assert.match(simulation.data.run.report.limitations.join(' '),/No labeled fraud outcomes/);
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(await financialSnapshot(f.db),before);
   assert.equal((await post(client,'rule_simulation',{ruleId:'velocity',threshold:1.5})).status,400);
@@ -213,15 +228,15 @@ test('Financial narrative checks withhold invented score scales and unauthorized
 pg('Agent budgets persist in PostgreSQL and concurrent slots cannot be bypassed by new service instances',async t=>{
   const f=await fixture(t,{http:false}),users=await actors(f.db),key=require('../banking/security').bucketKey('agents:user',String(users.jamie.id));
   await f.db.query('INSERT INTO auth_attempts(bucket_key,attempts,window_started_at,expires_at) VALUES($1,40,now(),now()+interval \'15 minutes\')',[key]);
-  const agent=createAgents({db:f.db});
+  const agent=createAgents({db:f.db,model:f.agentModel});
   await assert.rejects(agent.execute(users.jamie,'reconciliation',{}),e=>e.status===429);
   await f.db.query('DELETE FROM auth_attempts WHERE bucket_key=$1',[key]);
   for(let i=0;i<2;i++)await f.db.query("INSERT INTO agent_runs(id,user_id,auth_version,kind,engine) VALUES($1,$2,$3,'assistant','workflow')",[randomUUID(),users.alex.id,users.alex.auth_version]);
-  await assert.rejects(createAgents({db:f.db}).execute(users.jamie,'reconciliation',{}),e=>e.status===429);
+  await assert.rejects(createAgents({db:f.db,model:f.agentModel}).execute(users.jamie,'reconciliation',{}),e=>e.status===429);
   assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_runs')).rows[0].count),2);
 });
 pg('Expired conversation references and revoked HTTP sessions cannot continue an agent task',async t=>{
-  const f=await fixture(t,{http:false}),users=await actors(f.db),agent=createAgents({db:f.db});
+  const f=await fixture(t,{http:false}),users=await actors(f.db),agent=createAgents({db:f.db,model:f.agentModel});
   const answer=await agent.execute(users.jamie,'assistant',{message:'Transfer'});
   await f.db.query("UPDATE agent_runs SET created_at=now()-interval '16 minutes' WHERE id=$1",[answer.runId]);
   await assert.rejects(agent.execute(users.jamie,'assistant',{message:'SGD 5',previousRunId:answer.runId}),e=>e.status===409);

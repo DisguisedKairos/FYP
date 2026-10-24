@@ -125,7 +125,7 @@ function validateAssessment(risk, input) {
   if (!risk || !sameBinding(risk, input) || !Number.isInteger(risk.score) || risk.score < 0 || risk.score > 100
     || !Number.isInteger(risk.modelScore) || risk.modelScore < 0 || risk.modelScore > 94 || !['allow', 'review', 'block'].includes(risk.decision)
     || !Number.isSafeInteger(risk.ruleVersion) || risk.ruleVersion < 1 || !Array.isArray(risk.reasons) || !risk.policy || !Array.isArray(risk.policy.rules)
-    || !risk.features || !risk.modelVersion || !Number.isFinite(Date.parse(risk.assessedAt)) || risk.synthetic !== true
+    || !risk.features || !risk.modelVersion || !Number.isFinite(Date.parse(risk.assessedAt)) || risk.provider !== 'ollama' || typeof risk.modelName!=='string' || !/^[a-f0-9]{64}$/.test(risk.modelSha256 || '') || !/^[a-f0-9]{64}$/.test(risk.promptSha256 || '')
     || (risk.decision === 'block' && risk.score < 95) || (risk.decision !== 'block' && risk.score > 94)
     || (risk.decision === 'allow' && risk.modelScore >= 65)) throw new HttpError(503, 'Screening returned an invalid bound result. No funds moved.');
 }

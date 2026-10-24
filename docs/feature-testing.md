@@ -45,7 +45,7 @@ The feature setup uses the real configured Python scorer and the existing rule p
 1. Sign in as the reviewer tester. In Fraud monitoring, open **high-value-awaiting-review** or **maker-awaiting-independent-review**. Inspect AI score, combined score, model explanation, matched controls and recorded authorization. Approve one with a verified sample reason; reject another. Refresh the business sender to see the final receipt and balance.
 2. The maker tester can see its held payment in Activity. Its own transaction is excluded from its review queue, and a direct self-approval request returns 403. The fixture has verified this guard. A different administrator can review it.
 3. As staff/reviewer, open Fraud rules. For a small rule-management demonstration, record the initial threshold, change the high-value threshold from SGD 10,000 to SGD 9,500, authorize and inspect the audit entry. Restore the original threshold afterward and inspect the second audit event. Rule edits affect the shared local policy; the fixture itself does not edit it. Ordinary customer accounts cannot use these administrator APIs.
-4. For the separate **AI-only anomaly**, velocity sequence, review-versus-block rule comparison and scorer-outage demonstration, use `npm run demo:fraud:serve` at port 3001. That disposable demonstration deliberately changes/restores its own rules and leaves the native app's policy alone. Its credentials and examples are described in [fraud simulation](fraud-simulation.md).
+4. Use npm run demo:agents for actual local Ollama scoring and all five analysis features in a disposable schema. Old preset fraud simulations have been removed.
 
 ## Login security, MFA and sessions
 

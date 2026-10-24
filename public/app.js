@@ -1,4 +1,4 @@
-import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant, setAssistantEngine } from './js/assistant.js';
+import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 import { loadFraudCases, runFraudScan, openFraudCase, claimFraudCase, submitFraudCaseReview, cancelFraudCases } from './js/fraud-cases.js';
@@ -181,7 +181,6 @@ document.addEventListener('input',event => {
   if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
 });
 document.addEventListener('change',event => {
-  if(event.target.id==='assistant-engine')return setAssistantEngine(event.target.value);
   if(event.target.id==='agent-rule')return selectAgentRule(event.target.form);
   if (event.target.id === 'rule-audit-filter') return loadRuleAudit({ruleId:event.target.value,page:1});
   if (event.target.id === 'fraud-case-filter') return loadFraudCases({status:event.target.value});

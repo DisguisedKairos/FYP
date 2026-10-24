@@ -40,7 +40,7 @@ async function fixture(t) {
   app = createDatabase({ connectionString: result.appUrl });
   return { admin, owner, app, options, result, async start() {
     const { createApplication } = require('../app');
-    const riskClient = createRiskClient({ db: app, assessModel: modelStub(), modelInfo: require('../services/fraud/model.json') });
+    const riskClient = createRiskClient({ db: app, assessModel: modelStub(), modelInfo: require('./dft-helpers').MODEL_INFO });
     server = await createApplication({ db: app, seed: false, backgroundJobs: false, publicOrigin: '', trustProxy: '', riskClient });
     await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
     const base = 'http://127.0.0.1:' + server.address().port;

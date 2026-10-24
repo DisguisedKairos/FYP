@@ -163,9 +163,9 @@ async function createApplication(options = {}) {
     return riskClient.updateRule(req.params.id, patch, req.banking.user);
   });
   route('get', '/api/fraud/model', async req => { ledger.requireAdmin(req.banking.user); return { model: await riskClient.getModelInfo() }; });
-  route('get', '/api/fraud/evaluation', async req => {
+  route('get', '/api/fraud/model-activity', async req => {
     ledger.requireAdmin(req.banking.user);
-    return { evaluation: await require('./banking/fraud-monitoring').modelEvaluation(db, req.banking.user, { days: query(req).get('days') ?? '30', now, activeModel: await riskClient.getModelInfo() }) };
+    return { activity: await require('./banking/fraud-monitoring').modelActivity(db, req.banking.user, { days: query(req).get('days') ?? '30', now, activeModel: await riskClient.getModelInfo() }) };
   });
   route('get', '/api/fraud/reviews', async req => ({ reviews: await ledger.reviews(db, req.banking.user) }));
   route('get', '/api/fraud/cases', req => fraudCases.list(db, req.banking.user, Object.fromEntries(query(req))));
@@ -186,15 +186,17 @@ async function createApplication(options = {}) {
     return { case: await fraudCases.decide(db, req.banking.user, req.params.id, body, { now, authorization }) };
   });
   route('post', '/api/fraud/reviews/:id', async req => ({ transaction: await ledger.review(db, req.banking.user, req.params.id, req.body, financialOptions(req)) }));
-  route('post', '/api/assistant/messages', req => require('./banking/assistant').answer({ db, user: req.banking.user, body: req.body, now, notificationClient: { list: id => workflows.notifications(db, { id }) } }));
+  const runAgent = (req, kind) => agents.execute(req.banking.user, kind, req.body, { ip: req.ip, validateSession: async () => {
+    const active = await auth.load(req);
+    if (!active.user || String(active.user.id) !== String(req.banking.user.id)) throw new HttpError(401, 'Your session ended. Sign in again.');
+  } });
+  // Compatibility endpoint uses the same local model and security boundaries.
+  route('post', '/api/assistant/messages', req => runAgent(req, 'assistant'));
   route('get', '/api/agents/status', async () => ({ agent: await agents.status() }));
   route('get', '/api/agents/runs', async req => ({ runs: await agents.list(req.banking.user) }));
   route('get', '/api/agents/runs/:id', async req => ({ run: await agents.detail(req.banking.user, req.params.id) }));
   for (const kind of ['assistant','fraud_investigation','liquidity','rule_simulation','reconciliation']) {
-    route('post', `/api/agents/${kind}`, req => agents.execute(req.banking.user, kind, req.body, { ip: req.ip, validateSession:async()=>{
-      const active=await auth.load(req);
-      if(!active.user || String(active.user.id)!==String(req.banking.user.id))throw new HttpError(401,'Your session ended. Sign in again.');
-    } }));
+    route('post', `/api/agents/${kind}`, req => runAgent(req, kind));
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));

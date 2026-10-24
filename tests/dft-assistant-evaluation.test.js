@@ -95,6 +95,24 @@ pg('Direct and record-based prompt injections cannot cross company boundaries or
   assert.deepEqual(await balances(f.db), before);
   assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count), 0);
 });
+
+pg('Model draft defaults must match the banking form and cannot choose a different owned source',async t=>{
+  const f=await fixture(t,{http:false}),user=await actor(f.db,'alex@greenlink.demo'),before=await balances(f.db);
+  const accounts=(await f.db.query("SELECT id::text,name FROM accounts WHERE user_id=$1 AND status='active' ORDER BY id",[user.id])).rows;
+  const run=async(message,args)=>{
+    let calls=0;
+    return createAgents({db:f.db,model:model(async()=>++calls===1?tool('prepare_payment_draft',args):{role:'assistant',content:'Review the supplied draft in the ordinary banking form before authorizing [E1].'})}).execute(user,'assistant',{message});
+  };
+  const message='Transfer SGD 25 to 1020002001',args={kind:'transfer',type:'transfer',fromAccountId:accounts[0].id,toAccountNumber:'1020002001',amount:'25.00'};
+  const draft=await run(message,args);
+  assert.equal(draft.actions[0].draft.fromAccountId,accounts[0].id);assert.equal(draft.actions[0].draft.amount,'25.00');
+  await assert.rejects(run(message,{...args,fromAccountId:accounts[1].id}),e=>e.status===400);
+  await assert.rejects(run(message,{...args,type:'bill'}),e=>e.status===400);
+  const selected=`Transfer SGD 25 from ${accounts[1].name} to 1020002001`;
+  await assert.rejects(run(selected,args),e=>e.status===400);
+  assert.equal((await run(selected,{...args,fromAccountId:accounts[1].id})).actions[0].draft.fromAccountId,accounts[1].id);
+  assert.deepEqual(await balances(f.db),before);assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count),0);
+});
 pg('Assistant detects false reassurance against actual projected shortfalls', async t => {
   const f = await fixture(t), client = f.client(); await client.login();
   const user = await actor(f.db, 'alex@greenlink.demo'), source = (await client.dashboard()).accounts[0];

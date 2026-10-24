@@ -5,8 +5,10 @@ const {Pool}=require('pg');
 const {createDatabase}=require('../database');
 const {seedDemo}=require('../scripts/seed-demo');
 const {createRiskClient}=require('../banking/risk');
-function modelStub(score=2){return async input=>({...input,modelScore:score,score,decision:score>=65?'review':'allow',synthetic:true,features:{amountLog:0,amountDeviation:0,velocity:0,newPayee:0,balanceUtilization:0,unusualHour:0,recentValue:0},context:{historicalTransactions:input.historySummary.historyCount,averageOutgoingCents:Math.round(input.historySummary.averageOutgoingCents),outgoingCount10m:input.historySummary.outgoingCount10m,dailyOutgoingCents:input.historySummary.dailyOutgoingCents,knownPayee:Boolean(input.isInternal || input.historySummary.knownPayee)},reasons:[{code:'test_model',message:'Controlled model fixture.',contribution:0}],modelVersion:'test-model',assessedAt:input.createdAt});}
+const MODEL_INFO={provider:'ollama',localOnly:true,available:true,modelName:'controlled-local',version:'test-model',modelSha256:'a'.repeat(64),promptSha256:'b'.repeat(64),reviewThreshold:65,algorithm:'Controlled test adapter',limitations:[]};
+function modelStub(score=2){return async input=>({...input,modelScore:score,score,decision:score>=65?'review':'allow',provider:'ollama',modelName:'controlled-local',modelSha256:MODEL_INFO.modelSha256,promptSha256:MODEL_INFO.promptSha256,features:{amountLog:0,amountDeviation:0,velocity:0,newPayee:0,balanceUtilization:0,unusualHour:0,recentValue:0},context:{historicalTransactions:input.historySummary.historyCount,averageOutgoingCents:Math.round(input.historySummary.averageOutgoingCents),outgoingCount10m:input.historySummary.outgoingCount10m,dailyOutgoingCents:input.historySummary.dailyOutgoingCents,knownPayee:Boolean(input.isInternal || input.historySummary.knownPayee)},reasons:[{code:'test_model',message:'Controlled model fixture.',contribution:0}],modelVersion:'test-model',assessedAt:input.createdAt});}
 async function fixture(t,{http=true,seed=true,now=Date.now,riskClient,assessModel,...options}={}){
+  const agentModel=options.agentModel || require('./dft-agent-model').createTestAgentModel();
   if(!process.env.TEST_DATABASE_URL)throw new Error('TEST_DATABASE_URL is required for real PostgreSQL tests.');
   const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL}),schema=`dft_${randomUUID().replace(/-/g,'')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
@@ -15,10 +17,10 @@ async function fixture(t,{http=true,seed=true,now=Date.now,riskClient,assessMode
   const stop=async()=>{if(server?.listening){await new Promise((resolve,reject)=>{server.close(error=>error?reject(error):resolve());server.closeAllConnections();});await server.closeResources();}};
   t.after(async()=>{await stop();await db.close();assert.match(schema,/^dft_[a-f0-9]{32}$/);await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
   await db.migrate();if(seed)await seedDemo(db,{now});
-  const actualRisk=riskClient || createRiskClient({db,assessModel:assessModel || modelStub(),modelInfo:require('../services/fraud/model.json')});
-  const start=async(extra={})=>{const {createApplication}=require('../app');server=await createApplication({db,migrate:false,seed:false,backgroundJobs:false,publicOrigin:'',trustProxy:'',now,riskClient:actualRisk,...options,...extra});await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});baseUrl=`http://127.0.0.1:${server.address().port}`;};
+  const actualRisk=riskClient || createRiskClient({db,assessModel:assessModel || modelStub(),modelInfo:MODEL_INFO});
+  const start=async(extra={})=>{const {createApplication}=require('../app');server=await createApplication({db,migrate:false,seed:false,backgroundJobs:false,publicOrigin:'',trustProxy:'',now,riskClient:actualRisk,agentModel,...options,...extra});await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});baseUrl=`http://127.0.0.1:${server.address().port}`;};
   if(http)await start();
-  return {db,dbPath:null,schema,riskClient:actualRisk,start,stop,get server(){return server;},get baseUrl(){return baseUrl;},client:()=>new Client(()=>baseUrl),runJobs:()=>server.runJobs()};
+  return {db,dbPath:null,schema,riskClient:actualRisk,agentModel,start,stop,get server(){return server;},get baseUrl(){return baseUrl;},client:()=>new Client(()=>baseUrl),runJobs:()=>server.runJobs()};
 }
 async function approveBusiness(db,user,{legalName=`Test Business ${user.id} Pte. Ltd.`,registrationNumber=`TEST${String(user.id).padStart(8,'0')}`}={}) {
   return require('../banking/business').create(db,user,{legalName,registrationNumber,country:'SG',legalForm:'company',industry:'Test business services',registeredAddress:'1 Test Business Road, Singapore 000001'},{status:'approved'});
@@ -39,4 +41,4 @@ class Client{
   async history(filters={}){const result=await this.request(`/api/transactions?${new URLSearchParams(filters)}`);assert.equal(result.status,200,JSON.stringify(result.data));return result.data;}
   async ledger(filters={}){const rows=[];for(let page=1;;page++){const result=await this.history({...filters,page,pageSize:100});rows.push(...result.transactions);if(page>=result.pagination.totalPages)return rows;}}
 }
-module.exports={fixture,createFixture:fixture,Client,modelStub,approveBusiness,businessProfile,accountNamed:(data,name)=>{const account=data.accounts.find(row=>row.name===name);assert.ok(account);return account;},totalBalance:data=>data.accounts.reduce((sum,row)=>sum+row.balanceCents,0)};
+module.exports={MODEL_INFO,fixture,createFixture:fixture,Client,modelStub,approveBusiness,businessProfile,accountNamed:(data,name)=>{const account=data.accounts.find(row=>row.name===name);assert.ok(account);return account;},totalBalance:data=>data.accounts.reduce((sum,row)=>sum+row.balanceCents,0)};

@@ -185,12 +185,12 @@ function savePrivate(filename, value) {
   fs.renameSync(temporary, filename);
 }
 
-async function prepareMfaAndVerify(db, manifest, credentials, filename, riskClient, encryptionKey, verificationOrigin) {
+async function prepareMfaAndVerify(db, manifest, credentials, filename, riskClient, encryptionKey, verificationOrigin, { agentModel } = {}) {
   // The live operator command talks to the already running restricted web
   // process. Only isolated integration tests construct an in-process server.
   let server, origin = verificationOrigin;
   if (!origin) {
-    server = await require('../app').createApplication({ db, migrate: false, seed: false, backgroundJobs: false, riskClient, publicOrigin: '', trustProxy: '', authEncryptionKey: encryptionKey });
+    server = await require('../app').createApplication({ db, migrate: false, seed: false, backgroundJobs: false, riskClient, agentModel, publicOrigin: '', trustProxy: '', authEncryptionKey: encryptionKey });
     await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
     origin = 'http://127.0.0.1:' + server.address().port;
   }
@@ -214,7 +214,9 @@ async function prepareMfaAndVerify(db, manifest, credentials, filename, riskClie
         await session.request('/api/fraud/rules', undefined, 403);
         await session.request('/api/transactions?accountId=' + manifest.accounts.recipient, undefined, 404);
         const assistant = await session.request('/api/assistant/messages', { message: 'What is my balance?' });
-        assert.equal(assistant.intent, 'balance');
+        assert.equal(assistant.engine, 'ollama');
+        assert.ok(assistant.evidenceReferences?.some(e=>e.tool==='get_accounts'));
+        assert.ok(assistant.items?.some(a=>a.amountCents!==undefined));
       }
       await session.request('/api/auth/logout', {});
     }

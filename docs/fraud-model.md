@@ -1,36 +1,17 @@
-# Explainable fraud engine
+# Local Ollama fraud scoring
 
-## Training and inference
+Ollama is the only AI inference engine. The configured model is shared with the banking assistant through AGENT_MODEL and AGENT_OLLAMA_URL. FastAPI is an authenticated validation gateway, not a separate trained fraud predictor. No baseline artifact, synthetic dataset, logistic weights or formula score remains.
 
-`datasets/fraud-history.csv` contains 1,400 synthetic, labelled transaction observations. `scripts/train-fraud.js` trains regularized logistic regression using a deterministic 80/20 split and writes `services/fraud/model.json` plus the approved checksum in `fraud_service/model.sha256`. The Python FastAPI service performs inference without an external AI API or machine-learning library. A missing, invalid or changed unapproved artifact fails startup.
+Express supplies a bound transaction with authoritative pre-payment aggregates from PostgreSQL. The local model receives the amount, balance, transaction type, internal-transfer flag, Singapore hour and historical aggregates. Customer IDs, account numbers, payee identifiers, credentials, descriptions and raw transaction histories are omitted from the fraud prompt.
 
-Run `npm run train:fraud` to reproduce the checked-in model. To train from another governed dataset, pass its CSV path: `node scripts/train-fraud.js path/to/history.csv`. Use `--generate-demo` only to regenerate the synthetic baseline dataset. No customer records are uploaded.
+The gateway requests [structured Ollama output](https://docs.ollama.com/capabilities/structured-outputs): an integer modelScore from zero through 94 and reason codes from the evidence actually supported by the request. No free-form model explanation is published as a banking fact. The model selects factual explanation codes; the gateway renders their verified descriptions. High-risk scores require a supported suspicious pattern. Unknown codes, duplicate/extra fields, nonfinite or out-of-range scores, unfinished output and unsupported models are rejected.
 
-Required CSV fields:
+Scores at or above 65 request human review. They are uncalibrated qualitative LLM indicators, not probabilities of proven fraud. No accuracy, precision, recall, calibration or production effectiveness is claimed. Financial rules remain separate and can hold/block even when the model score is low. Rule matches can produce a combined priority score; that value is labelled separately from the AI score.
 
-| Field | Meaning |
-| --- | --- |
-| `amountCents` | Current payment amount. |
-| `averageOutgoingCents` | Average completed historical outgoing amount. |
-| `outgoingCount10m` | Completed outgoing payments in the preceding ten minutes. |
-| `outgoingAmount10m` | Total of those payments. |
-| `knownPayee` | 1 if the recipient appears in completed outgoing history; otherwise 0. |
-| `balanceCents` | Available source balance. |
-| `hour` | Singapore local hour, 0–23. |
-| `label` | Historical fraud label: 0 or 1. |
+Both gateways reject cloud model names, remotely backed models and external inference origins. Native access uses loopback; Compose permits only its private Ollama service name. The installed weights digest and prompt revision are recorded with each new assessment. A weights change during inference is refused. Model inference has a bounded timeout and concurrency limit. Invalid, busy or unavailable inference produces an explicit error with no financial movement and no alternative model.
 
-Inference recomputes these features from the authoritative ledger history supplied by the banking service. Future records, rejected payments and transfers between a customer's own accounts do not inflate recent external payment counts. Features include logarithmic amount, amount deviation, velocity, recipient familiarity, balance utilisation, unusual hour and recent outgoing value.
+Existing historical assessments are retained as immutable evidence. They are not re-labelled as Ollama outputs. The staff activity panel counts only matching current Ollama provenance and excludes legacy/changed-model records. Background monitoring writes new evidence instead of overwriting original payment assessments.
 
-## Decisions and explanations
+The private endpoints are GET /internal/health, GET /internal/model and POST /internal/assess. Every endpoint requires the service token. Health reports the validation gateway; model metadata additionally checks the installed local model. The scorer has no database credentials or financial write endpoint.
 
-Python emits an integer model score from 0 to 94 using `min(94, round(sigmoid(logit) * 100))`, with JavaScript-compatible rounding. A score of 65 or above requests review; the model cannot independently block. The Node banking service adds approved deterministic policy rules. A matched blocking rule raises the combined score to 95 and rejects the instruction; a matched review rule raises it to at least 70. Administrator rule changes require fresh password authorization, the current policy version and an audit record.
-
-Each assessment stores its model version, rule version, feature values, history summary, matched rules and plain-language reasons. Repeating the same transaction identifier returns the original assessment even if rules or balances have since changed. Reusing an identifier for different immutable payment details is rejected.
-
-## Evaluation and limits
-
-Version 2.8.0 adds a separate chronological experiment, validation-only threshold selection, calibration diagnostics and staff distribution monitoring. Run `npm run evaluate:fraud` or open Fraud monitoring. The original approved artifact and live threshold remain unchanged. See [evaluation methods, private CSV input and monitoring limits](ai-evaluation.md).
-
-The artifact's primary metrics use the published rounded weights and actual runtime review threshold 65 on 280 held-out synthetic observations: TP 61, FP 2, TN 194, FN 23; precision 96.83%, recall 72.62%, accuracy 91.07%. The prior probability-threshold 0.5 experiment is labelled separately under `diagnostics`, not presented as deployed-policy performance. Configurable banking rules are outside these model-only metrics.
-
-The shuffled 80/20 synthetic split is not time-separated or customer-separated production validation. These results establish reproducibility only. Real banking use needs representative labels, leakage checks, calibration, fairness evaluation, drift monitoring, investigator feedback and independently approved thresholds. Python tests independently recompute the held-out confusion matrix and compare 63 boundary/feature vectors against the JavaScript reference. They also test authentication, immutable source/payload binding, schema rejection and model-artifact tampering.
+See [banking controls](financial-controls.md), [human fraud monitoring](fraud-monitoring.md), [AI verification](ai-evaluation.md) and [banking agents](banking-agents.md).

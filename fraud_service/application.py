@@ -6,7 +6,6 @@ import hmac
 import json
 import os
 import re
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -14,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .model import DEFAULT_MODEL, FraudModel
+from .model import OllamaFraudModel
 from .schemas import AssessmentRequest
 
 BODY_LIMIT = 16 * 1024
@@ -109,13 +108,11 @@ class ServiceBoundary:
         await self.app(scope, replay_receive, protected_send)
 
 
-def create_app(*, token: str | None = None, model_path: Path | None = None, expected_sha256: str | None = None) -> FastAPI:
+def create_app(*, token: str | None = None, model: OllamaFraudModel | None = None) -> FastAPI:
     configured_token = os.environ.get("SERVICE_TOKEN", "") if token is None else token
     if not isinstance(configured_token, str) or not re.fullmatch(r"[A-Za-z0-9._~-]{24,512}", configured_token):
         raise ValueError("SERVICE_TOKEN must contain 24-512 visible token characters.")
-    selected_path = Path(model_path or os.environ.get("FRAUD_MODEL_PATH", DEFAULT_MODEL))
-    checksum = expected_sha256 if expected_sha256 is not None else os.environ.get("FRAUD_MODEL_SHA256")
-    model = FraudModel.load(selected_path, checksum)
+    model = model or OllamaFraudModel()
     application = FastAPI(title="Greenlink private fraud model", docs_url=None, redoc_url=None, openapi_url=None, redirect_slashes=False)
     application.add_middleware(ServiceBoundary, token=configured_token)
 
@@ -127,17 +124,20 @@ def create_app(*, token: str | None = None, model_path: Path | None = None, expe
 
     @application.get("/internal/health")
     async def health() -> dict[str, Any]:
-        return {"ok": True, "service": "fraud", "status": "ready", "modelVersion": model.version, "modelSha256": model.sha256}
+        return {"ok": True, "service": "fraud", "status": "ready", "provider": "ollama", "modelVersion": model.version}
 
     @application.get("/internal/model")
     async def metadata() -> dict[str, Any]:
-        return {"ok": True, "model": model.info()}
+        try:
+            return {"ok": True, "model": await asyncio.to_thread(model.info)}
+        except (OSError, ValueError, TimeoutError, RecursionError):
+            return JSONResponse({"error": "The configured local Ollama model is unavailable."}, status_code=503)
 
     @application.post("/internal/assess")
     async def assess(payload: AssessmentRequest) -> dict[str, Any]:
         try:
-            result = model.assess(payload)
-        except (ArithmeticError, ValueError):
+            result = await asyncio.to_thread(model.assess, payload)
+        except (ArithmeticError, OSError, ValueError, TimeoutError, RecursionError):
             return JSONResponse({"error": "Model inference is unavailable. No payment was executed."}, status_code=503)
         return {"ok": True, "risk": result}
 

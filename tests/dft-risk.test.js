@@ -13,7 +13,7 @@ function modelResult(input, score = 5) {
   const known = input.isInternal || summary.knownPayee;
   return {
     ...Object.fromEntries(['transactionId', 'userId', 'sourceAccountId', 'payloadHash', 'type', 'amountCents', 'payee', 'isInternal'].map(key => [key, input[key]])),
-    modelScore: score, score, decision: score >= 65 ? 'review' : 'allow', synthetic: true, modelVersion: 'explicit-test-model', assessedAt: input.createdAt,
+    modelScore: score, score, decision: score >= 65 ? 'review' : 'allow', provider:'ollama',modelName:'controlled-local',modelSha256:'a'.repeat(64),promptSha256:'b'.repeat(64), modelVersion: 'explicit-test-model', assessedAt: input.createdAt,
     features: { amountLog: 0.1, amountDeviation: 0, velocity: 0, newPayee: known ? 0 : 1, balanceUtilization: Math.min(1.5, input.amountCents / Math.max(1, input.accountBalanceCents)), unusualHour: 0, recentValue: 0 },
     context: { historicalTransactions: summary.historyCount, averageOutgoingCents: summary.averageOutgoingCents, outgoingCount10m: summary.outgoingCount10m, dailyOutgoingCents: summary.dailyOutgoingCents, knownPayee: known },
     reasons: [{ code: 'test_fixture', message: 'Explicit test-only model response.', contribution: 0 }],
@@ -106,7 +106,7 @@ pgTest('DFT invalid or unbound Python outputs fail closed without persisting a r
     result => ({ ...result, type: 'bill' }), result => ({ ...result, amountCents: result.amountCents + 1 }),
     result => ({ ...result, score: NaN }), result => ({ ...result, score: 95, modelScore: 95 }),
     result => ({ ...result, modelScore: 4 }), result => ({ ...result, decision: 'block' }),
-    result => ({ ...result, synthetic: false }), result => ({ ...result, reasons: [{ code: 'x', message: 'x', contribution: Infinity }] }),
+    result => ({ ...result, provider: 'retired-model' }), result => ({ ...result, reasons: [{ code: 'x', message: 'x', contribution: Infinity }] }),
     result => ({ ...result, features: { ...result.features, amountLog: NaN } }), result => ({ ...result, context: {} }),
     result => ({ ...result, assessedAt: '2026-01-01T00:00:00Z' }),
   ];
@@ -156,4 +156,10 @@ pgTest('DFT screening configuration cannot silently replace Python with a local 
   const invalid = createRiskClient({ db, token: '' });
   await assert.rejects(invalid.assess(input()), failure(503));
   assert.equal(Number((await db.query('SELECT count(*) FROM fraud_assessments WHERE result_json IS NOT NULL')).rows[0].count), 0);
+});
+
+test('Fraud inference refuses external model endpoints and permits only local/private scorer origins',()=>{
+  const db={query:async()=>{},transaction:async()=>{}};
+  for(const url of ['https://fraud.example','http://fraud.example','https://localhost:4011','http://u:p@localhost:4011','http://127.0.0.1:4011/path','http://127.0.0.1:4011?remote=true'])assert.throws(()=>createRiskClient({db,url}),/remote model endpoints are refused/);
+  for(const url of ['http://127.0.0.1:4011','http://localhost:4011','http://[::1]:4011','http://fraud:4011'])assert.doesNotThrow(()=>createRiskClient({db,url}));
 });

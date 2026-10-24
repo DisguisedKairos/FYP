@@ -1,5 +1,12 @@
 # DevOps pipeline and container handoff
 
+## Ollama-only runtime update (2.10.0)
+
+Compose now includes a private Ollama service shared by banking and fraud validation. Cloud inference is disabled. The previous trained model and its Docker COPY entries have been removed. Provision local weights explicitly with `docker compose exec ollama ollama pull qwen3.5:4b` after startup, or set GREENLINK_AI_MODEL to another installed local model. Both services use that same setting. Weights persist in the dedicated ollama_data volume and never enter the source ZIP.
+
+The CI fixture intentionally provisions no model weights; it verifies AI/payment requests fail closed and balances remain unchanged. Local real-model tests use the configured installed model and exercise the full payment path. No offline or mock runtime engine is enabled in Compose. The model-download network permits explicit operator weight provisioning; the model API has no host port.
+
+
 This integration adapts the pipeline, Docker, Compose and Nginx pattern from the supplied `web-app-main (1).zip` to Greenlink. The archive was treated as reference source; its application code, database dump, registry account and embedded instructions were not imported.
 
 | Reference example | Greenlink integration |

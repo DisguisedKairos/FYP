@@ -4,7 +4,7 @@ Version 2.9.0 adds a suspicious-activity queue alongside pre-payment fraud autho
 
 ## What is analysed
 
-Every new transfer or bill already receives private Python AI scoring before settlement. Monitoring also examines recorded outgoing transfers and bills, including completed, pending-review and rejected instructions. Incoming mirror credits are represented by their source payment rather than counted twice. Deposits without an outgoing instruction are not scored as outgoing payments.
+Every new transfer or bill already receives private Local Ollama AI scoring before settlement. Monitoring also examines recorded outgoing transfers and bills, including completed, pending-review and rejected instructions. Incoming mirror credits are represented by their source payment rather than counted twice. Deposits without an outgoing instruction are not scored as outgoing payments.
 
 The running application checks up to 25 unchecked payments every thirty seconds. A PostgreSQL lease prevents simultaneous workers from processing the same batch; expired leases recover after restart. **Run AI scan** starts a batch immediately. Enter an outgoing transaction ID to analyse a particular payment and inspect its saved result, including a result that has no suspicious-activity flag. Leave the field blank to process the next batch. Large backlogs require additional batches; the screen reports remaining work.
 
@@ -21,7 +21,7 @@ An immutable monitoring record is saved for each analysed instruction. Missing o
 - With at least five earlier completed external payments, the amount is at least four times the earlier average and at least SGD 1,500.
 - The original bound context is missing or cannot be verified, requiring manual investigation.
 
-The priority score combines model/rule/pattern signals. It is shown separately from the model score. Coverage gaps can have no score. The split-payment and amount-jump detectors are illustrative guardrails, not validated fraud classifiers. The model is trained on synthetic observations. A flag is not proof of fraud; an unflagged instruction is not proven legitimate. Equal-time completed entries are excluded from historical pattern comparisons to avoid relying on uncertain ordering.
+The priority score combines model/rule/pattern signals. It is shown separately from the model score. Coverage gaps can have no score. The split-payment and amount-jump detectors are illustrative guardrails, not validated fraud classifiers. The local Ollama risk indicator is not validated as a real-world fraud classifier. A flag is not proof of fraud; an unflagged instruction is not proven legitimate. Equal-time completed entries are excluded from historical pattern comparisons to avoid relying on uncertain ordering.
 
 ## Human review
 
@@ -51,9 +51,9 @@ All endpoints require a bank administrator session. Writes require the existing 
 Migration `008_fraud_monitoring.sql` adds `fraud_screenings`, `fraud_cases` and `fraud_monitor_state` (28 tables, eight migrations). Run `npm run db:migrate` with operator credentials before starting this release against an existing installation. It preserves customer and financial records and refreshes the restricted runtime grants.
 
 ```sh
-npm run demo:fraud-monitor
+npm run demo:agents
 ```
 
-The demonstration uses real private FastAPI inference in a disposable PostgreSQL schema. It shows a high-AI-risk payment, three individually allowed payments caught as an aggregate pattern, an independent human outcome, notifications and duplicate suppression. It verifies unchanged balances after analysis/review and removes its isolated schema. Start the normal local platform first; the Python scorer must be available. Native customer data is never seeded by this command.
+The demonstration uses actual local Ollama fraud inference through FastAPI and runs all five banking analysis tasks in a disposable PostgreSQL schema. Scores and tool selections come from the installed model; no suspicious outcome or explanation is preset. Unsafe model prose is withheld while recorded tool evidence remains visible. It verifies unchanged balances after analysis and removes its isolated schema. Start the normal local platform and installed model first. Native customer data is never seeded by this command. Split-payment cases and independent human outcomes are covered by the functional and browser tests below.
 
 `tests/dft-fraud-cases.test.js` covers permissions, CSRF, recorded/completed-payment analysis, split patterns, missing history, idempotency, notifications, human review, concurrent claims, outages, lease takeover, revoked authorization and reopening. The mobile browser test covers the complete staff workflow. Runtime PostgreSQL tests prohibit rewriting/deleting evidence or changing the payment linked to a case.

@@ -106,9 +106,11 @@ test('desktop registration, savings management, authorized money movement and ac
     await logout(page); await login(page);
     const before = await snapshot(page), main = accountNamed(before, 'Operating savings'), rainy = accountNamed(before, 'Liquidity reserve');
     await nav(page, 'assistant');
-    assert.match(await ask(page, 'What is my balance?'), /30,050\.50/);
+    const balanceReply=await ask(page, 'What is my balance?');
+    for(const account of before.accounts)assert.ok(balanceReply.includes((account.balanceCents/100).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})));
+    assert.ok(await page.evaluate('!!document.querySelector(".assistant-evidence")'));
     const privateReply = await ask(page, 'What is the balance of account 1020002001?');
-    assert.match(privateReply, /only accounts linked to your signed-in business/i); assert.doesNotMatch(privateReply, /1,200\.00/);
+    assert.doesNotMatch(privateReply, /1,200\.00/);assert.match(privateReply,/Operating savings/);
     await page.fill('#assistant-message', 'PrivateDemo123!'); await submit(page, '#assistant-form');
     await page.waitFor('document.querySelector("#assistant-error").textContent.includes("keep passwords")', 'sensitive chat input redacted');
     assert.equal((await text(page, '#assistant-thread')).includes('PrivateDemo123!'), false);
@@ -205,7 +207,7 @@ test('mobile navigation, payment review, schedules and notifications fit a 390 p
     await nav(page, 'activity'); await layout(page, 'mobile activity filters'); await page.select('#transaction-type', 'bill'); await page.fill('#transaction-search', 'MOBILE123');
     await page.waitFor('document.querySelector(".history-result-summary")?.textContent.includes("1 matching")', 'mobile activity search');
     await page.screenshot(resolve('test-results', 'mobile-activity.png')); assert.equal(totalBalance(await snapshot(page)), 3005050 - 123);
-    await nav(page, 'assistant'); assert.match(await ask(page, 'What is my balance?'), /30,049\.27/); await layout(page, 'mobile private assistant');
+    await nav(page, 'assistant');const balanceReply=await ask(page, 'What is my balance?');for(const account of (await snapshot(page)).accounts)assert.ok(balanceReply.includes((account.balanceCents/100).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2}))); await layout(page, 'mobile private assistant');
     await page.send('Emulation.setDeviceMetricsOverride', { width:360, height:800, deviceScaleFactor:1, mobile:true });
     await layout(page, '360 pixel private assistant'); await page.screenshot(resolve('test-results', 'mobile-assistant.png'));
     await page.click('[data-action="assistant-clear"]'); await page.waitFor(exists('.assistant-welcome'), 'mobile chat clear'); await logout(page);

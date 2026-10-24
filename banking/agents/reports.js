@@ -95,7 +95,7 @@ async function investigation(db, user, { transactionId, now = Date.now } = {}) {
       history: { priorCompletedOutgoing: prior.count, averageCents: average, maximumCents: amount(prior.maximum), samePayeeCount: prior.same_payee, amountMultiple: average > 0 ? Number((-Number(row.amount_cents)/average).toFixed(2)) : null },
       findings: [...reasons, ...(prior.same_payee === 0 ? ['No earlier completed outgoing payment to this payee was found on the source account.'] : []), ...(!prior.count ? ['Insufficient completed history for a reliable behavioral comparison.'] : [])],
       nextSteps: ['Verify the business purpose and recipient through an independent channel.', 'Inspect the linked receipt and evidence before making a bank review decision.', 'Use the existing independent review screen; this brief does not approve, reject or prove fraud.'],
-      limitations: ['Historical comparison uses payments completed before the requested time; explanations are evidence summaries, not a fraud verdict.', 'The scoring model uses synthetic training data. Missing scores are reported as unavailable.'],
+      limitations: ['Historical comparison uses payments completed before the requested time; explanations are evidence summaries, not a fraud verdict.', 'Current AI scoring uses local Ollama without validated fraud accuracy. Historical assessments retain their recorded provider and missing scores remain unavailable.'],
       evidence: [{ type:'transaction',id:row.id,label:'Payment receipt' }, ...(assessment ? [{type:'assessment',id:assessment.id,label:'Recorded assessment and input snapshot'}] : [])], actions: [] };
   }, { isolation:'REPEATABLE READ',readOnly:true });
 }
@@ -118,12 +118,12 @@ async function simulation(db, user, { ruleId, patch, days=30, now=Date.now }={})
     const decide=(rules,input,result)=>{const matches=evaluateRules(rules,input); return matches.some(r=>r.action==='block')?'block':matches.length || result.modelScore>=65?'review':'allow';};
     let skipped=0;
     for(const row of sample){
-      if(!row.result_json || !Number.isInteger(row.result_json.modelScore)){skipped++;continue;}
+      if(!row.result_json || row.result_json.provider!=='ollama' || !Number.isInteger(row.result_json.modelScore)){skipped++;continue;}
       const initial=decide(policy.rules,row.input_json,row.result_json), next=decide(proposed,row.input_json,row.result_json);
       before[initial]++;after[next]++;
       if(initial!==next)changes.push({assessmentId:row.id,before:initial,after:next,amountCents:row.input_json.amountCents});
     }
-    return {title:'Historical fraud rule simulation',generatedAt:iso(now()),days,policyVersion:policy.version,rule:rule,candidate,assessed:sample.length-skipped,skipped,truncated,before,after,changed:changes.length,changes:changes.slice(0,100),actions:[],
+    return {title:'Historical fraud rule impact analysis',generatedAt:iso(now()),days,policyVersion:policy.version,rule:rule,candidate,assessed:sample.length-skipped,skipped,truncated,before,after,changed:changes.length,changes:changes.slice(0,100),actions:[],
       interpretation:changes.length ? `The proposed rule changes ${changes.length} sampled decisions. Review the affected cases before applying it.` : 'No sampled decision changes. This does not establish that the proposed rule is safe.',
       limitations:['Current and proposed policies are replayed against the same recorded input snapshots and original model scores.', 'This is a static historical comparison, not a counterfactual settlement simulation or a forecast.', 'No labeled fraud outcomes are available; false positives, recall and accuracy cannot be inferred.', 'Only the latest 1,000 assessments in the selected window are inspected. Live rules and money are unchanged.'],
       evidence:changes.slice(0,100).map(c=>({type:'assessment',id:c.assessmentId,label:'Changed historical assessment'}))};

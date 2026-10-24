@@ -105,7 +105,7 @@ export function reviewMoney(form) {
 export function riskExplanation(risk, { admin = false } = {}) {
   if (!risk) return '';
   const reasons = Array.isArray(risk.reasons) ? risk.reasons : [];
-  return `<section class="risk-explanation"><h3>${admin ? 'Risk assessment' : 'Security check'}</h3>${admin ? `<div class="risk-score"><strong>${esc(risk.score)}</strong><span>risk score · ${esc(risk.decision)}</span></div>` : ''}${reasons.length ? `<ul>${reasons.map(reason => `<li>${esc(typeof reason === 'string' ? reason : reason.message)}${admin && reason.contribution !== undefined ? `<small>Contribution: ${esc(reason.contribution)}</small>` : ''}</li>`).join('')}</ul>` : '<p>No elevated risk signals were recorded.</p>'}${admin ? `<p class="model-version">Model ${esc(risk.modelVersion)} · Rules ${esc(risk.ruleVersion)}</p>` : ''}</section>`;
+  return `<section class="risk-explanation"><h3>${admin ? 'Risk assessment' : 'Security check'}</h3>${admin ? `<div class="risk-score"><strong>${esc(risk.score)}</strong><span>risk score · ${esc(risk.decision)}</span></div>` : ''}${admin && risk.provider !== 'ollama' ? '<p class="notice">Archived assessment from the retired model. The original result is preserved for audit.</p>' : ''}${reasons.length ? `<ul>${reasons.map(reason => `<li>${esc(typeof reason === 'string' ? reason : reason.message)}${admin && risk.provider !== 'ollama' && reason.contribution !== undefined ? `<small>Contribution: ${esc(reason.contribution)}</small>` : ''}</li>`).join('')}</ul>` : '<p>No elevated risk signals were recorded.</p>'}${admin ? `<p class="model-version">Model ${esc(risk.modelVersion)} · Rules ${esc(risk.ruleVersion)}</p>` : ''}</section>`;
 }
 export function transactionDetails(transaction, receipt = null) {
   const source = accountById(transaction.accountId) || receipt?.source, complete = transaction.status === 'completed', held = transaction.status === 'pending_review';
@@ -120,7 +120,7 @@ export async function confirmMoney(form) {
   formBusy(form, true);
   const pending = state.pendingMoney, password = form.elements.authorizationPassword.value;
   try {
-    const result = await api(pending.type === 'payments' ? '/payments' : '/transfers', { ...pending.payload, authorizationPassword: password });
+    const result = await api(pending.type === 'payments' ? '/payments' : '/transfers', { ...pending.payload, authorizationPassword: password }, 'POST', {timeoutMs:75000});
     form.elements.authorizationPassword.value = '';
     state.moneyDraft[pending.type] = {};
     state.pendingMoney = null;

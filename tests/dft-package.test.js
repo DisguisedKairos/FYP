@@ -41,8 +41,6 @@ function fixture(t) {
     'package-lock.json': JSON.stringify({name:'greenlink-digital-bank',version:'2.0.0',lockfileVersion:3,packages:{'':{name:'greenlink-digital-bank',version:'2.0.0'}}}),
     'public/app.js': 'export const bank = "Greenlink";\n',
     'views/index.html': '<!doctype html><title>Greenlink</title>\n',
-    'services/fraud/model.json': '{"version":"synthetic-baseline"}\n',
-    'datasets/fraud-history.csv': 'amount,label\n25,0\n',
     'scripts/start.js': "console.log('start');\n",
     'tests/dft-example.test.js': "require('node:test')('example', () => {});\n",
     'Dockerfile': 'FROM node:22-bookworm-slim AS banking\n',
@@ -52,7 +50,6 @@ function fixture(t) {
     'deploy/nginx.conf': 'events {}\n',
     'deploy/configuration.js': 'module.exports = {};\n',
     'docs/architecture.md': 'Local services\n',
-    'fraud_service/model.sha256': 'approved-model-checksum\n',
     'tests_python/requirements.txt': '-r ../requirements.txt\n',
   };
   for (const required of REQUIRED_FILES) if (!(required in source)) source[required] = required.endsWith('.py') ? '# Python source fixture\n' : 'DFT source fixture\n';
@@ -184,9 +181,9 @@ test('packaging rejects source junctions and refuses output under shipped source
   assert.throws(() => buildPackage({ root, outputDirectory: path.join(root, 'public', 'releases') }), /outside allowlisted source directories/);
 });
 
-test('DFT package requires the PostgreSQL, Python, model approval and locked dependency source', t => {
+test('DFT package requires the PostgreSQL, Python, local Ollama boundary and locked dependency source', t => {
   const { root } = fixture(t);
-  for (const name of ['package-lock.json', 'main.py', 'requirements.txt', 'database/index.js', 'fraud_service/model.sha256', 'banking/totp.js']) {
+  for (const name of ['package-lock.json', 'main.py', 'requirements.txt', 'database/index.js', 'fraud_service/model.py', 'banking/totp.js']) {
     const filename = path.join(root, ...name.split('/')), bytes = fs.readFileSync(filename);
     fs.unlinkSync(filename);
     assert.throws(() => buildPackage({ root, allowDirty: true }), /Required DFT source file is missing/);
