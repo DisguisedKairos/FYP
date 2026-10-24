@@ -1,6 +1,6 @@
-# Green Link Digital Bank ? C300 FYP
+# Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform ? Version 2.10.0**
+**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.10.0**
 
 Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **local Ollama**. Sample funds, business checks and bill settlement are educational project flows.
 
