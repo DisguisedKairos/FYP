@@ -98,7 +98,7 @@ pg('Model-directed agent selects banking tools and records evidence without expo
     assert.ok(tools.every(t=>!/(execute|approve|update_rule|sql|shell)/.test(t.function.name)));
     if(++round===1)return {role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
     if(round===2)return {role:'assistant',content:'',tool_calls:[{function:{name:'project_liquidity',arguments:{days:7}}}]};
-    assert.ok(messages.some(m=>m.role==='tool'));return {role:'assistant',content:'A seven-day projection is available from the cited account evidence.'};
+    assert.ok(messages.some(m=>m.role==='tool'));return {role:'assistant',content:'The scheduled-payment projection is available from the cited account evidence [E2].'};
   });
   const agent=createAgents({db:f.db,model}),before=await financialSnapshot(f.db);
   const response=await agent.execute(users.jamie,'assistant',{message:'Can my business cover upcoming bills?'});
@@ -109,7 +109,7 @@ pg('Model-directed agent selects banking tools and records evidence without expo
     revision++;
     if(revision===1)return {role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
     if(revision===2)return {role:'assistant',content:'Your balance is SGD 123456.'};
-    assert.equal(tools.length,0);return {role:'assistant',content:'Inspect the authoritative account balances before reviewing your payment draft.'};
+    assert.equal(tools.length,0);return {role:'assistant',content:'Inspect the authoritative account balances before reviewing your payment draft [E1].'};
   });
   const corrected=await createAgents({db:f.db,model:rewrite}).execute(users.jamie,'assistant',{message:'Read my balances.'});
   assert.equal(revision,3);assert.ok(!corrected.reply.includes('123456'));assert.equal(corrected.narrativeWithheld,undefined);

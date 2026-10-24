@@ -33,6 +33,10 @@ async function run(base) {
   assert.equal((await request('/api/transfers', payload)).transaction.id, payment.id);
   assert.equal((await request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, source.balanceCents - 125);
   assert.equal((await request('/api/fraud/rules')).rules.length, 5);
+  const evaluation = (await request('/api/fraud/evaluation')).evaluation;
+  assert.equal(evaluation.baseline.metrics.truePositive, 61);
+  assert.equal(evaluation.temporal.synthetic, true);
+  assert.equal(evaluation.monitoring.status, 'insufficient_data');
   const history = await request('/api/transactions?q=Container%20integration%20transfer');
   assert.ok(history.transactions.some(t => t.id === payment.id));
   console.log('Container smoke passed: Nginx, authenticated banking, PostgreSQL, real Python scoring, atomic transfer, idempotency, history and fraud rules.');

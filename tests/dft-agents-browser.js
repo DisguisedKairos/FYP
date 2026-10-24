@@ -45,6 +45,9 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelectorAll("#agent-rule option").length===5');
   await page.fill('#agent-transaction',paid.data.transaction.id);await page.click('#agent-fraud-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Fraud investigation brief")');
   await visit(page,f.baseUrl,'/fraud-monitoring');await page.waitFor('!!document.querySelector("[data-investigate-transaction]")');
+  await page.waitFor('!!document.querySelector("[data-model-evaluation]")');
+  assert.match(await page.evaluate('document.querySelector("[data-model-evaluation]").textContent'),/Chronological evaluation/);
+  assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/Insufficient data/);
   await page.click('[data-investigate-transaction]');await page.waitFor('location.pathname==="/banking-insights" && document.querySelector("[data-agent-report]")?.textContent.includes("'+held.data.transaction.id+'")');
   await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule simulation")');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/changed decisions/);
@@ -52,4 +55,21 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   await page.waitFor('document.querySelectorAll("[data-agent-run]").length>=2');
   await page.screenshot(path.resolve('test-results','agents-staff-desktop.png'));
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(page.errors,[]);
+});
+
+test('Model answers show citations and open the saved owned evidence',async t=>{
+  const agentModel={mode:'ollama',model:'controlled-local',inspect:async()=>({mode:'ollama',available:true,configured:true,model:'controlled-local'}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
+  const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
+  await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
+  await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
+  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Local model ready")');
+  await visit(page,f.baseUrl,'/assistant');await page.select('#assistant-engine','ollama');
+  await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".assistant-evidence")');
+  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E1\]/);
+  assert.match(await page.evaluate('document.querySelector(".assistant-evidence").textContent'),/Owned account balances/);
+  await page.click('.assistant-evidence summary');await page.click('.assistant-evidence [data-agent-run]');
+  await page.waitFor('location.pathname==="/banking-insights" && !!document.querySelector("[data-agent-report]")');
+  assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/\[E1\] Owned account balances/);
+  assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+  assert.deepEqual(page.errors,[]);
 });

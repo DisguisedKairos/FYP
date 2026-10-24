@@ -27,6 +27,9 @@ COPY database/ ./database/
 COPY models/errors.js ./models/errors.js
 COPY services/fraud/model.json ./services/fraud/model.json
 COPY public/ ./public/
+COPY services/fraud/features.js ./services/fraud/features.js
+COPY datasets/fraud-history.csv ./datasets/fraud-history.csv
+COPY fraud_service/model.sha256 ./fraud_service/model.sha256
 COPY views/ ./views/
 COPY scripts/seed-demo.js ./scripts/seed-demo.js
 COPY scripts/create-staff.js ./scripts/create-staff.js

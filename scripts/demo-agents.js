@@ -14,6 +14,12 @@ async function main(){
   try{
     const model=createLocalModel({mode:'ollama',model:process.env.AGENT_MODEL || 'qwen3.5:4b'});
     const status=await model.inspect();assert.ok(status.available,'Start local Ollama with the configured tool-capable model.');
+    const chat=model.chat;let modelCalls=0;
+    model.chat=async(...args)=>{
+      const started=Date.now(),call=++modelCalls;
+      try{const result=await chat(...args);console.log(JSON.stringify({modelCall:call,durationMs:Date.now()-started,tools:(result.tool_calls || []).map(c=>c.function?.name),status:'responded'}));return result;}
+      catch(error){console.log(JSON.stringify({modelCall:call,durationMs:Date.now()-started,status:'unavailable'}));throw error;}
+    };
     const f=await fixture({after:fn=>cleanup.push(fn)},{http:false});
     const users=Object.fromEntries((await f.db.query('SELECT id,name,email,role,auth_version FROM users')).rows.map(u=>[u.email.split('@')[0],u]));
     const risk=createRiskClient({db:f.db});
@@ -21,7 +27,7 @@ async function main(){
     const payment=await ledger.submit(f.db,users.alex,'bill',{fromAccountId:String(account.id),billerId:'pub',reference:'AGENT-REAL-SCORER',amount:'100.00',requestId:randomUUID(),authorizationPassword:'Greenlink123!'},{riskClient:risk});
     assert.ok(Number.isInteger(payment.risk.modelScore));
     const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
-    const agent=createAgents({db:f.db,model});
+    const agent=createAgents({db:f.db,model});let withheld=0;
     for(const [kind,body,user] of [
       ['liquidity',{days:30,engine:'ollama'},users.jamie],
       ['fraud_investigation',{transactionId:payment.id,engine:'ollama'},users.reviewer],
@@ -32,10 +38,12 @@ async function main(){
       const result=await agent.execute(user,kind,body);
       const run=result.run || await agent.detail(user,result.runId);
       assert.equal(run.status,'completed');
-      console.log(JSON.stringify({feature:kind,engine:run.engine,status:run.status,tools:run.steps.map(s=>s.tool),title:run.report.title,summary:run.report.interpretation || run.report.reply || null}));
+      assert.ok(run.report.evidenceReferences?.length,'Every tool run should expose its saved evidence.');
+      if(run.report.narrativeWithheld)withheld++;
+      console.log(JSON.stringify({feature:kind,engine:run.engine,status:run.status,narrativeStatus:run.report.narrativeWithheld?'withheld':'passed_checks',narrativeIssue:run.report.narrativeIssue || null,tools:run.steps.map(s=>s.tool),evidence:run.report.evidenceReferences.map(e=>e.id),title:run.report.title,summary:run.report.interpretation || run.report.reply || null}));
     }
     assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
-    console.log('All five banking-agent features passed; real local Ollama and Python scoring verified; financial records unchanged after investigations.');
+    console.log(`All five workflows completed; ${withheld} model interpretations withheld. Real local Ollama and Python scoring verified; financial records unchanged after investigations. This is a smoke demonstration, not a statistical model-quality benchmark.`);
   }finally{for(const fn of cleanup.reverse())await fn();}
 }
 module.exports={main};

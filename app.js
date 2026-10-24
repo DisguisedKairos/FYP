@@ -162,6 +162,10 @@ async function createApplication(options = {}) {
     return riskClient.updateRule(req.params.id, patch, req.banking.user);
   });
   route('get', '/api/fraud/model', async req => { ledger.requireAdmin(req.banking.user); return { model: await riskClient.getModelInfo() }; });
+  route('get', '/api/fraud/evaluation', async req => {
+    ledger.requireAdmin(req.banking.user);
+    return { evaluation: await require('./banking/fraud-monitoring').modelEvaluation(db, req.banking.user, { days: query(req).get('days') ?? '30', now, activeModel: await riskClient.getModelInfo() }) };
+  });
   route('get', '/api/fraud/reviews', async req => ({ reviews: await ledger.reviews(db, req.banking.user) }));
   route('post', '/api/fraud/reviews/:id', async req => ({ transaction: await ledger.review(db, req.banking.user, req.params.id, req.body, financialOptions(req)) }));
   route('post', '/api/assistant/messages', req => require('./banking/assistant').answer({ db, user: req.banking.user, body: req.body, now, notificationClient: { list: id => workflows.notifications(db, { id }) } }));

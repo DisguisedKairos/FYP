@@ -29,6 +29,8 @@ Each assessment stores its model version, rule version, feature values, history 
 
 ## Evaluation and limits
 
+Version 2.8.0 adds a separate chronological experiment, validation-only threshold selection, calibration diagnostics and staff distribution monitoring. Run `npm run evaluate:fraud` or open Fraud monitoring. The original approved artifact and live threshold remain unchanged. See [evaluation methods, private CSV input and monitoring limits](ai-evaluation.md).
+
 The artifact's primary metrics use the published rounded weights and actual runtime review threshold 65 on 280 held-out synthetic observations: TP 61, FP 2, TN 194, FN 23; precision 96.83%, recall 72.62%, accuracy 91.07%. The prior probability-threshold 0.5 experiment is labelled separately under `diagnostics`, not presented as deployed-policy performance. Configurable banking rules are outside these model-only metrics.
 
 The shuffled 80/20 synthetic split is not time-separated or customer-separated production validation. These results establish reproducibility only. Real banking use needs representative labels, leakage checks, calibration, fairness evaluation, drift monitoring, investigator feedback and independently approved thresholds. Python tests independently recompute the held-out confusion matrix and compare 63 boundary/feature vectors against the JavaScript reference. They also test authentication, immutable source/payload binding, schema rejection and model-artifact tampering.

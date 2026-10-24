@@ -1,5 +1,7 @@
 # Private banking agents and evidence workflows
 
+Version 2.8.0 adds explicit tool citations, evidence links, qualitative consistency/relevance checks, user-bound draft values and an automated adversarial evaluation suite. See [AI evaluation and reliability](ai-evaluation.md) and run `npm run evaluate:assistant`.
+
 Version 2.7.0 adds five features to the existing DFT banking application. No onboarding agent is included.
 
 | Feature | Access | Where to use it |

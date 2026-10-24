@@ -37,6 +37,7 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | PATCH | `/api/fraud/rules/:id` | Admin `{enabled?,threshold?,action?,version,authorizationPassword}` |
 | GET | `/api/fraud/rules/audit` | Admin paginated policy history |
 | GET | `/api/fraud/model` | Admin model provenance and evaluation |
+| GET | `/api/fraud/evaluation` | Staff-only model diagnostics and recent feature shift; optional `days=1..90` |
 | GET | `/api/fraud/reviews` | Admin review queue |
 | POST | `/api/fraud/reviews/:id` | Independent admin `{decision,reason,authorizationPassword}` |
 

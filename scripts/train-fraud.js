@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { FEATURE_NAMES, contextFeatures, sigmoid } = require('../services/fraud/features');
+const { parseCsv, shuffledSplit, fit } = require('../banking/fraud-evaluation');
 
 const ROOT = path.resolve(__dirname, '..');
 const defaultData = path.join(ROOT, 'datasets', 'fraud-history.csv');
@@ -56,35 +57,9 @@ function evaluate(observations, intercept, weights, { type = 'rounded_model_scor
 
 function train(filename = defaultData) {
   const source = fs.readFileSync(filename, 'utf8').replace(/\r\n/g, '\n');
-  const lines = source.trim().split(/\r?\n/);
-  const headers = lines.shift().split(',');
-  const required = ['amountCents', 'averageOutgoingCents', 'outgoingCount10m', 'outgoingAmount10m', 'knownPayee', 'balanceCents', 'hour', 'label'];
-  if (required.some(name => !headers.includes(name))) throw new Error(`Training CSV needs ${required.join(', ')}.`);
-  const observations = lines.map((line, index) => {
-    const parts = line.split(',').map(Number);
-    if (parts.length !== headers.length || parts.some(v => !Number.isFinite(v))) throw new Error(`Invalid training row ${index + 2}.`);
-    const row = Object.fromEntries(headers.map((name, i) => [name, parts[i]]));
-    if (![0, 1].includes(row.label) || ![0, 1].includes(row.knownPayee) || row.amountCents <= 0 || row.balanceCents <= 0 || row.hour < 0 || row.hour > 23 || row.outgoingCount10m < 0) throw new Error(`Invalid observation at row ${index + 2}.`);
-    return { x: contextFeatures({ ...row, knownPayee: Boolean(row.knownPayee) }), y: row.label };
-  });
-  if (observations.length < 100 || new Set(observations.map(o => o.y)).size !== 2) throw new Error('Use at least 100 observations with both labels.');
-  const random = seededRandom(98245);
-  const shuffled = [...observations];
-  for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(random() * (i + 1)); [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
-  const cutoff = Math.floor(shuffled.length * 0.8);
-  const trainRows = shuffled.slice(0, cutoff), testRows = shuffled.slice(cutoff);
-  let intercept = -1;
-  const weights = FEATURE_NAMES.map(() => 0);
-  for (let epoch = 0; epoch < 1800; epoch++) {
-    const gradient = weights.map(() => 0); let bias = 0;
-    for (const row of trainRows) {
-      const error = sigmoid(intercept + weights.reduce((sum, w, i) => sum + w * row.x[i], 0)) - row.y;
-      bias += error;
-      for (let i = 0; i < weights.length; i++) gradient[i] += error * row.x[i];
-    }
-    intercept -= 0.14 * bias / trainRows.length;
-    for (let i = 0; i < weights.length; i++) weights[i] -= 0.14 * (gradient[i] / trainRows.length + 0.002 * weights[i]);
-  }
+  const observations = parseCsv(source);
+  const { train: trainRows, test: testRows } = shuffledSplit(observations);
+  const { intercept, weights } = fit(trainRows);
   // Evaluate the exact published weights and rounded/capped score used at runtime.
   const round = v => Number(v.toFixed(4));
   const publishedIntercept = round(intercept), publishedWeights = weights.map(round);

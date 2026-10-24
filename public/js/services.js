@@ -70,6 +70,9 @@ export async function loadExtras(page, { force = false } = {}) {
       if (page === 'fraud') {
         try { const result = await backgroundGet('/fraud/model'); state.remote.model = { data: result.model || result }; }
         catch (error) { state.remote.model = { error: error.message }; }
+        if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return;
+        try { const result = await backgroundGet('/fraud/evaluation'); if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.evaluation = { data: result.evaluation }; }
+        catch (error) { if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.evaluation = { error: error.message }; }
       }
       if (state.route.page === page && !modal.open) ui.render();
     } catch (error) {

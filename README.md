@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.7.1**
+**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.8.0**
 
 Republic Polytechnic C300 Final Year Project based on **Green Link Digital Bank (GLDB)**, a digital wholesale bank. The application serves registered businesses and institutions through authorized business operators and bank staff. Screens and statements identify it as a student project using sample funds. See [branding sources](docs/branding.md) and [wholesale banking scope](docs/wholesale-banking.md).
 
@@ -21,6 +21,14 @@ The stack is **Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML an
 There are two permission roles: **`customer`** (authorized business operator) and **`admin`** (administrator). Registration creates a customer with a pending business application and a zero-balance savings record. Bank approval is required for account changes and sending/receiving payments. Each business currently has one primary operator.
 
 High-risk instructions are held or rejected without a debit; an independent administrator must authorize an approval. Scoring failures fail closed. The AI model is a reproducible **synthetic-data baseline**, not validated production fraud detection. The private assistant reads owned data and prepares form drafts; payments use the ordinary authorization flow. See [financial controls](docs/financial-controls.md) and [model documentation](docs/fraud-model.md).
+
+## AI evaluation and reliability (2.8.0)
+
+Staff **Fraud monitoring** now includes threshold comparisons, confusion counts, calibration diagnostics, a separate chronological synthetic experiment and recent feature-distribution monitoring. The approved fraud model and live thresholds are unchanged. Run `npm run evaluate:fraud`; a timestamped labelled private CSV can also be evaluated locally.
+
+Assistant answers now cite saved tool evidence and expose a link to inspect it. Additional checks withhold misleading interpretations, require relevant tools for recognised questions and prevent a model from inventing draft amounts or recipients. Run `npm run evaluate:assistant` for the controlled adversarial suite. See [evaluation methods, demonstrations and limits](docs/ai-evaluation.md).
+
+Verification covers Node functional/security tests, eight browser workflows, 18 Python tests and real Express/PostgreSQL/FastAPI integration. The model remains a synthetic educational baseline; evaluation does not establish live banking fraud performance.
 
 ## Maintenance release 2.7.1
 

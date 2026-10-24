@@ -102,7 +102,7 @@ document.addEventListener('click',async event => {
   if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
-    if (control.dataset.agentRun) return showAgentRun(control.dataset.agentRun);
+    if (control.dataset.agentRun) { if(state.route.page!=='agents')navigate('agents'); return showAgentRun(control.dataset.agentRun); }
     if (control.dataset.investigateTransaction) return investigateFromQueue(control.dataset.investigateTransaction);
     if (control.dataset.agentDraft !== undefined) return openAgentDraft(control.dataset.agentDraft);
     if (control.dataset.assistantAction) return assistantAction(control.dataset.assistantAction);
