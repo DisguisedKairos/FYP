@@ -1,5 +1,5 @@
 import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant, setAssistantEngine } from './js/assistant.js';
-import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue } from './js/agents.js';
+import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 ﻿import { app, modal, state, ui, pages, api, esc, icon, money, sameId, accountById, transactionById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
 import { auth, render, connectionError, extraViews, updateMobileNavigation } from './js/views.js';
@@ -14,6 +14,7 @@ Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications,
 Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
+ui.restoreAgentForms=restoreAgentForms;
 extraViews.agents=agentsPage;
 
 function switchAuth() {
@@ -166,6 +167,7 @@ document.addEventListener('click',async event => {
 document.addEventListener('input',event => {
   if(event.target.id==='assistant-message')rememberAssistantInput(event.target.value);
   const form = event.target.closest('form');
+  if(form?.dataset.agentKind)rememberAgentForm(form);
   if (form?.id === 'history-filters') updateHistoryFilters(form,{debounce:event.target.type === 'search'});
   if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
 });
@@ -174,6 +176,7 @@ document.addEventListener('change',event => {
   if(event.target.id==='agent-rule')return selectAgentRule(event.target.form);
   if (event.target.id === 'rule-audit-filter') return loadRuleAudit({ruleId:event.target.value,page:1});
   const form = event.target.closest('form');
+  if(form?.dataset.agentKind)rememberAgentForm(form);
   if (form?.id === 'history-filters') return updateHistoryFilters(form);
   if (form?.id === 'schedule-form' && event.target.name === 'type') return changeScheduleType(form);
   if (form?.id !== 'money-form') return;

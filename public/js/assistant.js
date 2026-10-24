@@ -1,6 +1,6 @@
 // Raw messages stay in browser memory. Reports, tool evidence and draft context
 // are retained privately; financial actions only open the ordinary banking forms.
-import { app, state, ui, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
+import { state, ui, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
 import { heading } from './views.js';
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
@@ -51,6 +51,8 @@ function renderThread() {
   document.querySelector('#assistant-suggestions').innerHTML=suggestionHtml();
   const form=document.querySelector('#assistant-form');
   form.setAttribute('aria-busy',String(t.busy)); form.querySelector('button[type="submit"]').disabled=t.busy;
+  const mode=document.querySelector('#assistant-engine');
+  if(mode){mode.disabled=t.busy;mode.value=t.engine;}
   target.scrollTop=target.scrollHeight;
 }
 export function cancelAssistant() { generation++; controller?.abort(); if(state.assistant)state.assistant.busy=false; }

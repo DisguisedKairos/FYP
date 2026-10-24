@@ -1,7 +1,6 @@
 'use strict';
 
 const { HttpError } = require('../../models/errors');
-const ledger = require('../ledger');
 const { readPolicy, evaluateRules } = require('../risk');
 const { nextOccurrence } = require('../workflows');
 const DAY = 86400000;

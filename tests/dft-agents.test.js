@@ -40,6 +40,12 @@ pg('Multi-turn payment planning asks for missing details and creates only author
   assert.equal(schedule.status,200,JSON.stringify(schedule.data));assert.equal(schedule.data.actions[0].type,'draft_schedule');assert.equal(schedule.data.actions[0].draft.frequency,'weekly');assert.ok(Date.parse(schedule.data.actions[0].draft.scheduledAt)>Date.now());
   assert.equal((await post(client,'assistant',{message:'Schedule transfer SGD 10 to 1020002001 at 2030-02-31T02:00:00Z once'})).status,400);
   const bill=await post(client,'assistant',{message:'Pay SGD 2 to PUB reference AGENT-BILL'});assert.equal(bill.status,200);assert.equal(bill.data.actions[0].type,'draft_payment');
+  const pending=await post(client,'assistant',{message:'Transfer SGD 25'});
+  const balance=await post(client,'assistant',{message:'What balance is available to me?',previousRunId:pending.data.runId});
+  assert.equal(balance.status,200);assert.equal(balance.data.intent,'balance');
+  const switched=await post(client,'assistant',{message:'Pay SGD 2 to PUB reference NEW-TASK',previousRunId:balance.data.runId});
+  assert.equal(switched.status,200);assert.equal(switched.data.actions[0].type,'draft_payment');
+  assert.equal(switched.data.actions[0].draft.toAccountNumber,undefined);
   assert.deepEqual(await financialSnapshot(f.db),before);assert.equal(Number((await f.db.query('SELECT count(*) FROM transactions')).rows[0].count),tx);assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count),0);
   const text='password VeryPrivate123!';assert.equal((await post(client,'assistant',{message:text})).data.sensitiveInput,true);
   const records=JSON.stringify((await f.db.query('SELECT report_json,context_json FROM agent_runs')).rows);assert.ok(!records.includes(text));assert.ok(!records.includes('VeryPrivate123!'));
@@ -161,4 +167,15 @@ pg('Expired conversation references and revoked HTTP sessions cannot continue an
   await assert.rejects(agent.execute(users.jamie,'reconciliation',{}, {validateSession:async()=>{throw new (require('../models/errors').HttpError)(401,'Session revoked.');}}),e=>e.status===401);
   const failed=(await f.db.query("SELECT id FROM agent_runs WHERE status='failed'")).rows[0];
   assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_tool_calls WHERE run_id=$1',[failed.id])).rows[0].count),0);
+});
+pg('Failed optional model wording repair retains authoritative evidence and withholds the unsafe narrative',async t=>{
+  const f=await fixture(t,{http:false}),users=await actors(f.db);let calls=0;
+  const model=fakeModel(async()=>{
+    if(++calls===1)return {role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+    if(calls===2)return {role:'assistant',content:'Your balance is SGD 999999.'};
+    throw new (require('../models/errors').HttpError)(503,'Local model timed out.');
+  });
+  const result=await createAgents({db:f.db,model}).execute(users.jamie,'assistant',{message:'Show balances.'});
+  assert.equal(result.narrativeWithheld,true);assert.equal(result.items[0].amountCents,120000);
+  assert.ok(!result.reply.includes('999999'));assert.equal((await f.db.query('SELECT status FROM agent_runs WHERE id=$1',[result.runId])).rows[0].status,'completed');
 });

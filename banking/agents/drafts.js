@@ -57,24 +57,48 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
   if(!draft.kind)draft.kind=schedule?'schedule':payment?'bill':'transfer';
   if(schedule && draft.kind!=='schedule'){draft.type=draft.kind;draft.kind='schedule';}
   if(draft.kind==='schedule')draft.type=draft.type || (payment?'bill':'transfer');
-  const numeric=text.match(/(?:\b(?:SGD|amount)\s*|S\$\s*|\$\s*)(\d{1,11}(?:\.\d{1,2})?)(?![\d.])/i) || text.match(/^(?:please\s+)?(?:transfer|send|move|pay)\s+(\d{1,9}(?:\.\d{1,2})?)(?!\d)/i) || text.match(/^(\d{1,9}(?:\.\d{1,2})?)$/);
-  if(numeric)draft.amount=numeric[1];
-  const target=text.match(/\bto\s+(?:account\s+)?(\d{10})\b/i) || text.match(/^(\d{10})$/);
-  if(target)draft.toAccountNumber=target[1];
-  const source=accounts.find(a=>new RegExp('\\b(?:from|use)\\s+(?:my\\s+)?'+a.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text));
-  if(source)draft.fromAccountId=String(source.id);
-  const ownTarget=accounts.find(a=>new RegExp('\\bto\\s+(?:my\\s+)?'+a.name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text));
-  if(ownTarget)draft.toAccountNumber=ownTarget.number;
+  // Read the whole monetary token before validating it. Matching a valid prefix
+  // would turn 1,000.50 into 1 or silently truncate excessive decimal places.
+  const numeric=text.match(/(?:\b(?:SGD|amount)\s*|S\$\s*|\$\s*)([^\s]+)/i)
+    || text.match(/^(?:please\s+)?(?:transfer|send|move|pay)\s+([-+\d][^\s]*)/i)
+    || (!/^\d{10}$/.test(text) && text.match(/^([-+\d][\d.,eE+-]*)$/));
+  if(numeric){
+    if(!/^(?:\d{1,11}|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(numeric[1]))throw new HttpError(400,'Enter a valid SGD amount with no more than two decimal places.');
+    draft.amount=numeric[1].replace(/,/g,'');
+    ledger.parseAmount(draft.amount);
+  }
+  const accountText=value=>value.trim().replace(/^(?:my|account)\s+/i,'').replace(/[.!?]$/,'').toLowerCase();
+  const sourceText=text.match(/\b(?:from|use)\s+(.+?)(?=\s+(?:to|for|at|on|tomorrow|once|weekly|monthly)\b|$)/i)?.[1];
+  if(sourceText){
+    const matches=accounts.filter(a=>a.name.toLowerCase()===accountText(sourceText) || a.number===accountText(sourceText));
+    if(matches.length!==1)throw new HttpError(400,'Choose an unambiguous owned source account by name or account number.');
+    draft.fromAccountId=String(matches[0].id);
+  }
+  const targetText=text.match(/\bto\s+(.+?)(?=\s+(?:for|with|reference|ref|at|on|tomorrow|once|weekly|monthly)\b|$)/i)?.[1] || (/^\d{10}$/.test(text)?text:null);
+  if(targetText){
+    const target=accountText(targetText),owned=accounts.filter(a=>a.name.toLowerCase()===target || a.number===target);
+    delete draft.toAccountNumber;
+    if(owned.length>1)throw new HttpError(400,'Choose an unambiguous destination account number.');
+    if(owned.length===1)draft.toAccountNumber=owned[0].number;
+    else if(/^\d{10}$/.test(target))draft.toAccountNumber=target;
+  }
   const biller=billers.find(b=>text.toLowerCase().includes(b.name.toLowerCase()));
   if(biller)draft.billerId=biller.id;
-  const reference=text.match(/\b(?:ref(?:erence)?)\s+([A-Za-z0-9 _./-]{1,64})/i);
+  const reference=text.match(/\b(?:ref(?:erence)?)\s+(.+?)(?=\s+(?:tomorrow|at|on|once|weekly|monthly)\b|$)/i);
   if(reference)draft.reference=reference[1].trim();
   const date=text.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/);
   if(date)draft.scheduledAt=date[0];
   if(/\btomorrow\b/i.test(text)){
+    if(date)throw new HttpError(400,'Choose either tomorrow or an explicit UTC date, not both.');
     const tomorrow=new Date(now()+86400000);
     const sg=new Date(tomorrow.getTime()+8*3600000).toISOString().slice(0,10);
-    draft.scheduledAt=new Date(sg+'T09:00:00+08:00').toISOString();
+    const clock=text.match(/\btomorrow\s+(?:(at)\s+)?(\S+)(?:\s+(am|pm)\b)?/i);
+    const explicit=clock && (clock[1] || /^\d/.test(clock[2]));
+    const time=explicit?(clock[2]+(clock[3] || '')).match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i):null;
+    let hour=9,minute=0;
+    if(time){hour=Number(time[1]);minute=Number(time[2] || 0);if(minute>59 || (time[3]?hour<1 || hour>12:hour>23))throw new HttpError(400,'Choose a valid time for tomorrow in Singapore.');if(time[3])hour=hour%12+(/pm/i.test(time[3])?12:0);}
+    else if(explicit || /\btomorrow\s+(?:at\b|(?:in\s+the\s+)?(?:morning|afternoon|evening|night|noon|midnight)\b)/i.test(text))throw new HttpError(400,'Use a valid time such as tomorrow at 15:30.');
+    draft.scheduledAt=new Date(sg+'T'+String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+':00+08:00').toISOString();
   }
   const frequency=text.match(/\b(once|weekly|monthly)\b/i);if(frequency)draft.frequency=frequency[1].toLowerCase();
   return draft;

@@ -142,7 +142,9 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
         let modelRequests=0;
         for(let round=0;round<4;round++){
           const remaining=deadline-Date.now();if(remaining<=0)throw new HttpError(504,'The local agent time limit was reached. Use the offline workflow.');
-          const response=await model.chat(messages,toolNames.map(toolSchema),{signal:AbortSignal.timeout(Math.min(30000,remaining))});
+          // A local model may need to load its weights on the first request.
+          // Give that call more of the same bounded total task budget.
+          const response=await model.chat(messages,toolNames.map(toolSchema),{signal:AbortSignal.timeout(Math.min(round===0?45000:30000,remaining))});
           modelRequests++;
           if(!response.tool_calls?.length){if(!step)throw new HttpError(503,'The local model did not retrieve banking evidence. Use the offline workflow.');reply=response.content.slice(0,5000);break;}
           const normalized=[];
@@ -159,12 +161,18 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
         // One bounded rewrite can remove an unsafe narrative without trusting
         // it as financial evidence or changing any authoritative tool facts.
         if(narrativeIssue(reply,report) && modelRequests<4 && deadline-Date.now()>1000){
-          const revised=await model.chat([...messages,{role:'assistant',content:reply},{role:'user',content:'Rewrite the interpretation as a short qualitative paragraph. Do not include ANY digits, monetary amounts, scores, counts, dates, thresholds, account IDs or numbered lists. The banking screen already displays exact facts. Never claim you executed an action. Describe what the evidence suggests and what a human should verify.'}],[],{signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))});
-          if(!revised.tool_calls?.length && revised.content.trim())reply=revised.content.slice(0,5000);
+          try{
+            const revised=await model.chat([...messages,{role:'assistant',content:reply},{role:'user',content:'Rewrite the interpretation as a short qualitative paragraph. Do not include ANY digits, monetary amounts, scores, counts, dates, thresholds, account IDs or numbered lists. The banking screen already displays exact facts. Never claim you executed an action. Describe what the evidence suggests and what a human should verify.'}],[],{signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))});
+            if(!revised.tool_calls?.length && revised.content.trim())reply=revised.content.slice(0,5000);
+          }catch{
+            // An optional wording repair must not discard a valid evidence
+            // report. The original unsafe narrative is withheld below.
+          }
         }
       }else if(kind==='assistant'){
-        const readQuestion=/\b(?:balance|history|recent|liquidity|cash.?flow|reconcil|privacy|notification)\b/i.test(message) && !/\b(?:from|to|amount)\b/i.test(message);
-        const continuing=object(previous.pendingDraft) && !readQuestion, drafting=/^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b/i.test(message) || /\b(?:create|set up).*\b(?:payment|transfer|schedule)\b/i.test(message);
+        const drafting=/^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b/i.test(message) || /\b(?:create|set up).*\b(?:payment|transfer|schedule)\b/i.test(message);
+        const readQuestion=!drafting && /\b(?:balance|history|recent|liquidity|cash.?flow|reconcil|privacy|notification|transactions?|upcoming|flagged)\b/i.test(message);
+        const continuing=object(previous.pendingDraft) && !readQuestion && !drafting;
         if(/\b(?:start over|discard draft|forget draft)\b/i.test(message)){context={};reply='The draft conversation is cleared. No banking instruction was created.';}
         else if(/\b(?:privacy|private|data sharing|external|store.*chat|save.*chat)\b/i.test(message)){reply='Raw messages are not saved by the banking service. Investigation reports, tool evidence and draft context are retained privately in PostgreSQL. In Ollama mode, prompts and permitted banking results are sent only to the configured local model. Clearing this conversation clears browser messages; it does not delete investigation records.';}
         else if(continuing || drafting){

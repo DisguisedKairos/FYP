@@ -16,12 +16,19 @@ test('Business users project liquidity, inspect reconciliation and build a multi
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Offline workflows")');
   assert.equal(await page.evaluate('!!document.querySelector("#agent-fraud-form,#agent-simulation-form")'),false);
+  await page.fill('#agent-days','14');
   await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
+  assert.equal(await page.evaluate('document.querySelector("#agent-days").value'),'14');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/liquidity projection/);
   assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   await page.click('#agent-reconciliation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Reconciliation and exception")');
   await page.screenshot(path.resolve('test-results','agents-business-mobile.png'));
   await visit(page,f.baseUrl,'/assistant');
+  await page.evaluate(`window.originalAgentFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))await new Promise(resolve=>{window.releaseAgentResponse=resolve;});return window.originalAgentFetch(...args);};`);
+  await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
+  await page.waitFor('document.querySelector("#assistant-engine").disabled===true && !!window.releaseAgentResponse');
+  await page.evaluate('window.releaseAgentResponse();window.fetch=window.originalAgentFetch;');
+  await page.waitFor('document.querySelector("#assistant-form").getAttribute("aria-busy")==="false" && !document.querySelector("#assistant-engine").disabled');
   async function ask(message){const n=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+n+' && document.querySelector("#assistant-form").getAttribute("aria-busy")==="false"');}
   await ask('Transfer');assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/amount/);
   await ask('SGD 1');await ask('1020001001');
@@ -41,6 +48,7 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   await page.click('[data-investigate-transaction]');await page.waitFor('location.pathname==="/banking-insights" && document.querySelector("[data-agent-report]")?.textContent.includes("'+held.data.transaction.id+'")');
   await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule simulation")');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/changed decisions/);
+  assert.equal(await page.evaluate('document.querySelector("#agent-threshold").value'),'50');
   await page.waitFor('document.querySelectorAll("[data-agent-run]").length>=2');
   await page.screenshot(path.resolve('test-results','agents-staff-desktop.png'));
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(page.errors,[]);

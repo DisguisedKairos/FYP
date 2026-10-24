@@ -2,7 +2,7 @@ import { state, ui, api, esc, icon, money, fullDate, sameId, recoverSession, nav
 import { heading } from './views.js';
 import { applyBankingAction } from './assistant.js';
 
-let generation=0;
+let generation=0,detailGeneration=0;
 function workspace(){return state.agentWorkspace || (state.agentWorkspace={busy:false,error:'',run:null});}
 function modeOptions(){const info=state.remote.agents?.data?.agent;return '<option value="workflow">Offline evidence workflow</option><option value="ollama" '+(!info?.available?'disabled':'')+'>Local Ollama agent'+(info?.model?' - '+esc(info.model):'')+'</option>';}
 const modeField=()=>'<div class="field"><label>Analysis mode<select name="engine">'+modeOptions()+'</select></label></div>';
@@ -45,6 +45,7 @@ export async function loadAgents(){
 }
 export async function submitAgent(form){
   const w=workspace();if(w.busy)return;
+  rememberAgentForm(form);detailGeneration++;
   const values=Object.fromEntries(new FormData(form)),kind=form.dataset.agentKind,userId=state.user.id;
   if(values.days)values.days=Number(values.days);
   if(kind==='rule_simulation'){values.threshold=Number(values.threshold);values.enabled=form.elements.enabled.checked;}
@@ -57,12 +58,23 @@ export async function submitAgent(form){
   finally{if(state.agentWorkspace===w){w.busy=false;if(state.route.page==='agents')ui.render();loadAgents();}}
 }
 export async function showAgentRun(id){
-  const userId=state.user.id;
-  try{const result=await api('/agents/runs/'+encodeURIComponent(id));if(!sameId(state.user?.id,userId))return;workspace().run=result.run;workspace().error='';ui.render();}
-  catch(error){if(!await recoverSession(error)){workspace().error=error.message;ui.render();}}
+  const userId=state.user.id,w=workspace(),request=++detailGeneration;
+  try{const result=await api('/agents/runs/'+encodeURIComponent(id));if(request!==detailGeneration || state.agentWorkspace!==w || !sameId(state.user?.id,userId))return;w.run=result.run;w.error='';ui.render();}
+  catch(error){if(request!==detailGeneration || state.agentWorkspace!==w || !sameId(state.user?.id,userId))return;if(!await recoverSession(error)){w.error=error.message;ui.render();}}
 }
 export function openAgentDraft(index){const action=workspace().run?.report?.actions?.[Number(index)];if(action)applyBankingAction(action);}
-export function selectAgentRule(form){const rule=state.remote.agents?.data?.rules?.rules.find(r=>r.id===form.elements.ruleId.value);if(!rule)return;form.elements.threshold.value=rule.threshold;form.elements.action.value=rule.action;form.elements.enabled.checked=rule.enabled;}
+export function selectAgentRule(form){const rule=state.remote.agents?.data?.rules?.rules.find(r=>r.id===form.elements.ruleId.value);if(!rule)return;form.elements.threshold.value=rule.threshold;form.elements.action.value=rule.action;form.elements.enabled.checked=rule.enabled;rememberAgentForm(form);}
+export function rememberAgentForm(form){
+  if(!form?.dataset.agentKind)return;
+  const w=workspace();w.forms ||= {};
+  w.forms[form.dataset.agentKind]={...Object.fromEntries(new FormData(form)),...(form.elements.enabled?{enabled:form.elements.enabled.checked}:{})};
+}
+export function restoreAgentForms(){
+  for(const form of document.querySelectorAll('form[data-agent-kind]')){
+    const values=workspace().forms?.[form.dataset.agentKind];if(!values)continue;
+    for(const [name,value] of Object.entries(values)){const input=form.elements.namedItem(name);if(!input)continue;if(input.type==='checkbox')input.checked=Boolean(value);else input.value=String(value);}
+  }
+}
 export async function investigateFromQueue(id){
   if(state.user?.role!=='admin' || workspace().busy)return;
   navigate('agents');await loadAgents();

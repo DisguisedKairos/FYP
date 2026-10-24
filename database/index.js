@@ -26,7 +26,9 @@ function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptio
   }
   async function migrate() {
     return transaction(async client => {
-      await client.query("SELECT pg_advisory_xact_lock(783456120)");
+      // Serialize one schema's migrations without blocking independent schemas
+      // in the same development/test database.
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended('greenlink:migrations:'||current_schema(),0))");
       // A restricted application login can verify an installed schema without DDL.
       if (!(await client.query("SELECT to_regclass('schema_migrations') AS relation")).rows[0].relation) {
         await client.query('CREATE TABLE schema_migrations(name TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())');
