@@ -12,12 +12,6 @@
 !database/**
 !models/
 !models/errors.js
-!services/
-!services/fraud/
-!services/fraud/model.json
-!services/fraud/features.js
-!datasets/
-!datasets/fraud-history.csv
 !fraud_service/
 !fraud_service/**
 !public/
