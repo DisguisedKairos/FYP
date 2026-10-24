@@ -1,12 +1,16 @@
 # DFT verification record
 
+Version 2.7.0 adds five private banking-agent features and migration 007. The full local regression passed 111 Node tests and all seven browser workflows, including persisted budgets, expired conversations, hostile tools and narrative guards. The database has 25 tables and seven migrations; all 13 native accounts still reconcile, with the same 13 users, seven businesses and 28 transaction rows.
+
+`npm run demo:agents` exercised all five features against a disposable schema using real local `qwen3.5:4b` Ollama and real private FastAPI scoring. It verified that investigations leave financial balances unchanged. Live trials exposed incorrect numeric model prose; the final narrative guard withholds detected numeric claims and contradictory risk labels and directs users to authoritative tool facts. The guard does not establish that qualitative prose is always correct. See [agent walkthrough and limitations](banking-agents.md). Mobile business and desktop staff previews are stored privately under `test-results/agents-*.png`.
+
 Verified locally on 24 October 2026 (Asia/Singapore), using Node.js 22.14, PostgreSQL 18.6 and Python 3.13. Test credentials and output are excluded from source control and the release.
 
 | Check | Result |
 | --- | --- |
-| Last full local Node DFT functional/security suite | 98 passed, 0 failed, 0 skipped against real PostgreSQL; all four account-fixture cases passed after adding the target-mismatch guard |
+| Last full local Node DFT functional/security suite | 111 passed, 0 failed, 0 skipped against real PostgreSQL, including twelve banking-agent cases |
 | Python FastAPI/model and delivery suite | 18 passed, including token-file validation, 63 JavaScript parity vectors and independent held-out metric verification |
-| Browser workflows | 5 passed: business registration/onboarding and banking, mobile banking, standalone bank operations workspace, administrator fraud review, password/MFA/recovery/session controls |
+| Browser workflows | 7 passed: agent liquidity/reconciliation/draft planning and staff investigations/simulation; business registration/onboarding and banking, mobile banking, standalone bank operations workspace, administrator fraud review, password/MFA/recovery/session controls |
 | Actual process integration | Express + PostgreSQL + FastAPI smoke passed with authenticated scoring, payment lifecycle, history, statements, notifications and policy audit |
 | Packaged source | Archive integrity verified; fresh offline `npm ci` installed 79 locked packages; extracted application passed the actual two-process smoke |
 | Existing local data | The original 3 users, 3 accounts and 11 transactions remain intact. The explicit feature tour adds 10 test users, 7 business profiles, 10 savings records and 17 ledger rows; all 13 account balances reconcile |

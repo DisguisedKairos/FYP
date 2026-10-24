@@ -1,6 +1,6 @@
 {
   "name": "greenlink-digital-bank",
-  "version": "2.6.0",
+  "version": "2.7.0",
   "private": true,
   "description": "Republic Polytechnic C300 business banking prototype based on Green Link Digital Bank, using Express, PostgreSQL and private FastAPI fraud scoring.",
   "main": "app.js",
@@ -10,7 +10,7 @@
     "dev": "node --env-file-if-exists=.env scripts/start-platform.js",
     "setup": "node scripts/setup.js",
     "test": "node --env-file-if-exists=.env.test --test tests/dft-*.test.js",
-    "test:browser": "node --env-file-if-exists=.env.test --test tests/browser.e2e.js tests/dft-security-browser.js",
+    "test:browser": "node --env-file-if-exists=.env.test --test tests/browser.e2e.js tests/dft-security-browser.js tests/dft-agents-browser.js",
     "train:fraud": "node scripts/train-fraud.js",
     "package": "node scripts/package.js",
     "package:verify": "node scripts/verify-package.js",
@@ -33,7 +33,9 @@
     "devops:down": "docker compose down",
     "test:containers": "node deploy/smoke.js",
     "test:accounts": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/feature-accounts.js",
-    "test:accounts:otp": "node --env-file-if-exists=.env scripts/feature-accounts.js --otp"
+    "test:accounts:otp": "node --env-file-if-exists=.env scripts/feature-accounts.js --otp",
+    "demo:agents": "node --env-file-if-exists=.env --env-file-if-exists=.env.test scripts/demo-agents.js",
+    "agent:start": "node --env-file-if-exists=.env scripts/start-agent.js"
   },
   "engines": {
     "node": ">=22.13.0"

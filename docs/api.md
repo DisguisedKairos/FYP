@@ -40,6 +40,23 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | GET | `/api/fraud/reviews` | Admin review queue |
 | POST | `/api/fraud/reviews/:id` | Independent admin `{decision,reason,authorizationPassword}` |
 
+## Private banking agents (2.7.0)
+
+All routes require the existing session. POST routes additionally require CSRF and the same-origin guard. Run records are private to their initiating user. `engine` is `workflow` or `ollama`; report forms default to workflow, and assistant requests default to configured `AGENT_MODE`.
+
+| Method | Path | Payload/result |
+| --- | --- | --- |
+| GET | `/api/agents/status` | Local model configuration/availability; no model credentials |
+| GET | `/api/agents/runs` | Latest 30 owned run summaries |
+| GET | `/api/agents/runs/:id` | Owned report and permitted tool evidence |
+| POST | `/api/agents/assistant` | `{message,previousRunId?,engine?}`; response has reply, authoritative fact cards, form-draft actions, run ID and tool names |
+| POST | `/api/agents/liquidity` | `{days?,engine?}`; owned 1-90 day scheduled-payment projection |
+| POST | `/api/agents/fraud_investigation` | Staff-only `{transactionId,engine?}`; recorded risk and history investigation |
+| POST | `/api/agents/rule_simulation` | Staff-only `{ruleId,threshold?,enabled?,action?,days?,engine?}`; historical comparison, no live changes |
+| POST | `/api/agents/reconciliation` | `{engine?}`; owned exceptions or staff operations scope |
+
+Reports return `{run:{id,kind,engine,status,report,steps,...}}`. Unsupported fields/tools fail closed. Raw messages are not stored; reports, tool evidence and structured draft context are retained in PostgreSQL. Follow [agent privacy, limits and walkthrough](banking-agents.md).
+
 ## Financial payloads
 
 Registration additionally requires `business:{legalName,registrationNumber,country:"SG",legalForm,industry,registeredAddress}`. Legal form is `company`, `partnership` or `institution`; personal onboarding is rejected. The business starts pending review regardless of client-supplied status. Approval requires a fresh bank staff password and `verificationConfirmed:true`; review cannot be performed by the business's own primary operator. Version mismatches and already-reviewed applications return409. Approved identity changes require bank assistance.

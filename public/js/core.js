@@ -7,6 +7,7 @@ export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
   business: { path: '/business', label: 'Business profile', icon: 'wallet' },
   assistant: { path: '/assistant', label: 'GLDB Assistant', icon: 'chat' },
+  agents: { path: '/banking-insights', label: 'Banking insights', icon: 'activity' },
   accounts: { path: '/accounts', label: 'Business accounts', icon: 'wallet' },
   transfers: { path: '/transfers', label: 'Transfers', icon: 'transfer' },
   payments: { path: '/payments', label: 'Business bills', icon: 'bill' },
@@ -63,7 +64,7 @@ export async function api(path, body, method = 'POST', options = {}) {
   const abort = () => controller.abort();
   if (options.signal?.aborted) controller.abort();
   else options.signal?.addEventListener('abort', abort, { once: true });
-  const timeout = setTimeout(() => controller.abort(), 20000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || 20000);
   try {
     const response = await fetch(`/api${path}`, {
       method: body === undefined ? 'GET' : method, credentials: 'same-origin', signal: controller.signal,
@@ -125,7 +126,7 @@ export function closeDialog(force = false) {
 export function clearBankingState() {
   ui.cancelReads?.();
   closeDialog(true);
-  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, assistant:null, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, assistant:null, agentWorkspace:null, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
 }
 export async function recoverSession(error) {

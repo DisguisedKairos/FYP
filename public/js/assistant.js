@@ -1,11 +1,11 @@
-﻿// The conversation stays in this signed-in browser session. The assistant API
-// reads owned records; financial actions only create drafts in normal forms.
+// Raw messages stay in browser memory. Reports, tool evidence and draft context
+// are retained privately; financial actions only open the ordinary banking forms.
 import { app, state, ui, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
 import { heading } from './views.js';
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 const starters=['What is my balance?','Show my recent transactions','What payments are scheduled?','Help me transfer money'];
-function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:''}); }
+function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,engine:''}); }
 function itemContent(item) {
   if(typeof item==='string')return '<li>'+esc(item)+'</li>';
   if(!item || typeof item!=='object')return '';
@@ -23,10 +23,16 @@ function suggestionHtml() {
   const suggestions=last?.suggestions?.length?last.suggestions:messages.length?[]:starters;
   return suggestions.slice(0,4).map(text=>'<button type="button" class="assistant-suggestion" data-assistant-suggestion="'+esc(text)+'">'+esc(text)+'</button>').join('');
 }
-export function assistantPage() {
+function baseAssistantPage() {
   const t=thread();
   return heading('Your business banking assistant.', 'Ask about your accounts, find a payment or prepare a draft.', '<button type="button" class="button secondary" data-action="assistant-clear">'+icon('close')+'<span>Clear conversation</span></button>')+'<section class="panel assistant-panel" aria-labelledby="assistant-title"><div class="assistant-panel-heading"><span class="quick-action-icon">'+icon('chat')+'</span><div><h2 id="assistant-title">GLDB Assistant</h2><p>Uses only your signed-in accounts. Payments always require your review and password.</p></div><span class="tag">Private</span></div><div id="assistant-thread" class="assistant-thread" role="log" aria-label="Conversation with GLDB Assistant" aria-live="polite" aria-relevant="additions text">'+(t.messages.length?t.messages.map(messageHtml).join(''):'<div class="assistant-welcome">'+icon('chat')+'<h3>What would you like to take care of?</h3><p>I can explain balances, find activity and help prepare payment drafts. You stay in control of every payment.</p></div>')+'</div><div id="assistant-response-status" class="assistant-response-status" role="status">'+(t.busy?'Looking at your account information…':'')+'</div><div id="assistant-error" class="error-message assistant-error" role="alert">'+(t.error?esc(t.error)+' <button type="button" class="text-button" data-action="assistant-retry">Try again</button>':'')+'</div><div id="assistant-suggestions" class="assistant-suggestions">'+suggestionHtml()+'</div><form id="assistant-form" class="assistant-form" aria-busy="'+t.busy+'"><label for="assistant-message">Your message</label><div class="assistant-composer"><textarea id="assistant-message" name="message" rows="2" maxlength="1000" required placeholder="Ask about your balance, recent activity or a payment…" aria-describedby="assistant-privacy">'+esc(t.input)+'</textarea><button type="submit" class="button" aria-label="Send message" '+(t.busy?'disabled':'')+'>Send '+icon('arrow')+'</button></div><small id="assistant-privacy">Never send passwords in chat. Drafts open a banking form; chat does not authorize or send money.</small></form></section>';
 }
+export function assistantPage() {
+  const t=thread();
+  const modes='<div class="assistant-mode"><label for="assistant-engine">Assistant mode</label><select id="assistant-engine" '+(t.busy?'disabled':'')+'><option value="" '+(!t.engine?'selected':'')+'>Configured default</option><option value="workflow" '+(t.engine==='workflow'?'selected':'')+'>Offline evidence workflow</option><option value="ollama" '+(t.engine==='ollama'?'selected':'')+'>Local Ollama agent</option></select><small>Raw chat stays in browser memory. Reports and tool evidence are saved privately.</small></div>';
+  return baseAssistantPage().replace('<section class="panel assistant-panel"',modes+'<section class="panel assistant-panel"');
+}
+export function setAssistantEngine(value) { if(!thread().busy && ['','workflow','ollama'].includes(value))thread().engine=value; }
 function renderThread() {
   if(state.route.page!=='assistant')return;
   const target=document.querySelector('#assistant-thread');
@@ -70,10 +76,11 @@ export async function sendAssistant(message,{retry=false}={}) {
   const input=document.querySelector('#assistant-message');if(input)input.value='';
   renderThread();
   try {
-    const result=await api('/assistant/messages',{message:text},'POST',{signal:controller.signal});
+    const result=await api('/agents/assistant',{message:text,...(t.previousRunId?{previousRunId:t.previousRunId}:{}),...(t.engine?{engine:t.engine}:{})},'POST',{signal:controller.signal,timeoutMs:90000});
     if(request!==generation || state.assistant!==t || !state.user || state.signingOut || !sameId(state.user.id,userId))return;
     if(result.sensitiveInput){const submitted=[...t.messages].reverse().find(message=>message.role==='user');if(submitted)submitted.text='[Sensitive message removed]';}
-    t.messages.push({id:++nextMessageId,role:'assistant',text:result.reply || 'Please choose one of the suggested banking tasks.',items:Array.isArray(result.items)?result.items:[],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
+    t.previousRunId=result.runId || null;
+    t.messages.push({id:++nextMessageId,role:'assistant',text:result.reply || 'Please choose one of the suggested banking tasks.',items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine?[{title:result.engine==='ollama'?'Local Ollama agent':'Offline evidence workflow',subtitle:(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
   } catch(error) {
     if(request!==generation || error.status===-1 || state.assistant!==t || !state.user || state.signingOut || !sameId(state.user.id,userId))return;
@@ -100,6 +107,10 @@ export function assistantAction(reference) {
   if(!state.user || state.signingOut)return;
   const [messageId,index]=String(reference).split(':'),message=thread().messages.find(m=>String(m.id)===messageId),action=message?.actions?.[Number(index)];
   if(!action)return;
+  applyBankingAction(action);
+}
+export function applyBankingAction(action) {
+  if(!state.user || state.signingOut)return;
   if(action.type==='navigate') {
     const aliases={dashboard:'overview',transactions:'activity','scheduled-payments':'schedules','bill-payments':'payments','fraud-monitoring':'fraud','fraud-rules':'rules'};
     const page=aliases[action.page] || action.page;

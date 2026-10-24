@@ -437,3 +437,27 @@ dialog.wide-dialog { width:900px; }
   .print-statement .brand-logo { display:block!important; }
   .print-statement .brand-logo-inverse { display:none!important; }
 }
+/* Banking agent workspace: evidence first, with all financial actions in forms. */
+.agent-layout { display:grid;grid-template-columns:minmax(260px, .8fr) minmax(0,1.3fr);gap:24px;margin-top:24px;align-items:start; }
+.agent-tools,.agent-results { display:grid;gap:20px;min-width:0; }
+.agent-tools .panel,.agent-results .panel { margin:0;min-width:0; }
+.agent-tools form { display:grid;gap:16px; }
+.agent-tools select { width:100%; }
+.agent-metrics { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0; }
+.agent-metrics>div { display:grid;gap:8px;padding:16px;border:1px solid #e0e7ee;border-radius:12px; }
+.agent-metrics span { font-size:12px;color:#52657d; }
+.agent-metrics strong { font-size:20px;overflow-wrap:anywhere; }
+.agent-findings { padding-left:22px;line-height:1.7;overflow-wrap:anywhere; }
+.agent-run-list { display:grid;gap:12px;padding:0;list-style:none; }
+.agent-run-list li { display:grid;gap:4px; }
+.agent-run-list small { color:#52657d;font-size:12px; }
+.agent-report { padding:24px;overflow-wrap:anywhere; }
+.agent-report details { margin-top:20px; }
+.agent-report .table-scroll { overflow:auto;max-width:100%; }
+.agent-report table { width:100%;border-collapse:collapse;text-align:left; }
+.agent-report th,.agent-report td { padding:12px;border-bottom:1px solid #e0e7ee; }
+.agent-report .metadata-json { max-height:450px;overflow:auto;white-space:pre-wrap;word-break:break-word; }
+.assistant-mode { display:flex;gap:12px;align-items:center;padding:12px 0;flex-wrap:wrap; }
+.assistant-mode select { max-width:100%; }
+@media(max-width:1000px) { .agent-layout { grid-template-columns:minmax(0,1fr); } }
+@media(max-width:500px) { .agent-metrics { grid-template-columns:minmax(0,1fr); }.agent-report { padding:16px; }.agent-report .section-heading { align-items:start;gap:12px;flex-wrap:wrap; } }

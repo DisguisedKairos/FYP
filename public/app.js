@@ -1,4 +1,5 @@
-import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
+import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant, setAssistantEngine } from './js/assistant.js';
+import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 ﻿import { app, modal, state, ui, pages, api, esc, icon, money, sameId, accountById, transactionById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
 import { auth, render, connectionError, extraViews, updateMobileNavigation } from './js/views.js';
@@ -12,6 +13,8 @@ import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessA
 Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); } });
 Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
+ui.loadAgents=loadAgents;
+extraViews.agents=agentsPage;
 
 function switchAuth() {
   state.authMode = state.authMode === 'login' ? 'register' : 'login';
@@ -64,6 +67,10 @@ document.addEventListener('submit',async event => {
         await authenticate(values); break;
       }
       case 'account-form': await submitAccount(form); break;
+      case 'agent-liquidity-form':
+      case 'agent-reconciliation-form':
+      case 'agent-fraud-form':
+      case 'agent-simulation-form': await submitAgent(form); break;
       case 'business-profile-form': await submitBusiness(form); break;
       case 'business-review-form': await submitBusinessReview(form); break;
       case 'close-account-form': await submitAccount(form,true); break;
@@ -94,6 +101,9 @@ document.addEventListener('click',async event => {
   if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
+    if (control.dataset.agentRun) return showAgentRun(control.dataset.agentRun);
+    if (control.dataset.investigateTransaction) return investigateFromQueue(control.dataset.investigateTransaction);
+    if (control.dataset.agentDraft !== undefined) return openAgentDraft(control.dataset.agentDraft);
     if (control.dataset.assistantAction) return assistantAction(control.dataset.assistantAction);
     if (control.dataset.assistantSuggestion) return sendAssistant(control.dataset.assistantSuggestion);
     if (control.dataset.readNotification) { control.disabled = true; await markNotification(control.dataset.readNotification); return; }
@@ -107,6 +117,7 @@ document.addEventListener('click',async event => {
       case 'auth-switch': switchAuth(); break;
       case 'refresh-business-applications': await loadBusinessApplications(); break;
       case 'assistant-clear': clearAssistant(); break;
+      case 'agents-refresh': await loadAgents(); break;
       case 'assistant-retry': await retryAssistant(); break;
       case 'password': {
         const input = document.getElementById(control.dataset.input), show = input.type === 'password';
@@ -159,6 +170,8 @@ document.addEventListener('input',event => {
   if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
 });
 document.addEventListener('change',event => {
+  if(event.target.id==='assistant-engine')return setAssistantEngine(event.target.value);
+  if(event.target.id==='agent-rule')return selectAgentRule(event.target.form);
   if (event.target.id === 'rule-audit-filter') return loadRuleAudit({ruleId:event.target.value,page:1});
   const form = event.target.closest('form');
   if (form?.id === 'history-filters') return updateHistoryFilters(form);

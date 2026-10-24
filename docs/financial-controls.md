@@ -29,3 +29,9 @@ Statements use a consistent database snapshot and Singapore date boundaries. The
 Customers can access only their own accounts, history, receipts, schedules, statements and notifications. The assistant follows the same ownership boundary, returns drafts requiring the ordinary review/password flow, and cannot authorize writes. Registration cannot assign privileges. Password changes and session revocation invalidate stale authorizations; optional authenticator login prevents code/recovery replay. Audit records contain decisions and actor context without passwords, raw cookies, OTPs or recovery secrets.
 
 The functional/security suites test concurrency, rollback, idempotency, independent review, hostile inputs, data isolation, service failure, recovery and reconciliation. Their evidence applies to this project implementation with synthetic data, not a live bank certification.
+
+## Agent boundaries
+
+The 2.7.0 agent layer has read/report and form-draft tools only. Tools repeat role/ownership checks; HTTP tasks recheck their session and all tasks recheck the security version before returning results. Local Ollama is optional and isolated from the fraud-scoring service. There is no agent tool for SQL, shell access, settlement, transaction decisions, rule changes or repairing balances.
+
+Numerical facts are rendered from authoritative tool results. Generated numerical claims and unauthorized execution claims are withheld. Qualitative interpretations remain subject to reviewer verification. Historical rule simulations never alter policies, and liquidity projections include assumptions rather than guaranteed funds. Existing password authorization, independent review, binding keys and settlement guardrails apply to every draft completed through banking forms. See [agent controls and evidence](banking-agents.md).

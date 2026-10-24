@@ -2,7 +2,7 @@
 
 // Only the banking application's known tables may be adopted by db:setup.
 const TABLES = Object.freeze([
-  'accounts', 'audit_log', 'auth_attempts', 'billers', 'businesses',
+  'accounts', 'agent_runs', 'agent_tool_calls', 'audit_log', 'auth_attempts', 'billers', 'businesses',
   'fraud_assessments', 'fraud_rule_audit', 'fraud_rules', 'fraud_settings',
   'legacy_imports', 'legacy_service_records', 'mfa_recovery_codes',
   'notification_outbox', 'notifications', 'payment_bindings', 'requests',
@@ -38,6 +38,8 @@ async function grantRuntime(client, { ownerRole, appRole }) {
   await client.query(`GRANT INSERT(user_id,name,number,created_at), UPDATE(name,status,balance_cents,business_id) ON accounts TO ${app}`);
   await client.query(`GRANT INSERT, UPDATE(status,created_at,completed_at,settlement_seq,review_json) ON transactions TO ${app}`);
   await client.query(`GRANT INSERT ON audit_log, payment_bindings, fraud_rule_audit TO ${app}`);
+  await client.query(`GRANT INSERT, UPDATE(status,engine,report_json,context_json,error_code,completed_at) ON agent_runs TO ${app}`);
+  await client.query(`GRANT INSERT ON agent_tool_calls TO ${app}`);
   await client.query(`GRANT INSERT, UPDATE(result_json) ON fraud_assessments TO ${app}`);
   await client.query(`GRANT UPDATE(enabled,threshold,action) ON fraud_rules TO ${app}`);
   await client.query(`GRANT UPDATE(version) ON fraud_settings TO ${app}`);

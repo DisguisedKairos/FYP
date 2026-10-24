@@ -10,6 +10,7 @@ const ledger = require('./banking/ledger');
 const history = require('./banking/history');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
+const { createAgents } = require('./banking/agents');
 const { createRiskClient } = require('./banking/risk');
 const { seedDemo } = require('./scripts/seed-demo');
 const { HttpError } = require('./models/errors');
@@ -47,6 +48,7 @@ async function createApplication(options = {}) {
   if (options.seed ?? process.env.SEED_DEMO === 'true') await seedDemo(db, { now });
   const auth = createAuth({ db, now, publicOrigin, secureCookies: publicOrigin?.startsWith('https://'), authEncryptionKey: options.authEncryptionKey ?? process.env.AUTH_ENCRYPTION_KEY });
   const riskClient = options.riskClient || createRiskClient({ db });
+  const agents = createAgents({ db, now, ...(options.agentModel ? { model: options.agentModel } : {}) });
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', configuredProxy);
@@ -163,9 +165,18 @@ async function createApplication(options = {}) {
   route('get', '/api/fraud/reviews', async req => ({ reviews: await ledger.reviews(db, req.banking.user) }));
   route('post', '/api/fraud/reviews/:id', async req => ({ transaction: await ledger.review(db, req.banking.user, req.params.id, req.body, financialOptions(req)) }));
   route('post', '/api/assistant/messages', req => require('./banking/assistant').answer({ db, user: req.banking.user, body: req.body, now, notificationClient: { list: id => workflows.notifications(db, { id }) } }));
+  route('get', '/api/agents/status', async () => ({ agent: await agents.status() }));
+  route('get', '/api/agents/runs', async req => ({ runs: await agents.list(req.banking.user) }));
+  route('get', '/api/agents/runs/:id', async req => ({ run: await agents.detail(req.banking.user, req.params.id) }));
+  for (const kind of ['assistant','fraud_investigation','liquidity','rule_simulation','reconciliation']) {
+    route('post', `/api/agents/${kind}`, req => agents.execute(req.banking.user, kind, req.body, { ip: req.ip, validateSession:async()=>{
+      const active=await auth.load(req);
+      if(!active.user || String(active.user.id)!==String(req.banking.user.id))throw new HttpError(401,'Your session ended. Sign in again.');
+    } }));
+  }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant', '/banking-insights']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
   app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error, _req, res, _next) => {

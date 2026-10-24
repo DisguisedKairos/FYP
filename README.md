@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.6.0**
+**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.7.0**
 
 Republic Polytechnic C300 Final Year Project based on **Green Link Digital Bank (GLDB)**, a digital wholesale bank. The application serves registered businesses and institutions through authorized business operators and bank staff. Screens and statements identify it as a student project using sample funds. See [branding sources](docs/branding.md) and [wholesale banking scope](docs/wholesale-banking.md).
 
@@ -21,6 +21,14 @@ The stack is **Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML an
 There are two permission roles: **`customer`** (authorized business operator) and **`admin`** (administrator). Registration creates a customer with a pending business application and a zero-balance savings record. Bank approval is required for account changes and sending/receiving payments. Each business currently has one primary operator.
 
 High-risk instructions are held or rejected without a debit; an independent administrator must authorize an approval. Scoring failures fail closed. The AI model is a reproducible **synthetic-data baseline**, not validated production fraud detection. The private assistant reads owned data and prepares form drafts; payments use the ordinary authorization flow. See [financial controls](docs/financial-controls.md) and [model documentation](docs/fraud-model.md).
+
+## Banking agents and insights
+
+Version 2.7.0 adds fraud investigation, a multi-step banking assistant, liquidity planning, historical fraud-rule simulation and reconciliation investigation. Open **http://localhost:3000/banking-insights**. Staff investigation/simulation tools are role-restricted; operators see owned liquidity and reconciliation.
+
+The native app is configured for local Ollama with installed `qwen3.5:4b`. Run `npm run agent:start` separately if the local model server is stopped. Report forms also offer clearly labelled offline evidence workflows. Payments, schedules and policy changes retain the ordinary banking authorization flow. Raw messages are not saved; investigation summaries, tool evidence and structured draft context are retained privately. See the [complete agent walkthrough and safeguards](docs/banking-agents.md).
+
+Use `npm run demo:agents` for all five features against real local Ollama and private Python scoring in an isolated, disposable PostgreSQL schema. The onboarding agent is excluded.
 
 ## Start the existing local project
 
@@ -148,7 +156,7 @@ node --env-file=.env --env-file=.env.test scripts/platform-smoke.js
 
 Install `tests_python/requirements.txt` with the virtual-environment interpreter, then use that interpreter to run `-m unittest discover -s tests_python -v`. `npm run test:python` uses `python` on `PATH`. Browser tests require Chrome, Chromium or Edge; `CHROME_PATH` can select it. Missing `TEST_DATABASE_URL` causes PostgreSQL-dependent tests to skip and does not establish database acceptance.
 
-The verified 2.6.0 [GitHub run](https://github.com/DisguisedKairos/FYP/actions/runs/40018091472) passed **99 Node tests, 18 Python tests, five browser tests**, real Express/PostgreSQL/FastAPI integration, package checks and the complete Compose payment/permissions check. Four additional live-browser checks confirmed the prepared native business, staff, pending-onboarding and MFA screens. See the [verification record](docs/verification.md).
+The earlier verified 2.6.0 [GitHub run](https://github.com/DisguisedKairos/FYP/actions/runs/40018091472) passed **99 Node tests, 18 Python tests, five browser tests**, real Express/PostgreSQL/FastAPI integration, package checks and the complete Compose payment/permissions check. The 2.7.0 local regression passed 111 Node tests and seven browser tests; all five new features were also exercised with real local Ollama and private Python scoring. Four additional live-browser checks confirmed the prepared native business, staff, pending-onboarding and MFA screens. See the [verification record](docs/verification.md).
 
 ## Containers and delivery pipeline
 
@@ -165,7 +173,7 @@ Open **http://localhost:8080**. The stack contains Nginx, separate non-root bank
 
 ## PostgreSQL records and source package
 
-PostgreSQL is the sole banking database: **23 tables and six checksum-verified migrations**. Retired database stores, importer and prototype code have been removed. Existing records are retained, and migration 006 corrects recognized historical demo email aliases while preserving passwords, IDs, roles and money. A verified pre-cleanup PostgreSQL backup is kept privately under `data/backups/`. See [database design and maintenance](docs/database.md).
+PostgreSQL is the sole banking database: **25 tables and seven checksum-verified migrations**. Retired database stores, importer and prototype code have been removed. Existing records are retained, and migration 006 corrects recognized historical demo email aliases while preserving passwords, IDs, roles and money. A verified pre-cleanup PostgreSQL backup is kept privately under `data/backups/`. See [database design and maintenance](docs/database.md).
 
 Keep `.env`, `.env.database-admin`, `.env.test`, `data/` and `test-results/` private. The web service uses restricted runtime credentials; provisioning and staff administration use separate operator credentials. The scorer receives no database or MFA encryption credentials.
 
@@ -176,7 +184,7 @@ npm run package
 npm run package:verify
 ```
 
-The current archive is generated as `releases/greenlink-digital-bank-2.6.0.zip` with a SHA-256 companion and per-file manifest. It includes application source, the dependency lockfile, Python requirements, SQL migrations, tests, walkthroughs, workflow and delivery configuration. Private credentials, database files, installed dependencies and generated reports are excluded. Native database binaries and Python environments are installed separately.
+The current archive is generated as `releases/greenlink-digital-bank-2.7.0.zip` with a SHA-256 companion and per-file manifest. It includes application source, the dependency lockfile, Python requirements, SQL migrations, tests, walkthroughs, workflow and delivery configuration. Private credentials, database files, installed dependencies and generated reports are excluded. Native database binaries and Python environments are installed separately.
 
 ## Project map and responsibility boundary
 

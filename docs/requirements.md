@@ -21,6 +21,7 @@
 | Complete local feature-testing identities | Ten opt-in test users covering both roles, onboarding states, maker/checker, MFA and real screened financial/schedule examples | `dft-feature-accounts.test.js`, live browser checks and private walkthrough |
 | Automated verification and container delivery | Adapted GitHub Actions workflow, separate images, gated Compose integration and optional GHCR publishing | `docs/devops.md`, delivery secret tests and CI runs |
 | Reviewable application package | Locked dependencies, source allowlist and integrity checks | `dft-package.test.js` |
+| Private banking agent extensions | Fraud investigation, multi-step draft planning, liquidity projection, historical rule simulation and reconciliation; optional local Ollama tool loop | `dft-agents.test.js`, `dft-agents-browser.js`, `demo:agents`; no onboarding agent |
 
 Tests against PostgreSQL require `TEST_DATABASE_URL`; skipped cases are not acceptance evidence. Browser tests need a local Chrome-compatible browser. Python tests use the provided pinned test requirements.
 
