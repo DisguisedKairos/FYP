@@ -58,8 +58,8 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   await f.owner.query('INSERT INTO schema_migrations(name,checksum,applied_at) VALUES($1,$2,$3)', [latest.name, latest.checksum, latest.applied_at]);
   let report = await inspectDatabase(f.app);
   assert.equal(report.ready, true);
-  assert.equal(report.tables, 25);
-  assert.equal(report.migrations.length, 7);
+  assert.equal(report.tables, 28);
+  assert.equal(report.migrations.length, 8);
   assert.deepEqual(report.discrepancies, []);
   const denied = [
     'CREATE TABLE injected(id int)',
@@ -70,6 +70,10 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
     'DELETE FROM agent_runs',
     "UPDATE agent_tool_calls SET tool_name='forged'",
     'DELETE FROM agent_tool_calls',
+    'DELETE FROM fraud_screenings',
+    "UPDATE fraud_screenings SET evidence_json='{}'",
+    'DELETE FROM fraud_cases',
+    "UPDATE fraud_cases SET transaction_id='forged'",
     'DELETE FROM transactions',
     'UPDATE transactions SET amount_cents=amount_cents',
     'UPDATE accounts SET opening_balance_cents=0',

@@ -12,6 +12,7 @@ const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
 const { createAgents } = require('./banking/agents');
 const { createRiskClient } = require('./banking/risk');
+const fraudCases = require('./banking/fraud-cases');
 const { seedDemo } = require('./scripts/seed-demo');
 const { HttpError } = require('./models/errors');
 
@@ -167,6 +168,23 @@ async function createApplication(options = {}) {
     return { evaluation: await require('./banking/fraud-monitoring').modelEvaluation(db, req.banking.user, { days: query(req).get('days') ?? '30', now, activeModel: await riskClient.getModelInfo() }) };
   });
   route('get', '/api/fraud/reviews', async req => ({ reviews: await ledger.reviews(db, req.banking.user) }));
+  route('get', '/api/fraud/cases', req => fraudCases.list(db, req.banking.user, Object.fromEntries(query(req))));
+  route('get', '/api/fraud/cases/:id', async req => ({ case: await fraudCases.detail(db, req.banking.user, req.params.id) }));
+  route('get', '/api/fraud/analysis/:id', async req => ({ analysis: await fraudCases.analysis(db, req.banking.user, req.params.id) }));
+  route('post', '/api/fraud/scan', async req => {
+    ledger.requireAdmin(req.banking.user);
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).some(k => !['limit','transactionId'].includes(k))) throw new HttpError(400, 'Only a batch limit and optional outgoing transaction ID may be supplied.');
+    return { scan: await fraudCases.scan(db, riskClient, { actor: req.banking.user, now, force: true, limit: req.body.limit ?? 25, transactionId:req.body.transactionId ?? null, validateSession: async () => {
+      const current = await auth.load(req);
+      if (!current.user || String(current.user.id) !== String(req.banking.user.id)) throw new HttpError(401, 'Your session ended. Sign in again.');
+    } }) };
+  });
+  route('post', '/api/fraud/cases/:id/review', async req => {
+    ledger.requireAdmin(req.banking.user);
+    const { authorizationPassword, ...body } = req.body || {};
+    const authorization = body.action === 'close' ? await auth.authorize(req.banking.user, authorizationPassword, { ip: req.ip, purpose: 'fraud_case_review' }) : null;
+    return { case: await fraudCases.decide(db, req.banking.user, req.params.id, body, { now, authorization }) };
+  });
   route('post', '/api/fraud/reviews/:id', async req => ({ transaction: await ledger.review(db, req.banking.user, req.params.id, req.body, financialOptions(req)) }));
   route('post', '/api/assistant/messages', req => require('./banking/assistant').answer({ db, user: req.banking.user, body: req.body, now, notificationClient: { list: id => workflows.notifications(db, { id }) } }));
   route('get', '/api/agents/status', async () => ({ agent: await agents.status() }));
@@ -193,7 +211,14 @@ async function createApplication(options = {}) {
   const server = http.createServer(app);
   server.requestTimeout = 30000; server.headersTimeout = 15000;
   let activeJobs = null, timer, stopped = false;
-  server.runJobs = () => activeJobs || (activeJobs = (async () => ({ ...await workflows.runDue(db, { riskClient, now }), ...await workflows.dispatch(db, { now }) }))().finally(() => { activeJobs = null; }));
+  server.runJobs = () => activeJobs || (activeJobs = (async () => {
+    const schedules = await workflows.runDue(db, { riskClient, now });
+    // Surveillance outages must not stop durable notification delivery or schedules.
+    let monitoring;
+    try { monitoring = await fraudCases.scan(db, riskClient, { now }); }
+    catch { monitoring = { unavailable: true }; }
+    return { ...schedules, fraudMonitoring: monitoring, ...await workflows.dispatch(db, { now }) };
+  })().finally(() => { activeJobs = null; }));
   server.db = db; server.auth = auth; server.riskClient = riskClient; server.app = app;
   server.closeResources = async () => { stopped = true; clearInterval(timer); if (activeJobs) await activeJobs.catch(() => {}); await riskClient.close?.(); if (!options.db) await db.close(); };
   server.once('listening', () => {

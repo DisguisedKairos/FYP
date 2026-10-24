@@ -93,6 +93,10 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
     } catch { throw new HttpError(503, 'Transaction screening is unavailable. Your balance has not changed.'); }
   }
   async function getRules() { return db.transaction(client => readPolicy(client), { isolation: 'REPEATABLE READ', readOnly: true }); }
+  async function analyze(input) {
+    validateInput(input);
+    return validateModel(assessModel ? await assessModel(input) : (await call('/internal/assess', input)).risk, input);
+  }
   async function assess(input) {
     validateInput(input);
     const record = await db.transaction(async client => {
@@ -109,7 +113,7 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
     });
     if (record.result_json) return record.result_json;
     const bound = record.input_json, policy = record.policy_json;
-    const model = validateModel(assessModel ? await assessModel(bound) : (await call('/internal/assess', bound)).risk, bound);
+    const model = await analyze(bound);
     const matches = evaluateRules(policy.rules, bound);
     const decision = matches.some(reason => reason.action === 'block') ? 'block' : matches.length || model.decision === 'review' ? 'review' : 'allow';
     const result = { ...model, decision, score: decision === 'block' ? 95 : matches.length ? Math.max(70, model.score) : model.score, ruleVersion: policy.version,
@@ -160,7 +164,7 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
         pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } };
     }, { isolation: 'REPEATABLE READ', readOnly: true });
   }
-  return { assess, getRules, getAudit, updateRule, getModelInfo: async () => modelInfo || (await call('/internal/model')).model, close() {} };
+  return { assess, analyze, getRules, getAudit, updateRule, getModelInfo: async () => modelInfo || (await call('/internal/model')).model, close() {} };
 }
 
 module.exports = { createRiskClient, readPolicy, evaluateRules, validateInput, validateModel, sameBinding };

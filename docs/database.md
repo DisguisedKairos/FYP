@@ -13,7 +13,7 @@ The active application uses PostgreSQL exclusively through [`db.js`](../db.js) a
 | Migration login | `greenlink_owner` |
 | Native server files | `.local/postgresql/` (ignored, not shipped) |
 | Persistent data / server log | `data/postgresql/` / `data/postgresql.log` (ignored) |
-| Schema | 25 tables, seven checksum-verified migrations |
+| Schema | 28 tables, eight checksum-verified migrations |
 
 At verification on 24 October 2026, the existing three users, three accounts and 11 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The retired non-PostgreSQL stores have been removed after verifying a PostgreSQL backup in `data/backups/`. Only `data/postgresql` is active; the earlier stopped PostgreSQL cluster is an inactive reference copy. Existing business operators still need their own business profile and independent approval before financial writes.
 
@@ -108,6 +108,8 @@ erDiagram
 | `sessions`, `auth_attempts` | Hashed session tokens, expiration/revocation and durable login/authorization quotas |
 | `user_mfa`, `mfa_recovery_codes` | Encrypted authenticator secrets, replay counters and one-use hashed recovery codes |
 | `fraud_assessments`, `fraud_settings`, `fraud_rules`, `fraud_rule_audit` | Bound historical/model inputs, explainable scores, current policy version and independent rule audit |
+| `fraud_screenings`, `fraud_cases`, `fraud_monitor_state` | Append-only monitoring evidence, independent human investigation cases and a recoverable batch-worker lease |
+| `agent_runs`, `agent_tool_calls` | Private assistant reports, bounded draft context and append-only tool evidence |
 | `scheduled_payments`, `scheduled_payment_runs` | Recurrence, durable worker leases, retries and unique occurrence/receipt records |
 | `notification_outbox`, `notifications` | Atomic outgoing events and deduplicated in-app delivery/read status |
 | `audit_log` | Append-only application security/financial event records |

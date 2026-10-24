@@ -45,7 +45,7 @@ Use the ten identities and private initial password in `data/testing/FEATURE-TES
 
 ## Evidence, privacy and boundaries
 
-Migration `007_banking_agents.sql` adds `agent_runs` and append-only `agent_tool_calls`. The schema now has **25 tables and seven migrations**. Existing identity, balance and transaction records are preserved.
+Migration `007_banking_agents.sql` adds `agent_runs` and append-only `agent_tool_calls`. Version 2.9.0 also adds three [transaction-monitoring and human-review tables](fraud-monitoring.md), bringing the schema to **28 tables and eight migrations**. Existing identity, balance and transaction records are preserved.
 
 Reports, permitted tool arguments/results and structured draft context are saved privately in PostgreSQL. Raw user messages, model prompts and hidden reasoning are not stored by the banking service. A report may contain a generated paraphrase. Clearing a conversation clears browser messages; it does not remove evidence records. Report lists/detail endpoints are restricted to the initiating user, including for staff. Sensitive input is refused before creating a run.
 

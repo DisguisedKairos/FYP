@@ -15,9 +15,9 @@ async function run(base) {
       ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(15000) });
     if (response.headers.getSetCookie()[0]) cookie = response.headers.getSetCookie()[0].split(';')[0];
     const result = await response.json();
-    assert.equal(response.status, expected, `${pathname}: ${JSON.stringify(result)}`);
+    assert.ok([expected].flat().includes(response.status), `${pathname}: ${response.status} ${JSON.stringify(result)}`);
     if (result.csrfToken) csrf = result.csrfToken;
-    return result;
+    return { ...result, httpStatus: response.status };
   }
   assert.equal((await request('/health')).database, 'postgresql');
   await request('/api/dashboard', undefined, 401);
@@ -37,6 +37,17 @@ async function run(base) {
   assert.equal(evaluation.baseline.metrics.truePositive, 61);
   assert.equal(evaluation.temporal.synthetic, true);
   assert.equal(evaluation.monitoring.status, 'insufficient_data');
+  let scan;
+  for(let attempt=0;attempt<20;attempt++){
+    const response=await request('/api/fraud/scan', { transactionId: payment.id },[200,409]);
+    if(response.httpStatus===200){scan=response.scan;break;}
+    await new Promise(resolve=>setTimeout(resolve,250));
+  }
+  assert.ok(scan,'Monitoring batch should become available.');
+  assert.ok([0,1].includes(scan.modelAnalyzed)); // An automatic batch may already have analysed it.
+  const monitored = (await request('/api/fraud/analysis/' + payment.id)).analysis;
+  assert.ok(Number.isInteger(monitored.evidence.model.score));
+  assert.equal((await request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, source.balanceCents - 125);
   const history = await request('/api/transactions?q=Container%20integration%20transfer');
   assert.ok(history.transactions.some(t => t.id === payment.id));
   console.log('Container smoke passed: Nginx, authenticated banking, PostgreSQL, real Python scoring, atomic transfer, idempotency, history and fraud rules.');

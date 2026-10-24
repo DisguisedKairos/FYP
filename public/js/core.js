@@ -126,7 +126,8 @@ export function closeDialog(force = false) {
 export function clearBankingState() {
   ui.cancelReads?.();
   closeDialog(true);
-  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, assistant:null, agentWorkspace:null, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  modal.replaceChildren();
+  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
 }
 export async function recoverSession(error) {

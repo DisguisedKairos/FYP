@@ -23,7 +23,7 @@ test('A blocked migration in one schema does not block initialization of an inde
     let timer;
     try{await Promise.race([other.migrate(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('An unrelated schema migration blocked initialization.')),2500);})]);}
     finally{clearTimeout(timer);}
-    assert.equal(Number((await other.query('SELECT count(*) FROM schema_migrations')).rows[0].count),7);
+    assert.equal(Number((await other.query('SELECT count(*) FROM schema_migrations')).rows[0].count),8);
   }finally{
     await blocker.query('ROLLBACK');if(pending)await pending;await other.close();
     assert.match(schema,/^dft_[a-f0-9]{32}$/);await blocker.query(`DROP SCHEMA ${schema} CASCADE`);await blocker.end();

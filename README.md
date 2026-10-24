@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.8.0**
+**AI-Enabled Cloud-Native Digital Banking Platform | Version 2.9.0**
 
 Republic Polytechnic C300 Final Year Project based on **Green Link Digital Bank (GLDB)**, a digital wholesale bank. The application serves registered businesses and institutions through authorized business operators and bank staff. Screens and statements identify it as a student project using sample funds. See [branding sources](docs/branding.md) and [wholesale banking scope](docs/wholesale-banking.md).
 
@@ -21,6 +21,14 @@ The stack is **Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML an
 There are two permission roles: **`customer`** (authorized business operator) and **`admin`** (administrator). Registration creates a customer with a pending business application and a zero-balance savings record. Bank approval is required for account changes and sending/receiving payments. Each business currently has one primary operator.
 
 High-risk instructions are held or rejected without a debit; an independent administrator must authorize an approval. Scoring failures fail closed. The AI model is a reproducible **synthetic-data baseline**, not validated production fraud detection. The private assistant reads owned data and prepares form drafts; payments use the ordinary authorization flow. See [financial controls](docs/financial-controls.md) and [model documentation](docs/fraud-model.md).
+
+## AI suspicious-activity monitoring (2.9.0)
+
+Bank staff can now analyse recorded payments, including completed ones, and investigate a dedicated suspicious-activity queue. The private AI scorer, current rules and historical patterns produce saved explanations. Monitoring runs automatically in bounded batches; **Run AI scan** also supports a specific outgoing transaction ID. Independent reviewers claim cases and record a password-authorized outcome without changing payment balances or statuses.
+
+This release adds three PostgreSQL monitoring/case tables. Run `npm run db:migrate` before starting an existing checkout. Native records are preserved. See the [review workflow, safeguards and APIs](docs/fraud-monitoring.md), or run `npm run demo:fraud-monitor` for real Python scoring and a human-review example in an isolated schema.
+
+Verification: 164 Node functional/security tests, nine browser workflows and real Express/PostgreSQL/FastAPI integration. A real-scoring example produced a 91/100 AI flag and detected three smaller completed payments as an aggregate pattern; review left financial balances unchanged.
 
 ## AI evaluation and reliability (2.8.0)
 

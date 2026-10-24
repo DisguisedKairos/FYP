@@ -469,5 +469,14 @@ dialog.wide-dialog { width:900px; }
 .model-evaluation-panel .metadata-json { max-height:450px;overflow:auto;white-space:pre-wrap;word-break:break-word; }
 .assistant-evidence { margin-top:16px;font-size:12px;overflow-wrap:anywhere; }
 .assistant-evidence li { margin-top:10px; }
+.fraud-cases-panel { margin-bottom:24px;min-width:0;overflow-wrap:anywhere; }
+.fraud-cases-panel .section-heading { flex-wrap:wrap;gap:12px; }
+.fraud-cases-panel p { line-height:1.7; }
+.fraud-cases-panel .field { max-width:300px;margin:20px 0; }
+.fraud-cases-panel .table-scroll { max-width:100%;overflow:auto; }
+.fraud-cases-panel table { width:100%;border-collapse:collapse;text-align:left; }
+.fraud-cases-panel th,.fraud-cases-panel td { padding:14px 10px;border-bottom:1px solid var(--line);vertical-align:top; }
+.fraud-cases-panel td small { display:block;margin-top:6px; }
+.fraud-cases-panel .pagination { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px; }
 @media(max-width:1000px) { .agent-layout { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:500px) { .agent-metrics { grid-template-columns:minmax(0,1fr); }.agent-report { padding:16px; }.agent-report .section-heading { align-items:start;gap:12px;flex-wrap:wrap; } }

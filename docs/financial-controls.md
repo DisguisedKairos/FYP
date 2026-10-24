@@ -18,6 +18,8 @@ Approved deterministic rules apply independently of the model. Controls include 
 
 ## Schedules, notifications and statements
 
+The separate [suspicious-activity monitor](fraud-monitoring.md) can flag recorded payments, including completed ones, using the original AI input, current rules and historical patterns. Its findings are append-only; cases require an independent human reviewer, a current version and fresh password authorization for resolution. Cases never approve, reverse or change a payment. Missing historical context is labelled for manual review; scoring outages leave records unchecked for retry. Original transaction assessments remain unchanged.
+
 A schedule stores the authorized canonical instruction and next occurrence. Every occurrence has a stable key, processing lease, attempt count and terminal result. A transient dependency outage retries the same occurrence with bounded delay; a committed result is recovered after interruption without a second debit. Cancellation respects an occurrence that already committed. Past occurrences remain visible.
 
 Financial operations emit outbox events in their transaction. Delivery and notification insertion are atomic and deduplicated. Notification lists/acknowledgements are scoped to their owner. Notifications are in-app only.

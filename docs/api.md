@@ -38,6 +38,11 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | GET | `/api/fraud/rules/audit` | Admin paginated policy history |
 | GET | `/api/fraud/model` | Admin model provenance and evaluation |
 | GET | `/api/fraud/evaluation` | Staff-only model diagnostics and recent feature shift; optional `days=1..90` |
+| POST | `/api/fraud/scan` | Staff-only bounded monitoring scan; `{limit?:1..25,transactionId?}` |
+| GET | `/api/fraud/analysis/:id` | Staff-only saved monitoring analysis for an outgoing transaction |
+| GET | `/api/fraud/cases` | Staff-only suspicious cases, counts and scan status; `status`, `page` |
+| GET | `/api/fraud/cases/:id` | Case evidence and human-review audit history |
+| POST | `/api/fraud/cases/:id/review` | Claim `{action:"claim",version}` or resolve `{action:"close",version,outcome,reason,authorizationPassword}` |
 | GET | `/api/fraud/reviews` | Admin review queue |
 | POST | `/api/fraud/reviews/:id` | Independent admin `{decision,reason,authorizationPassword}` |
 
