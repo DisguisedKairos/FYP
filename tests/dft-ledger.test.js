@@ -203,3 +203,38 @@ pgTest('DFT a downstream database failure rolls back balances, both ledger sides
   assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type LIKE 'transaction.%'")).rows[0].count),0);
   assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type='ai.model_call'")).rows[0].count),1,'Completed AI evidence survives a rolled-back payment.');
 });
+
+
+pgTest('DFT a concurrently committed schedule claims its request key before payment screening', async t => {
+  let modelCalls=0;
+  const f=await setup(t,{assessModel:async input=>{modelCalls++;return modelResult(input);}}),body=f.body(),before=await f.total();
+  let interleaved=false;
+  const db={...f.db,query:async(sql,values)=>{
+    const result=await f.db.query(sql,values);
+    if(!interleaved && sql==='SELECT * FROM requests WHERE user_id=$1 AND request_id=$2'){
+      interleaved=true;
+      await require('../banking/workflows').createSchedule(f.db,f.owner,{...body,type:'transfer',frequency:'once',scheduledAt:'2027-01-02T04:00:00.000Z'},{authorize:authorized,now:f.options.now});
+    }
+    return result;
+  }};
+  await assert.rejects(ledger.submit(db,f.owner,'transfer',body,f.options),failure(409));
+  assert.equal(modelCalls,0,'A schedule already owns this key; no payment model call should run.');
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM payment_bindings')).rows[0].count),0);
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count),1);
+  assert.equal(await f.total(),before);
+});
+
+pgTest('DFT a payment completed during replay lookup returns its receipt without starting screening again',async t=>{
+  const f=await setup(t),body=f.body();let interleaved=false,receipt;
+  const db={...f.db,query:async(sql,values)=>{
+    const result=await f.db.query(sql,values);
+    if(!interleaved && sql==='SELECT * FROM requests WHERE user_id=$1 AND request_id=$2'){
+      interleaved=true;receipt=await ledger.submit(f.db,f.owner,'transfer',body,f.options);
+    }
+    return result;
+  }};
+  const result=await ledger.submit(db,f.owner,'transfer',body,{...f.options,riskClient:{assess:async()=>{throw new Error('A committed receipt needs no new screening.');}}});
+  assert.deepEqual(result,receipt);
+  assert.equal(await f.balance(f.source),997500);
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM requests')).rows[0].count),1);
+});

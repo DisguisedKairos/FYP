@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.11.2**
+**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.11.3**
 
 Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **local Ollama**. Sample funds, business checks and bill settlement are educational project flows.
 
@@ -12,7 +12,7 @@ Offline/parser engines, the logistic model and dataset, training/evaluation scri
 
 AI scores are qualitative indicators, not validated fraud probabilities. Deterministic financial rules, integer-cent calculations, database locks, password authorization and independent human review remain application controls. The model has no payment execution or rule-changing tool.
 
-Version 2.11.2 reserves scheduled payments as each starts, preserves full search queries, and prevents delayed profile/case responses and failed case searches from showing stale results. Unused imports, obsolete page URLs, an unconditional demo-login hint and the redundant database wrapper have been removed. Open **AI audit log** in the sidebar or **View AI audit** below an assistant response.
+Version 2.11.3 fixes payment retries during concurrent requests, prevents schedules and payments from claiming the same request key, and keeps fraud-case pagination within the available results. Staff notification links now open their saved investigations and leave a usable queue after closing the dialog. Open **AI audit log** in the sidebar or **View AI audit** below an assistant response.
 
 ## Features
 
@@ -96,6 +96,6 @@ npm run package
 npm run package:verify
 ~~~
 
-The source archive is releases/greenlink-digital-bank-2.11.2.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
+The source archive is releases/greenlink-digital-bank-2.11.3.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
 
 See [local banking agents](docs/banking-agents.md), [Ollama fraud contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md) and [APIs](docs/api.md).

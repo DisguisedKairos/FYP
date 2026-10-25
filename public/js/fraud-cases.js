@@ -25,6 +25,7 @@ export async function loadFraudCases({ status, direction = 0, render = true } = 
   try {
     const data = await api('/fraud/cases?' + new URLSearchParams(f));
     if (request !== generation || !sameId(state.user?.id, userId) || state.signingOut) return;
+    f.page = data.pagination.page;
     state.remote.fraudCases = { data };
   } catch (error) {
     if (request !== generation || !sameId(state.user?.id, userId)) return;

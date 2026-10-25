@@ -121,7 +121,7 @@ export function reviewSchedule(form) {
   if (!bill && values.description.length > 100) throw new Error('Use a transfer note of 100 characters or fewer.');
   if (bill) {
     values.reference = String(values.reference || '').trim();
-    if (values.reference.length < 3 || values.reference.length > 64) throw new Error('Enter a bill reference of 3?64 characters.');
+    if (values.reference.length < 3 || values.reference.length > 64) throw new Error('Enter a bill reference of 3 to 64 characters.');
   }
   if (!bill) {
     values.toAccountNumber = String(values.toAccountNumber).replace(/[\s-]/g,'');

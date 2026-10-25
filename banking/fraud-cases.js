@@ -122,10 +122,11 @@ async function list(db, actor, { status = 'active', page = '1' } = {}) {
   return db.transaction(async client => {
     const where = status === 'all' ? '' : status === 'active' ? "WHERE c.status<>'closed'" : 'WHERE c.status=$1', values = status === 'all' || status === 'active' ? [] : [status];
     const total = Number((await client.query('SELECT count(*) FROM fraud_cases c ' + where, values)).rows[0].count);
-    const rows = (await client.query(projection + ' ' + where + ` ORDER BY c.updated_at DESC,c.id LIMIT 20 OFFSET $${values.length + 1}`, [...values, (Number(page) - 1) * 20])).rows;
+    const totalPages = Math.ceil(total / 20), currentPage = Math.min(Number(page), Math.max(1, totalPages));
+    const rows = (await client.query(projection + ' ' + where + ` ORDER BY c.updated_at DESC,c.id LIMIT 20 OFFSET $${values.length + 1}`, [...values, (currentPage - 1) * 20])).rows;
     const counts = (await client.query("SELECT count(*) FILTER(WHERE status='open')::int AS open,count(*) FILTER(WHERE status='in_review')::int AS in_review,count(*) FILTER(WHERE status='closed')::int AS closed FROM fraud_cases")).rows[0];
     const state = (await client.query('SELECT last_started_at,last_completed_at,last_error,last_summary,lease_until FROM fraud_monitor_state WHERE id=1')).rows[0];
-    return { cases: rows.map(caseView), counts, pagination: { page: Number(page), total, totalPages: Math.ceil(total / 20) }, monitor: { lastStartedAt: state.last_started_at ? iso(state.last_started_at) : null, lastCompletedAt: state.last_completed_at ? iso(state.last_completed_at) : null, lastError: state.last_error, summary: state.last_summary, running: state.lease_until && new Date(state.lease_until).getTime() > Date.now() }, scope: 'All recorded outgoing internal transfers and bills, including completed, pending and rejected instructions. Incoming mirror credits are represented by their source payment.' };
+    return { cases: rows.map(caseView), counts, pagination: { page: currentPage, total, totalPages }, monitor: { lastStartedAt: state.last_started_at ? iso(state.last_started_at) : null, lastCompletedAt: state.last_completed_at ? iso(state.last_completed_at) : null, lastError: state.last_error, summary: state.last_summary, running: state.lease_until && new Date(state.lease_until).getTime() > Date.now() }, scope: 'All recorded outgoing internal transfers and bills, including completed, pending and rejected instructions. Incoming mirror credits are represented by their source payment.' };
   }, { isolation: 'REPEATABLE READ', readOnly: true });
 }
 async function detail(db, actor, id) {

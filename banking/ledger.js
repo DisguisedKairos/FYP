@@ -113,13 +113,17 @@ async function lockSender(client, userId) {
 }
 async function bind(db, user, key, kind, payload) {
   const payloadHash = canonicalHash(user.id, kind, payload), id = deterministicId(user.id, key);
-  await db.transaction(async client => {
+  const receipt = await db.transaction(async client => {
     await lockSender(client, user.id);
+    // Schedules and payments share a request namespace. Recheck after locking:
+    // another request may have committed since the optimistic replay lookup.
+    const completed = await replay(client, user.id, key, kind, payload);
+    if (completed) return completed;
     const previous = (await client.query('SELECT * FROM payment_bindings WHERE user_id=$1 AND request_id=$2', [user.id, key])).rows[0];
     if (previous) { if (previous.kind !== kind || previous.payload_hash !== payloadHash) throw new HttpError(409, 'This requestId is permanently bound to another payment payload.'); return; }
     await client.query('INSERT INTO payment_bindings(user_id,request_id,kind,payload_hash,canonical_json,assessment_id) VALUES($1,$2,$3,$4,$5,$6)', [user.id, key, kind, payloadHash, payload, id]);
   });
-  return { id, payloadHash };
+  return { id, payloadHash, receipt };
 }
 function validateAssessment(risk, input) {
   if (!risk || !sameBinding(risk, input) || !Number.isInteger(risk.score) || risk.score < 0 || risk.score > 100
@@ -158,6 +162,7 @@ async function submit(db, user, kind, body, options = {}) {
   const previous = await replay(db, user.id, key, requestKind, payload);
   if (previous) return previous;
   const binding = await bind(db, user, key, requestKind, payload);
+  if (binding.receipt) return binding.receipt;
   const initial = await resolve(db, user, kind, payload), requestedAt = clock(now);
   const input = { transactionId: binding.id, userId: String(user.id), sourceAccountId: payload.fromId, payloadHash: binding.payloadHash, type: kind,
     amountCents: payload.amountCents, payee: payload.number || payload.billerId, accountBalanceCents: cents(initial.source.balance_cents),

@@ -109,7 +109,15 @@ document.addEventListener('click',async event => {
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
     if (control.dataset.aiAuditId) { if(state.route.page!=='aiAudit')navigate('aiAudit'); return showAiAudit(control.dataset.aiAuditKind,control.dataset.aiAuditId); }
-    if (control.dataset.fraudCase) return openFraudCase(control.dataset.fraudCase);
+    if (control.dataset.fraudCase) {
+      if(state.route.page!=='fraud'){
+        navigate('fraud');
+        const route=state.route;
+        await loadExtras('fraud');
+        if(state.route!==route || modal.open)return;
+      }
+      return openFraudCase(control.dataset.fraudCase);
+    }
     if (control.dataset.claimFraudCase) return claimFraudCase(control);
     if (control.dataset.agentRun) { if(state.route.page!=='agents')navigate('agents'); return showAgentRun(control.dataset.agentRun); }
     if (control.dataset.investigateTransaction) return investigateFromQueue(control.dataset.investigateTransaction);

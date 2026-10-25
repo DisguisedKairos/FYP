@@ -150,3 +150,15 @@ pg('Resolved cases stay resolved on unchanged findings and reopen only for mater
   c = await caseFor(f, transaction.id); assert.equal(c.status, 'open'); assert.equal(c.outcome, null); assert.equal(c.assignedTo, null); assert.ok(result.reopened >= 1);
   assert.ok((await cases.detail(f.db, await actor(f.db), c.id)).events.some(e => e.type === 'fraud.case_closed'));
 });
+
+
+pg('Case pagination returns the last available page after the active queue shrinks',async t=>{
+  const f=await fixture(t,{assessModel:modelStub(80)}),transaction=await payment(f);
+  await scan(f,{transactionId:transaction.id});const reviewer=await actor(f.db);
+  const result=await cases.list(f.db,reviewer,{status:'active',page:'2'});
+  assert.equal(result.pagination.page,1);assert.equal(result.pagination.total,1);assert.equal(result.cases[0].transactionId,transaction.id);
+  const client=f.client();await client.login('reviewer@greenlink.demo');const path='/api/fraud/cases/'+result.cases[0].id+'/review';
+  const claimed=await client.request(path,{method:'POST',body:{action:'claim',version:result.cases[0].version}});assert.equal(claimed.status,200);
+  const closed=await client.request(path,{method:'POST',body:{action:'close',version:claimed.data.case.version,outcome:'legitimate',reason:'Independent business evidence was verified.',authorizationPassword:'Greenlink123!'}});assert.equal(closed.status,200);
+  const empty=await cases.list(f.db,reviewer,{status:'active',page:'2'});assert.deepEqual(empty.pagination,{page:1,total:0,totalPages:0});assert.deepEqual(empty.cases,[]);
+});

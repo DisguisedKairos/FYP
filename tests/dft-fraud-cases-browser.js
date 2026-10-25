@@ -55,3 +55,17 @@ test('Delayed fraud case reads and completed scans do not reopen dialogs after n
  assert.equal(await page.evaluate('document.querySelectorAll("[data-fraud-case]").length'),0,'A failed filter must not show cases from the previous selection.');
  await page.evaluate('window.fetch=window.originalCaseFetch');await page.click('[data-action=fraud-cases-retry]');await page.waitFor('!!document.querySelector("#fraud-case-filter") && document.querySelector("[data-fraud-cases]").textContent.includes("No cases match")');assert.deepEqual(page.errors,[]);
 });
+
+
+test('Staff notification links open the saved investigation and an outdated case page returns to available results',async t=>{
+  const f=await fixture(t,{assessModel:modelStub(80)}),client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
+  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:account.id,billerId:'pub',reference:'NOTIFICATION-CASE',amount:'1.00',requestId:randomUUID()}});assert.equal(paid.status,200);
+  await require('../banking/fraud-cases').scan(f.db,f.riskClient,{force:true,transactionId:paid.data.transaction.id});await require('../banking/workflows').dispatch(f.db);
+  const page=await launchChrome(t,{width:1280,height:900});await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');await page.fill('#email','reviewer@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');await page.click('[data-nav=notifications]');await page.waitFor('!!document.querySelector("[data-fraud-case]")');
+  await page.click('[data-fraud-case]');await page.waitFor('location.pathname==="/fraud-monitoring" && !!document.querySelector("#modal[open] [data-claim-fraud-case]")');
+  assert.ok((await page.evaluate('document.querySelector("#modal").textContent')).includes(paid.data.transaction.id));
+  await page.click('#modal [data-action=close-dialog]');await page.waitFor('!!document.querySelector("#fraud-case-filter")');
+  await page.evaluate("import('/js/fraud-cases.js').then(m=>m.loadFraudCases({direction:1}))");
+  assert.deepEqual(await page.evaluate("import('/js/core.js').then(m=>({page:m.state.fraudCaseFilters.page,visible:document.querySelectorAll('[data-fraud-case]').length}))"),{page:1,visible:1});
+  assert.match(await page.evaluate('document.querySelector("[data-fraud-cases] .pagination").textContent'),/Page 1 of 1/);assert.deepEqual(page.errors,[]);
+});
