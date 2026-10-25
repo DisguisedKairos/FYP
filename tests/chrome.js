@@ -82,10 +82,12 @@ class ChromePage {
   }
 
   async click(selector) {
-    await this.evaluate(`document.querySelector(${JSON.stringify(selector)})?.scrollIntoView({ block: 'center' })`);
     const locate = `(() => {
       const element = document.querySelector(${JSON.stringify(selector)});
       if (!element || element.disabled || element.closest('[inert]')) return null;
+      // Async page updates can replace the scrolled node. Reapply scrolling
+      // while locating it, keeping the same visibility and hit-target checks.
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
       const rect = element.getBoundingClientRect();
       const point = { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
       if (!rect.width || !rect.height || rect.x < 0 || rect.right > innerWidth + 1 || point.y < 0 || point.y > innerHeight) return null;
