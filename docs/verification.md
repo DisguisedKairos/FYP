@@ -1,10 +1,12 @@
-# DFT verification record - 2.10.0
+# DFT verification record - 2.10.1
 
-Verified locally on 25 October 2026 (Asia/Singapore): 165 Node functional/security tests, 21 Python contract/delivery tests and nine browser workflows passed. Syntax checks covered 82 JavaScript files. The suite uses controlled adapters only inside tests; production cannot select them.
+Verified locally on 25 October 2026 (Asia/Singapore): 167 Node functional/security tests, 21 Python contract/delivery tests and nine browser workflows passed. Syntax checks covered 82 JavaScript files. The suite uses controlled adapters only inside tests; production cannot select them.
 
-Real local qwen3.5:4b fraud inference returned 5 for a routine sample and 68 for a contrasting amount/velocity/balance-use sample. These are observed model outputs, not preset demonstration scores or validated fraud-performance metrics.
+The earlier 2.10.0 local qwen3.5:4b fraud comparison returned 5 for a routine sample and 68 for a contrasting amount/velocity/balance-use sample. These are observed model outputs, not preset demonstration scores or validated fraud-performance metrics.
 
 The real Express/PostgreSQL/FastAPI process check passed with installed Ollama. It exercised actual fraud scoring, assistant balance and draft tools, authorized transfers/bills, independent review, schedules, notifications, statements and rule audit. A held instruction is settled only through a separately authorized reviewer in that disposable fixture. When no model is installed, process/container checks instead verify explicit unavailability and unchanged balances.
+
+Patch regressions reproduced the prior failures before the fixes: incomplete/wrong-model assistant envelopes, expired conversation references trapped in retries, bill drafts accepted with undersized references, and missing incoming-receipt model provenance. All now pass. Incoming receipts retain provenance without copying sender history/context. The cancellation browser assertion also waits through the normal loading state instead of reading a missing card.
 
 The original native database retains 13 accounts and 28 ledger rows. Before the new runtime started, no standing schedules were due, and the account/transaction financial fingerprint remained c652e4b50bfa55035f5ae3cb3a6d6a65ab818b5120f73817e89f2405d1f8dac0. A verified private PostgreSQL backup was saved as data/backups/greenlink-before-ollama-20261025.dump. No account credentials, balances, old assessments or review decisions were reset.
 

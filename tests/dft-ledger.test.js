@@ -68,6 +68,7 @@ pgTest('DFT completed transfers atomically conserve value and persist both ledge
   assert.ok(records.every(row => row.completed_at && row.settlement_seq));
   assert.equal(records[0].reference, records[1].reference);
   assert.equal(records[1].risk_json.assessmentId, result.id);
+  for(const key of ['provider','modelName','modelScore','modelSha256','promptSha256'])assert.equal(records[1].risk_json[key],result.risk[key],`Incoming receipt must retain ${key} from its originating assessment.`);
   assert.equal(records[1].risk_json.context, undefined, 'Recipient must not receive sender behavioural aggregates.');
   assert.equal(Number((await f.db.query('SELECT count(*) FROM notification_outbox')).rows[0].count), 2);
   assert.equal(Number((await f.db.query('SELECT count(*) FROM audit_log')).rows[0].count), 1);

@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.10.0**
+**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.10.1**
 
 Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **local Ollama**. Sample funds, business checks and bill settlement are educational project flows.
 
@@ -11,6 +11,8 @@ Every new AI inference uses the configured installed Ollama model, currently **q
 Offline/parser engines, the logistic model and dataset, training/evaluation scripts, synthetic accuracy/calibration screens and old fraud demonstrations have been removed. No alternative model or preset score is used when Ollama fails. Historical PostgreSQL evidence remains available for audit and is excluded from current-model activity totals.
 
 AI scores are qualitative indicators, not validated fraud probabilities. Deterministic financial rules, integer-cent calculations, database locks, password authorization and independent human review remain application controls. The model has no payment execution or rule-changing tool.
+
+Version 2.10.1 rejects incomplete or wrong-model assistant responses, lets expired conversations restart safely, aligns bill-draft reference validation with payment forms, and preserves model provenance on incoming transfer receipts.
 
 ## Features
 
@@ -86,6 +88,6 @@ npm run package
 npm run package:verify
 ~~~
 
-The source archive is releases/greenlink-digital-bank-2.10.0.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
+The source archive is releases/greenlink-digital-bank-2.10.1.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
 
 See [local banking agents](docs/banking-agents.md), [Ollama fraud contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md) and [APIs](docs/api.md).

@@ -20,14 +20,17 @@ function createLocalModel({ mode=process.env.AGENT_MODE || 'ollama', model=proce
     try{
       const info=await request('/api/show',{model},AbortSignal.timeout(3000));
       const local=!info.remote_model && !info.remote_host;
-      const tools=Array.isArray(info.capabilities) && info.capabilities.includes('tools');
+      const tools=Array.isArray(info.capabilities) && info.capabilities.every(c=>typeof c==='string') && info.capabilities.includes('completion') && info.capabilities.includes('tools');
       return {mode,configured:true,available:local&&tools,model,localOnly:true,reason:!local?'Remote models are refused.':!tools?'The model must support tool calling.':null};
     }catch{return {mode,configured:true,available:false,model,localOnly:true,reason:'Start Ollama and install the configured tool-capable model.'};}
   }
   async function chat(messages,tools,{signal}={}){
     const data=await request('/api/chat',{model,messages,tools,stream:false,think:false,options:{temperature:0,num_ctx:8192,num_predict:700},keep_alive:'10m'},signal || AbortSignal.timeout(25000));
+    const object=value=>value!==null && typeof value==='object' && !Array.isArray(value);
+    const invalid=()=>new HttpError(503,'The local model returned an invalid or incomplete response. Retry the request.');
+    if(!object(data) || Object.hasOwn(data,'error') || data.done!==true || data.done_reason!=='stop' || ![model,`${model}:latest`].includes(data.model))throw invalid();
     const message=data.message;
-    if(!message || message.role!=='assistant' || typeof message.content!=='string' || message.content.length>12000 || (message.tool_calls!==undefined && (!Array.isArray(message.tool_calls)||message.tool_calls.length>4)))throw new HttpError(503,'The local model returned an invalid response.');
+    if(!object(message) || message.role!=='assistant' || typeof message.content!=='string' || message.content.length>12000 || (message.tool_calls!==undefined && (!Array.isArray(message.tool_calls)||message.tool_calls.length>4 || message.tool_calls.some(c=>!object(c) || !object(c.function) || typeof c.function.name!=='string' || !/^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(c.function.name) || !(object(c.function.arguments) || typeof c.function.arguments==='string')))))throw invalid();
     return {role:'assistant',content:message.content,...(message.tool_calls?.length?{tool_calls:message.tool_calls}: {})};
   }
   return {mode,model,inspect,chat};

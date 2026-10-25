@@ -29,7 +29,7 @@ async function prepareDraft(db,user,input,{now=Date.now}={}) {
     const billers=(await db.query('SELECT id,name FROM billers')).rows;
     if(!draft.billerId)missing.push('biller');else if(!billers.some(b=>b.id===draft.billerId))throw new HttpError(400,'Choose a supported biller.');
     if(!draft.reference)missing.push('billing reference');
-    else if(!/^[A-Za-z0-9 _./-]{1,64}$/.test(draft.reference))throw new HttpError(400,'Enter a valid billing reference.');
+    else if(!/^[A-Za-z0-9 _./-]{3,64}$/.test(draft.reference))throw new HttpError(400,'Enter a billing reference of 3-64 characters.');
   }
   if(draft.kind==='schedule'){
     if(!draft.scheduledAt)missing.push('future date and time');

@@ -82,7 +82,10 @@ export async function sendAssistant(message,{retry=false}={}) {
   } catch(error) {
     if(request!==generation || error.status===-1 || state.assistant!==t || !state.user || state.signingOut || !sameId(state.user.id,userId))return;
     if(await recoverSession(error))return;
-    t.error=error.message;
+    if(error.code==='ASSISTANT_CONTEXT_EXPIRED'){
+      t.previousRunId=null;
+      t.error='This conversation expired. Try again to start a fresh request; previous draft details will not be reused.';
+    }else t.error=error.message;
   } finally {
     if(request===generation && state.assistant===t){t.busy=false;renderThread();}
   }

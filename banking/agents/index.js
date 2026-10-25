@@ -91,7 +91,10 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
         if(typeof body.previousRunId!=='string')throw new HttpError(400,'Invalid conversation reference.');
         const saved=(await db.query("SELECT context_json,auth_version,created_at FROM agent_runs WHERE id=$1 AND user_id=$2 AND kind='assistant' AND status='completed'",[body.previousRunId,user.id])).rows[0];
         if(!saved)throw new HttpError(404,'Conversation reference not found.');
-        if(saved.auth_version!==actor.auth_version || now()-new Date(saved.created_at).getTime()>15*60000)throw new HttpError(409,'The draft conversation expired. Start a new request.');
+        if(saved.auth_version!==actor.auth_version || now()-new Date(saved.created_at).getTime()>15*60000){
+          const error=new HttpError(409,'The draft conversation expired. Start a new request.');
+          error.code='ASSISTANT_CONTEXT_EXPIRED';throw error;
+        }
         previous=saved.context_json;
       }
     }

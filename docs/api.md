@@ -80,3 +80,5 @@ Errors return `{error}` with an appropriate HTTP status. MFA login challenges ad
 ## Private scoring contract
 
 The local Python model exposes `/internal/health`, `/internal/model` and `POST /internal/assess` on its separate loopback address. Every endpoint requires `Authorization: Bearer <SERVICE_TOKEN>`. Express never serves those private routes publicly. Assessment input binds `transactionId,userId,sourceAccountId,payloadHash,type,amountCents,payee,accountBalanceCents,isInternal,createdAt` and a validated `historySummary`. The scorer returns the same bindings with bounded score, decision, seven features, historical context, reasons and model provenance. It owns no ledger writes or fraud-rule administration.
+
+Assistant continuation expiry returns HTTP 409 with `code: ASSISTANT_CONTEXT_EXPIRED`. Clients must discard the expired reference and allow an explicit fresh request; they must not reuse the previous draft context.

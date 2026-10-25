@@ -140,7 +140,8 @@ async function settle(client, user, payload, resolved, transactionId, reference,
   if (resolved.target) {
     await client.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1', [resolved.target.id, payload.amountCents]);
     const incomingId = randomUUID();
-    const associated = { score: risk.score, decision: risk.decision, modelVersion: risk.modelVersion, ruleVersion: risk.ruleVersion,
+    const associated = { provider: risk.provider, modelName: risk.modelName, modelScore: risk.modelScore, modelSha256: risk.modelSha256, promptSha256: risk.promptSha256,
+      score: risk.score, decision: risk.decision, modelVersion: risk.modelVersion, ruleVersion: risk.ruleVersion,
       assessedAt: risk.assessedAt, assessmentId: transactionId, reasons: [{ code: 'associated_transfer', message: 'Screened with the originating transfer.', contribution: 0 }] };
     await client.query(`INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq,payee,risk_json)
       VALUES($1,$2,'transfer',$3,$4,$5,'completed',$6,$7,$8,$8,$8,nextval('settlement_sequence'),$9,$10)`,

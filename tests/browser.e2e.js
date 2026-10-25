@@ -201,7 +201,7 @@ test('mobile navigation, payment review, schedules and notifications fit a 390 p
     await submit(page, '#schedule-form'); await page.waitFor(exists('#confirm-schedule-form'), 'schedule review');
     await page.fill('#authorizationPassword', 'Greenlink123!'); await submit(page, '#confirm-schedule-form');
     await page.waitFor(exists('.schedule-card'), 'authorized schedule saved'); await page.click('[data-cancel-schedule]'); await submit(page, '#cancel-schedule-form');
-    await page.waitFor('document.querySelector(".schedule-card").textContent.toLowerCase().includes("cancelled")', 'schedule cancelled');
+    await page.waitFor('document.querySelector(".schedule-card")?.textContent.toLowerCase().includes("cancelled")', 'schedule cancelled');
     await nav(page, 'notifications'); await page.waitFor(exists('.notification-item.unread'), 'delivered notification'); await layout(page, 'mobile notifications');
     await page.click('[data-action="notifications-read-all"]'); await page.waitFor('!document.querySelector(".notification-item.unread")', 'notifications acknowledged');
     await nav(page, 'activity'); await layout(page, 'mobile activity filters'); await page.select('#transaction-type', 'bill'); await page.fill('#transaction-search', 'MOBILE123');

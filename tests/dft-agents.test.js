@@ -255,3 +255,32 @@ pg('Failed optional model wording repair retains authoritative evidence and with
   assert.equal(result.narrativeWithheld,true);assert.equal(result.items[0].amountCents,120000);
   assert.ok(!result.reply.includes('999999'));assert.equal((await f.db.query('SELECT status FROM agent_runs WHERE id=$1',[result.runId])).rows[0].status,'completed');
 });
+
+
+test('Local model adapter validates model identity, completed generation and tool response shape',async()=>{
+  const complete={model:'test-local',done:true,done_reason:'stop',message:{role:'assistant',content:'Use the recorded evidence.'}};
+  const ask=(body,model='test-local')=>createLocalModel({model,fetchImpl:async()=>new Response(JSON.stringify(body))}).chat([],[]);
+  assert.equal((await ask(complete)).content,complete.message.content);
+  assert.equal((await ask({...complete,model:'test-local:latest'})).role,'assistant');
+  const tool={function:{name:'get_accounts',arguments:{}}};
+  assert.deepEqual((await ask({...complete,message:{role:'assistant',content:'',tool_calls:[tool]}})).tool_calls,[tool]);
+  for(const response of [null,[],{...complete,model:'different-local-model'},{...complete,done:false},
+    {...complete,done_reason:'length'},{...complete,done:undefined},{...complete,error:'generation failed'},
+    {...complete,message:{role:'assistant',content:'',tool_calls:[null]}},
+    {...complete,message:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:[]}}]}}]){
+    await assert.rejects(ask(response),e=>e.status===503,JSON.stringify(response));
+  }
+});
+
+
+pg('Bill drafts hand off only valid billing references without creating financial instructions',async t=>{
+  const f=await fixture(t,{http:false}),user=(await actors(f.db)).jamie;
+  const {prepareDraft}=require('../banking/agents/drafts'),before=await financialSnapshot(f.db);
+  for(const reference of ['A','AB'])await assert.rejects(prepareDraft(f.db,user,{kind:'bill',billerId:'pub',reference,amount:'10.00'}),e=>e.status===400);
+  const result=await prepareDraft(f.db,user,{kind:'bill',billerId:'pub',reference:'INV-123',amount:'10.00'});
+  assert.equal(result.complete,true);assert.equal(result.actions[0].type,'draft_payment');
+  const canonical=require('../banking/ledger').normalize('bill',result.actions[0].draft);
+  assert.equal(canonical.reference,'INV-123');assert.equal(canonical.amountCents,1000);
+  assert.deepEqual(await financialSnapshot(f.db),before);
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM payment_bindings')).rows[0].count),0);
+});
