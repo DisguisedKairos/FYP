@@ -77,3 +77,21 @@ pg('Unsafe model prose records the rejected narrative outcome and bounded repair
  const r=await post(client,'What is my balance?');assert.equal(r.status,200);assert.equal(r.data.narrativeWithheld,true);
  const d=(await get(client,'agent',r.data.runId)).data.record;assert.equal(d.evidence.guardrails.narrative,'withheld');assert.ok(d.evidence.guardrails.reason);assert.ok(d.modelCalls.some(c=>c.phase==='narrative_repair'));assert.doesNotMatch(JSON.stringify(d),/999999/);assert.equal(d.evidence.tools[0].tool,'get_accounts');
 });
+
+pg('Payment audit retains initial screening but reflects stricter controls applied before settlement',async t=>{
+ const f=await fixture(t),{own,staff}=await clients(f),original=f.riskClient.assess,reviewer=(await f.db.query("SELECT id,role,auth_version FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];
+ f.riskClient.assess=async input=>{const result=await original(input);await f.riskClient.updateRule('high_value',{version:1,threshold:0.5,action:'block'},reviewer);return result;};
+ const before=await balances(f.db),id=await payment(own);assert.equal(await balances(f.db),before);
+ for(const client of [own,staff]){const d=(await get(client,'payment',id)).data.record;assert.equal(d.evidence.paymentStatus,'rejected');assert.equal(d.evidence.assessment.decision,'allow','The initial assessment must remain immutable evidence.');assert.equal(d.evidence.policySnapshot.version,1);assert.equal(d.evidence.decisionSummary.decision,'block');assert.equal(d.evidence.decisionSummary.combinedScore,95);assert.ok(d.evidence.decisionSummary.ruleMatches.some(r=>r.code==='rule:high_value'));assert.equal(d.evidence.paymentRisk.currentRuleVersion,2);assert.equal(d.evidence.guardrails.payloadBinding,true);
+ const rows=(await client.request('/api/ai-audit?type=payment&q='+id)).data.entries;assert.equal(rows[0].decision,'block');}
+});
+
+pg('Fraud investigation and monitoring retain the recorded payment block after a later policy change',async t=>{
+ const f=await fixture(t),{own}=await clients(f),original=f.riskClient.assess,reviewer=(await f.db.query("SELECT id,role,auth_version FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];
+ f.riskClient.assess=async input=>{const r=await original(input);await f.riskClient.updateRule('high_value',{version:1,threshold:0.5,action:'block'},reviewer);return r;};
+ const id=await payment(own),brief=await require('../banking/agents/reports').investigation(f.db,reviewer,{transactionId:id});
+ await f.riskClient.updateRule('high_value',{version:2,enabled:false},reviewer);
+ const before=await balances(f.db);await require('../banking/fraud-cases').scan(f.db,f.riskClient,{actor:reviewer,force:true,transactionId:id});
+ const analysis=await require('../banking/fraud-cases').analysis(f.db,reviewer,id);
+ assert.deepEqual({investigationDecision:brief.assessment.decision,investigationPolicyVersion:brief.assessment.policyVersion,monitoringDecision:analysis.evidence.original.decision,recordedBlockFlag:analysis.evidence.signals.some(s=>s.code==='original_block'),flagged:analysis.evidence.flagged},{investigationDecision:'block',investigationPolicyVersion:2,monitoringDecision:'block',recordedBlockFlag:true,flagged:true});assert.equal(await balances(f.db),before);
+});

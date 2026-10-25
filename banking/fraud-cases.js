@@ -6,7 +6,7 @@ const { assertActor } = require('./agents/reports');
 const { readPolicy, evaluateRules } = require('./risk');
 const { enqueue, assertAuthorization } = require('./ledger');
 const iso = value => new Date(value).toISOString();
-const VERSION = 'surveillance-v2-ollama';
+const VERSION = 'surveillance-v3-ollama';
 const reviewCodes = new Set(['confirmed_fraud', 'legitimate', 'inconclusive']);
 function batchSize(value = 25) { if (!Number.isInteger(value) || value < 1 || value > 25) throw new HttpError(400, 'Scan between 1 and 25 payments per batch.'); return value; }
 function signal(code, message, source) { return { code, message, source }; }
@@ -14,7 +14,7 @@ function bindingMatches(input, row) {
   return input && input.transactionId === row.id && input.userId === String(row.user_id) && input.sourceAccountId === String(row.account_id) && input.amountCents === -Number(row.amount_cents) && input.type === row.type && input.payee === row.payee && input.isInternal === row.internal && Date.parse(input.createdAt) === new Date(row.requested_at).getTime();
 }
 function finding(row, { model = null, policy, prior, now = Date.now } = {}) {
-  const signals = [], amount = -Number(row.amount_cents), original = row.result_json || row.risk_json;
+  const signals = [], amount = -Number(row.amount_cents), original = row.risk_json || row.result_json;
   if (['review', 'block'].includes(original?.decision)) signals.push(signal('original_' + original.decision, 'The original payment screening requested ' + (original.decision === 'block' ? 'a block' : 'independent review') + '.', 'recorded_screening'));
   if (model?.modelScore >= 65) signals.push(signal('ai_risk', 'The AI model identified an unusual transaction pattern above its review threshold.', 'ollama_ai'));
   let matched = [];

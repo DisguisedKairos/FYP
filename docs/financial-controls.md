@@ -34,6 +34,10 @@ The functional/security suites test concurrency, rollback, idempotency, independ
 
 ## Agent boundaries
 
-The 2.7.0 agent layer has read/report and form-draft tools only. Tools repeat role/ownership checks; HTTP tasks recheck their session and all tasks recheck the security version before returning results. Local Ollama is optional and isolated from the fraud-scoring service. There is no agent tool for SQL, shell access, settlement, transaction decisions, rule changes or repairing balances.
+The 2.7.0 agent layer has read/report and form-draft tools only. Tools repeat role/ownership checks; HTTP tasks recheck their session and all tasks recheck the security version before returning results. The assistant and private FastAPI fraud-scoring gateway require the configured local Ollama model for inference. Banking reads remain available without it. There is no agent tool for SQL, shell access, settlement, transaction decisions, rule changes or repairing balances.
 
 Numerical facts are rendered from authoritative tool results. Generated numerical claims and unauthorized execution claims are withheld. Qualitative interpretations remain subject to reviewer verification. Historical rule simulations never alter policies, and liquidity projections include assumptions rather than guaranteed funds. Existing password authorization, independent review, binding keys and settlement guardrails apply to every draft completed through banking forms. See [agent controls and evidence](banking-agents.md).
+
+## Recorded decisions and subsequent rule changes
+
+The original fraud assessment and policy snapshot remain evidence of pre-payment screening. Settlement may apply stricter current controls and record a different risk decision, score and rule version on the payment. AI audit, fraud investigation and monitoring use that recorded payment decision while retaining the initial assessment separately. Later policy changes cannot erase a recorded review/block signal. A human approval changes the payment lifecycle status and adds independent review evidence; it does not rewrite the original risk decision.

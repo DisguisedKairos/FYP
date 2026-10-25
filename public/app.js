@@ -1,4 +1,4 @@
-import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit} from './js/ai-audit.js';
+import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
 import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
@@ -214,7 +214,7 @@ document.addEventListener('keydown',event => {
   }
 });
 modal.addEventListener('cancel',event => { if (state.modalBusy) event.preventDefault(); });
-modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); clearSecuritySecrets(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
+modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); cancelAiAuditDetail(); clearSecuritySecrets(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
 modal.addEventListener('click',event => {
   if (event.target !== modal || state.modalBusy) return;
   const bounds = modal.getBoundingClientRect();

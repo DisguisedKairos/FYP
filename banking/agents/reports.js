@@ -87,11 +87,11 @@ async function investigation(db, user, { transactionId, now = Date.now } = {}) {
     const prior = (await client.query(`SELECT count(*)::int AS count,COALESCE(avg(-amount_cents),0)::text AS average,
       count(*) FILTER (WHERE payee=$3)::int AS same_payee,COALESCE(max(-amount_cents),0)::text AS maximum
       FROM transactions WHERE account_id=$1 AND amount_cents<0 AND status='completed' AND completed_at<$2 AND id<>$4`, [row.account_id,row.requested_at,row.payee,row.id])).rows[0];
-    const risk = assessment?.result_json || row.risk_json;
+    const risk = row.risk_json || assessment?.result_json;
     const reasons = (risk?.reasons || []).map(r => typeof r === 'string' ? r : r.message).filter(Boolean);
     const average = Math.round(Number(prior.average));
     return { title: 'Fraud investigation brief', generatedAt: iso(now()), transaction: { id: row.id, accountSuffix: row.number.slice(-4), business: row.legal_name || 'Business profile required', amountCents: -amount(row.amount_cents), status: row.status, requestedAt: iso(row.requested_at), counterparty: row.counterparty },
-      assessment: { available: Boolean(risk), modelScore: risk?.modelScore ?? null, combinedScore: risk?.score ?? null, scoreScale:100, decision: risk?.decision || 'unavailable', modelVersion: risk?.modelVersion || null, policyVersion: assessment ? Number(assessment.policy_version) : risk?.ruleVersion || null, reasons },
+      assessment: { available: Boolean(risk), modelScore: risk?.modelScore ?? null, combinedScore: risk?.score ?? null, scoreScale:100, decision: risk?.decision || 'unavailable', modelVersion: risk?.modelVersion || null, policyVersion: risk?.currentRuleVersion || risk?.ruleVersion || (assessment ? Number(assessment.policy_version) : null), initialPolicyVersion: assessment ? Number(assessment.policy_version) : null, reasons },
       history: { priorCompletedOutgoing: prior.count, averageCents: average, maximumCents: amount(prior.maximum), samePayeeCount: prior.same_payee, amountMultiple: average > 0 ? Number((-Number(row.amount_cents)/average).toFixed(2)) : null },
       findings: [...reasons, ...(prior.same_payee === 0 ? ['No earlier completed outgoing payment to this payee was found on the source account.'] : []), ...(!prior.count ? ['Insufficient completed history for a reliable behavioral comparison.'] : [])],
       nextSteps: ['Verify the business purpose and recipient through an independent channel.', 'Inspect the linked receipt and evidence before making a bank review decision.', 'Use the existing independent review screen; this brief does not approve, reject or prove fraud.'],

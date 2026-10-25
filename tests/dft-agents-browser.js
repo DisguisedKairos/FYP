@@ -100,7 +100,7 @@ test('AI audit supports mobile search, model timeline, owned tool evidence and J
  await page.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath});
  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant [data-ai-audit-id]")');
  const runId=await page.evaluate('document.querySelector(".from-assistant [data-ai-audit-id]").dataset.aiAuditId');
- await page.click('.from-assistant [data-ai-audit-id]');await page.waitFor('location.pathname==="/ai-audit" && document.querySelector("#modal").open');
+ await page.click('.from-assistant [data-ai-audit-id]');await page.waitFor('location.pathname==="/ai-audit" && !!document.querySelector("#modal .ai-audit-timeline")');
  assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/Model request timeline/);assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/get_accounts/);assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/not a transcript of hidden model thoughts/);
  assert.ok(await page.evaluate('document.querySelectorAll(".ai-audit-timeline li").length>=3'));assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
  await page.click('[data-action="ai-audit-download"]');
@@ -111,4 +111,21 @@ test('AI audit supports mobile search, model timeline, owned tool evidence and J
  assert.equal(await page.evaluate('document.querySelector("[data-ai-audit-id]").dataset.aiAuditId'),runId);
  await page.fill('#ai-audit-query','NO-SUCH-AUDIT-RECORD');await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector(".empty-state")?.textContent.includes("No matching AI records")');
  await page.screenshot(path.resolve('test-results','ai-audit-mobile.png'));assert.deepEqual(page.errors,[]);
+});
+
+
+async function auditFixture(t){const opened=await open(t,1280,'jamie@greenlink.demo'),client=opened.f.client();await client.login('jamie@greenlink.demo');const run=await client.request('/api/agents/assistant',{method:'POST',body:{message:'What is my balance?'}});assert.equal(run.status,200);await visit(opened.page,opened.f.baseUrl,'/ai-audit');await opened.page.waitFor('!!document.querySelector("[data-ai-audit-id]")');return {...opened,runId:run.data.runId};}
+test('AI audit does not reopen dismissed details after leaving and returning to the page',async t=>{
+ const {page,runId}=await auditFixture(t);
+ await page.evaluate("window.auditOriginalFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.auditOriginalFetch(...args);if(String(args[0]).includes('/api/ai-audit/agent/')){const body=await response.text();await new Promise(resolve=>window.releaseAuditDetail=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+ await page.evaluate("import('/js/ai-audit.js').then(m=>{window.pendingAuditDetail=m.showAiAudit('agent',"+JSON.stringify(runId)+");return true;})");await page.waitFor('typeof window.releaseAuditDetail==="function"');
+ if(await page.evaluate('document.querySelector("#modal").open'))await page.click('[data-action="close-dialog"]');
+ await page.click('[data-nav="overview"]');await page.click('[data-nav="aiAudit"]');await page.waitFor('!!document.querySelector("[data-ai-audit-count]")');
+ await page.evaluate('window.releaseAuditDetail();window.pendingAuditDetail');
+ assert.equal(await page.evaluate('document.querySelector("#modal").open'),false,'A stale detail response must not reopen the dialog after navigation.');assert.deepEqual(page.errors,[]);
+});
+test('AI audit failed searches do not display the previous query results',async t=>{
+ const {page}=await auditFixture(t);await page.evaluate("window.auditOriginalFetch=window.fetch;window.fetch=(...args)=>String(args[0]).includes('/api/ai-audit?')?Promise.resolve(new Response(JSON.stringify({error:'Audit search temporarily unavailable.'}),{status:503,headers:{'Content-Type':'application/json'}})):window.auditOriginalFetch(...args);");
+ await page.fill('#ai-audit-query','NONEXISTENT-NEW-QUERY');await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector(".ai-audit-panel .error-message")?.textContent.includes("temporarily unavailable")');
+ assert.equal(await page.evaluate('document.querySelectorAll("[data-ai-audit-id]").length'),0,'Results from the previous query must be hidden after a failed search.');assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-count]")'),false);assert.deepEqual(page.errors,[]);
 });
