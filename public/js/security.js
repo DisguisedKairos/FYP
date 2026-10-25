@@ -1,10 +1,12 @@
 import { modal, state, ui, api, esc, icon, dialog, formBusy, formError, toast, recoverSession } from './core.js';
 
+let profileGeneration=0,profileController;
 const passwordField = (id, name, label, { fresh = false } = {}) => `<div class="field"><label for="${id}">${label}</label><div class="password-wrap"><input id="${id}" name="${name}" type="password" autocomplete="${fresh ? 'new-password' : 'current-password'}" maxlength="128" ${fresh ? 'minlength="8" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,128}"' : ''} required><button type="button" class="password-toggle" data-action="password" data-input="${id}" aria-label="Show password" aria-pressed="false">${icon('eye')}</button></div>${fresh ? '<small>8–128 characters, with uppercase, lowercase and a number.</small>' : ''}</div>`;
 const otpField = () => '<div class="field"><label for="security-otp">Authenticator code</label><input id="security-otp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" required><small>Use a current six-digit code. Each code can be used only once.</small></div>';
 const submit = label => `<div class="error-message" role="alert"></div><button type="submit" class="button full">${label} ${icon('shield')}</button>`;
 
 export function clearSecuritySecrets() {
+  profileGeneration++;profileController?.abort();
   if (modal.dataset.securitySecret === 'true') {
     delete modal.dataset.securitySecret;
     modal.innerHTML = '';
@@ -19,11 +21,21 @@ function securityDialog(title, body, { secret = false } = {}) {
 
 export async function profileDialog({ refresh = true } = {}) {
   const userId = state.user?.id;
-  if (!userId) return;
+  if (!userId || state.signingOut) return;
+  const route=state.route,request=++profileGeneration;profileController?.abort();
   if (refresh) {
-    const result = await api('/auth/security');
-    if (!state.user || state.user.id !== userId || state.signingOut) return;
-    state.user.mfaEnabled = Boolean(result.security.mfaEnabled);
+    profileController=new AbortController();
+    securityDialog('Your profile and security','<div class="loading-state" role="status"><p>Loading profile security...</p></div>');
+    const token='profile:'+request;modal.dataset.detailRequest=token;
+    const active=()=>request===profileGeneration && state.route===route && state.user?.id===userId && !state.signingOut && modal.open && modal.dataset.detailRequest===token;
+    try{
+      const result = await api('/auth/security',undefined,'GET',{signal:profileController.signal});
+      if(!active())return;
+      state.user.mfaEnabled = Boolean(result.security.mfaEnabled);
+    }catch(error){
+      if(active() && error.status!==-1 && !await recoverSession(error))securityDialog('Profile unavailable.','<p>'+esc(error.message)+'</p><button type="button" class="button secondary" data-action="close-dialog">Done</button>');
+      return;
+    }
   }
   securityDialog('Your profile and security', `<div class="profile-card"><span class="avatar">${esc(state.user.name[0])}</span><div><h3>${esc(state.user.name)}</h3><p>${esc(state.user.email)}</p></div></div><dl class="review-list"><div><dt>Access</dt><dd>${state.user.role === 'admin' ? 'Bank operations administrator' : 'Authorized business operator'}</dd></div><div><dt>Authenticator</dt><dd>${state.user.mfaEnabled ? 'Enabled' : 'Not enabled'}</dd></div><div><dt>Session lifetime</dt><dd>30 minutes inactive<small>24 hours maximum</small></dd></div></dl><div class="detail-section"><h3>Keep your account secure</h3><p>Update your password or sign out every active device. An authenticator adds a code to your sign-in password.</p><div class="modal-actions"><button type="button" class="button secondary" data-action="security-password">Change password</button><button type="button" class="button secondary" data-action="security-revoke">Sign out all devices</button></div><button type="button" class="button full secondary" data-action="${state.user.mfaEnabled ? 'security-mfa-disable' : 'security-mfa-setup'}">${state.user.mfaEnabled ? 'Disable authenticator' : 'Set up authenticator'} ${icon('shield')}</button></div>`);
 }

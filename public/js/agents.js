@@ -1,4 +1,4 @@
-import { state, ui, api, esc, icon, money, fullDate, sameId, recoverSession, navigate } from './core.js';
+import { state, ui, api, esc, icon, money, fullDate, sameId, recoverSession, navigate, modal } from './core.js';
 import { heading } from './views.js';
 import { applyBankingAction } from './assistant.js';
 
@@ -31,15 +31,17 @@ export function agentsPage(){
     '</div><div class="agent-results"><div class="error-message" role="alert">'+esc(w.error)+'</div>'+(w.busy?'<section class="panel loading-state" role="status"><p>Gathering evidence. Local model analysis can take up to one minute.</p></section>':reportHtml(w.run) || '<section class="panel empty-state"><h2>Start an investigation.</h2><p>Choose a tool to generate an evidence report. Financial changes use the normal banking forms.</p></section>')+'<section class="panel service-form"><div class="section-heading"><h2>Your recent investigations</h2><button type="button" class="text-button" data-action="agents-refresh">Refresh</button></div>'+(data?.runs?.length?'<ul class="agent-run-list">'+data.runs.map(r=>'<li><button type="button" class="text-button" data-agent-run="'+esc(r.id)+'">'+esc(r.title)+'</button><small>'+esc(r.status)+' / '+esc(r.engine)+' / '+fullDate(r.createdAt)+'</small></li>').join('')+'</ul>':'<p>No saved investigations yet.</p>')+'</section></div></div>';
 }
 export async function loadAgents(){
-  const token=++generation,userId=state.user?.id;if(!userId)return;
+  const token=++generation,userId=state.user?.id;if(!userId || state.signingOut)return;
+  const w=workspace(),active=()=>token===generation && state.agentWorkspace===w && sameId(state.user?.id,userId) && !state.signingOut;
+  const paint=()=>{if(state.route.page==='agents' && !w.busy && !modal.open && !document.activeElement?.closest('form[data-agent-kind]'))ui.render();};
   try{
     const requests=[api('/agents/status'),api('/agents/runs')];
     if(state.user.role==='admin')requests.push(api('/fraud/rules'),api('/fraud/reviews'));
     const [status,runs,rules,reviews]=await Promise.all(requests);
-    if(token!==generation || !sameId(state.user?.id,userId))return;
+    if(!active())return;
     state.remote.agents={data:{agent:status.agent,runs:runs.runs,rules,reviews:reviews?.reviews || []}};
-    if(state.route.page==='agents' && !workspace().busy)ui.render();
-  }catch(error){if(!sameId(state.user?.id,userId))return;if(await recoverSession(error))return;workspace().error=error.message;if(state.route.page==='agents')ui.render();}
+    paint();
+  }catch(error){if(!active())return;if(await recoverSession(error))return;w.error=error.message;paint();}
 }
 export async function submitAgent(form){
   const w=workspace();if(w.busy)return;

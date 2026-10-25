@@ -1,4 +1,4 @@
-﻿import { app, modal, state, ui, api, esc, icon, brand, money, fullDate, sameId, allAccounts, accountById, amountDecimal, parseAmount, formBusy, formError, dialog, closeDialog, toast, loadDashboard, recoverSession, navigate, routeUrl, statusPill, statusLabel, authorizationField } from './core.js';
+import { app, modal, state, ui, api, esc, icon, money, fullDate, sameId, accountById, amountDecimal, parseAmount, formBusy, formError, dialog, closeDialog, toast, loadDashboard, recoverSession, navigate, routeUrl, statusPill, authorizationField } from './core.js';
 
 export function accountNameDialog(id = '') {
   const account = id ? accountById(id) : null;

@@ -47,7 +47,6 @@ export const singaporeDay = (value = new Date()) => new Intl.DateTimeFormat('en-
 export const sameId = (a, b) => String(a) === String(b);
 export const allAccounts = () => [...(state.data?.accounts ?? []), ...(state.data?.closedAccounts ?? [])];
 export const accountById = id => allAccounts().find(account => sameId(account.id, id));
-export const transactionById = id => state.data?.transactions.find(transaction => sameId(transaction.id, id));
 export const amountDecimal = cents => `${cents < 0 ? '-' : ''}${Math.floor(Math.abs(cents) / 100)}.${String(Math.abs(cents) % 100).padStart(2, '0')}`;
 export function parseAmount(value) {
   const raw = String(value ?? '').trim();
@@ -125,7 +124,7 @@ export function closeDialog(force = false) {
   }
 }
 export function clearBankingState() {
-  ui.cancelReads?.();
+  cancelDashboardReads();ui.cancelReads?.();
   closeDialog(true);
   modal.replaceChildren();
   Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
@@ -149,24 +148,29 @@ export async function recoverSession(error) {
     return true;
   } catch { error.message = 'We could not refresh your session. Reload the page and sign in again.'; return false; }
 }
+const dashboardControllers=new Set();let dashboardEpoch=0,dashboardSequence=0,dashboardApplied=0;
+export function cancelDashboardReads(){dashboardEpoch++;for(const controller of dashboardControllers)controller.abort();dashboardControllers.clear();}
 export async function loadDashboard({ render = true } = {}) {
-  const userId = state.user?.id;
-  if (state.signingOut) return false;
-  try {
-    const result = await api('/dashboard');
-    if (!state.user || state.signingOut || !sameId(state.user.id, userId)) return false;
-    state.data = result;
-    state.user = result.user;
-    state.refreshError = '';
-    if (render) ui.render();
+  const userId=state.user?.id,epoch=dashboardEpoch;
+  if(!userId || state.signingOut)return false;
+  const request=++dashboardSequence,controller=new AbortController();dashboardControllers.add(controller);
+  const active=()=>epoch===dashboardEpoch && state.user && !state.signingOut && sameId(state.user.id,userId);
+  try{
+    const result=await api('/dashboard',undefined,'GET',{signal:controller.signal});
+    if(!active())return false;
+    // A slower earlier refresh cannot replace a newer snapshot. Its caller
+    // can still render the latest accepted data and finish its own workflow.
+    if(request>=dashboardApplied){dashboardApplied=request;state.data=result;state.user=result.user;state.refreshError='';}
+    if(render)ui.render();
     return true;
-  } catch (error) {
-    if (!state.user || state.signingOut || !sameId(state.user.id, userId)) return false;
-    if (await recoverSession(error)) return false;
-    state.refreshError = error.message;
-    if (render) state.data ? ui.render() : ui.connectionError(error.message);
+  }catch(error){
+    if(error.status===-1 || !active())return false;
+    if(request<dashboardApplied){if(render && state.data)ui.render();return Boolean(state.data);}
+    if(await recoverSession(error))return false;
+    state.refreshError=error.message;
+    if(render)state.data?ui.render():ui.connectionError(error.message);
     return false;
-  }
+  }finally{dashboardControllers.delete(controller);}
 }
 export function routeUrl(route) { return (pages[route.page]?.path ?? '/dashboard') + (route.account ? `?account=${encodeURIComponent(route.account)}` : ''); }
 export function navigate(page, { account = '', replace = false, focus = true } = {}) {

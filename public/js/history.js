@@ -1,6 +1,6 @@
-﻿// Account history, exports and statements are read from the ledger API. The
+// Account history, exports and statements are read from the ledger API. The
 // dashboard is only a recent-activity preview and is never a financial report.
-import { app, modal, state, ui, api, esc, icon, brand, money, fullDate, singaporeDay, sameId, allAccounts, formBusy, formError, dialog, toast, recoverSession, statusLabel } from './core.js';
+import { modal, state, ui, api, esc, icon, brand, money, fullDate, singaporeDay, sameId, allAccounts, formBusy, formError, dialog, toast, recoverSession, statusLabel } from './core.js';
 import { historyResults, accountRecentResults } from './views.js';
 
 let historyController, accountController, detailController, exportController, historyTimer;

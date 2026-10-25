@@ -129,3 +129,13 @@ test('AI audit failed searches do not display the previous query results',async 
  await page.fill('#ai-audit-query','NONEXISTENT-NEW-QUERY');await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector(".ai-audit-panel .error-message")?.textContent.includes("temporarily unavailable")');
  assert.equal(await page.evaluate('document.querySelectorAll("[data-ai-audit-id]").length'),0,'Results from the previous query must be hidden after a failed search.');assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-count]")'),false);assert.deepEqual(page.errors,[]);
 });
+
+
+test('An insights refresh preserves focus and typing in a draft rule form',async t=>{
+ const {f,page}=await open(t,1280,'reviewer@greenlink.demo');await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelectorAll("#agent-rule option").length===5');
+ await page.evaluate("window.focusOriginalFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.focusOriginalFetch(...args);if(String(args[0])==='/api/agents/status'){const body=await response.text();await new Promise(resolve=>window.releaseInsightStatus=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+ await page.evaluate("import('/js/agents.js').then(m=>{window.pendingInsightRefresh=m.loadAgents();return true;})");await page.waitFor('typeof window.releaseInsightStatus==="function"');
+ await page.evaluate('document.querySelector("#agent-threshold").focus();document.querySelector("#agent-threshold").select();window.releaseInsightStatus();window.pendingInsightRefresh');
+ const focused=await page.evaluate('document.activeElement.id');await page.send('Input.insertText',{text:'50'});
+ assert.deepEqual({focused,threshold:await page.evaluate('document.querySelector("#agent-threshold").value')},{focused:'agent-threshold',threshold:'50'});assert.deepEqual(page.errors,[]);
+});

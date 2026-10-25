@@ -18,7 +18,17 @@ async function fixture(t,{http=true,seed=true,now=Date.now,riskClient,assessMode
   t.after(async()=>{await stop();await db.close();assert.match(schema,/^dft_[a-f0-9]{32}$/);await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});
   await db.migrate();if(seed)await seedDemo(db,{now});
   const actualRisk=riskClient || createRiskClient({db,assessModel:assessModel || modelStub(),modelInfo:MODEL_INFO});
-  const start=async(extra={})=>{const {createApplication}=require('../app');server=await createApplication({db,migrate:false,seed:false,backgroundJobs:false,publicOrigin:'',trustProxy:'',now,riskClient:actualRisk,agentModel,...options,...extra});await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});baseUrl=`http://127.0.0.1:${server.address().port}`;};
+  const start=async(extra={})=>{const {createApplication}=require('../app');server=await createApplication({db,migrate:false,seed:false,backgroundJobs:false,publicOrigin:'',trustProxy:'',now,riskClient:actualRisk,agentModel,...options,...extra});for(let attempt=0;attempt<10;attempt++){
+    await new Promise((resolve,reject)=>{const failed=error=>reject(error);server.once('error',failed);server.listen(0,'127.0.0.1',()=>{server.removeListener('error',failed);resolve();});});
+    baseUrl='http://127.0.0.1:'+server.address().port;
+    try{await fetch(baseUrl+'/health',{signal:AbortSignal.timeout(5000)});break;}
+    catch(error){
+      // The OS can assign a port forbidden by browsers and Fetch. Retry that
+      // port rather than disabling the browser's port protections.
+      if(error.cause?.message!=='bad port' || attempt===9)throw error;
+      await new Promise((resolve,reject)=>server.close(error=>error?reject(error):resolve()));
+    }
+  }};
   if(http)await start();
   return {db,dbPath:null,schema,riskClient:actualRisk,agentModel,start,stop,get server(){return server;},get baseUrl(){return baseUrl;},client:()=>new Client(()=>baseUrl),runJobs:()=>server.runJobs()};
 }

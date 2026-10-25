@@ -1,6 +1,6 @@
 # PostgreSQL database
 
-The active application uses PostgreSQL exclusively through [`db.js`](../db.js) and [`database/index.js`](../database/index.js). Express authentication, banking, fraud records and jobs all use the same transactional database. Python scores requests without database credentials. SQL migrations are the authoritative schema; no external cloud or container setup is required.
+The active application uses PostgreSQL exclusively through [`database/index.js`](../database/index.js). Express authentication, banking, fraud records and jobs all use the same transactional database. Python scores requests without database credentials. SQL migrations are the authoritative schema; no external cloud or container setup is required.
 
 ## Current local installation
 
@@ -15,7 +15,7 @@ The active application uses PostgreSQL exclusively through [`db.js`](../db.js) a
 | Persistent data / server log | `data/postgresql/` / `data/postgresql.log` (ignored) |
 | Schema | 28 tables, eight checksum-verified migrations |
 
-At verification on 24 October 2026, the existing three users, three accounts and 11 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The retired non-PostgreSQL stores have been removed after verifying a PostgreSQL backup in `data/backups/`. Only `data/postgresql` is active; the earlier stopped PostgreSQL cluster is an inactive reference copy. Existing business operators still need their own business profile and independent approval before financial writes.
+At verification on 25 October 2026, the existing 13 users, seven businesses, 13 accounts and 28 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The retired non-PostgreSQL stores have been removed after verifying a PostgreSQL backup in `data/backups/`. The active cluster is `data/postgresql`. Existing business operators still need their own business profile and independent approval before financial writes.
 
 ```sh
 npm run db:status

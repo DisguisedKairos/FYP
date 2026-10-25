@@ -1,4 +1,4 @@
-import {state,ui,api,esc,icon,modal,dialog,closeDialog,formBusy,formError,loadDashboard,recoverSession,toast,authorizationField} from './core.js';
+import { state, ui, api, esc, icon, dialog, closeDialog, formBusy, formError, loadDashboard, recoverSession, toast, authorizationField } from './core.js';
 
 export function businessFields(value={}) {
   return `<div class="field"><label for="business-legal-name">Registered business name</label><input id="business-legal-name" name="legalName" value="${esc(value.legalName)}" autocomplete="organization" maxlength="160" minlength="2" required></div>

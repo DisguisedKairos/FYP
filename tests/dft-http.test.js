@@ -123,3 +123,11 @@ pgTest('DFT password changes invalidate a payment authorization while Python scr
   assert.equal(totalBalance(await client.dashboard()),totalBalance(before));
   assert.equal(Number((await f.db.query("SELECT count(*) FROM transactions WHERE description='HTTP regression'")).rows[0].count),0);
 });
+
+
+pgTest('DFT query parsing preserves literal question marks and validates following filters',async t=>{
+ const f=await fixture(t),client=f.client();await client.login('jamie@greenlink.demo');const source=(await client.dashboard()).accounts[0];
+ for(const description of ['QUERY-CHECK','QUERY-CHECK?EXACT']){const r=await client.request('/api/transfers',{method:'POST',body:{fromAccountId:source.id,toAccountNumber:'1020001001',amount:'0.01',description,requestId:randomUUID()}});assert.equal(r.status,200);}
+ const r=await client.request('/api/transactions?q=QUERY-CHECK?EXACT');assert.equal(r.status,200);assert.equal(r.data.pagination.total,1);assert.equal(r.data.transactions[0].description,'QUERY-CHECK?EXACT');
+ assert.equal((await client.request('/api/transactions?q=QUERY-CHECK?EXACT&page=0')).status,400);
+});

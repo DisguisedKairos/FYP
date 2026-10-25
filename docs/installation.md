@@ -31,3 +31,7 @@ DIT handles deployment credentials, network access, certificates and cloud datab
 ## Testing
 
 Set `TEST_DATABASE_URL` in ignored `.env.test` to a separate local database. Most tests use unique `dft_...` schemas, run migrations, and drop only their own schema. Provisioning tests additionally create/drop uniquely named disposable databases and roles; use a local test operator with those privileges. `npm test` and `npm run test:browser` load `.env.test`, never the bootstrap secrets file. Python tests need `tests_python/requirements.txt` installed. Browser tests need an installed Chrome/Edge. Screenshots, downloads and logs go to ignored `test-results/`.
+
+## Source cleanup
+
+The banking server imports the PostgreSQL adapter directly from database/index.js; the old root db.js forwarding file has been removed, and container/package inputs follow the same structure. Canonical browser pages are /scheduled-payments and /fraud-monitoring. Statements open from Activity; obsolete /schedules, /fraud and /statements page aliases return 404. The /api/statements endpoint remains active. SQL migrations, import provenance, retained audit evidence, private configuration and the active PostgreSQL data remain required.

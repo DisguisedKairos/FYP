@@ -2,8 +2,8 @@ import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancel
 import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
-import { loadFraudCases, runFraudScan, openFraudCase, claimFraudCase, submitFraudCaseReview, cancelFraudCases } from './js/fraud-cases.js';
-﻿import { app, modal, state, ui, pages, api, esc, icon, money, sameId, accountById, transactionById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
+import { loadFraudCases, runFraudScan, openFraudCase, claimFraudCase, submitFraudCaseReview, cancelFraudCases, cancelFraudCaseDetail } from './js/fraud-cases.js';
+import { app, modal, state, ui, api, money, accountById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, cancelDashboardReads, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
 import { auth, render, connectionError, extraViews, updateMobileNavigation } from './js/views.js';
 import { loadHistory, loadAccountRecent, openTransaction, cancelHistoryReads, cancelDetailRead } from './js/history.js';
 import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, reviewMoney, transactionDetails, confirmMoney, updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './js/workflows.js';
@@ -12,7 +12,7 @@ import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview 
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
-Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
 Object.assign(extraViews,{ aiAudit: aiAuditPage, assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
@@ -132,6 +132,7 @@ document.addEventListener('click',async event => {
       case 'assistant-clear': clearAssistant(); break;
       case 'agents-refresh': await loadAgents(); break;
       case 'fraud-scan': await runFraudScan(); break;
+      case 'fraud-cases-retry': await loadFraudCases(); break;
       case 'fraud-cases-prev': await loadFraudCases({direction:-1}); break;
       case 'fraud-cases-next': await loadFraudCases({direction:1}); break;
       case 'assistant-retry': await retryAssistant(); break;
@@ -214,7 +215,7 @@ document.addEventListener('keydown',event => {
   }
 });
 modal.addEventListener('cancel',event => { if (state.modalBusy) event.preventDefault(); });
-modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); cancelAiAuditDetail(); clearSecuritySecrets(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
+modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); cancelAiAuditDetail(); cancelFraudCaseDetail(); clearSecuritySecrets(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
 modal.addEventListener('click',event => {
   if (event.target !== modal || state.modalBusy) return;
   const bounds = modal.getBoundingClientRect();

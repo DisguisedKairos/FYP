@@ -1,4 +1,4 @@
-﻿import { app, state, pages, ui, esc, icon, brand, money, visibleMoney, shortDate, fullDate, sameId, allAccounts, accountById, statusPill, accountOptions, mobileQuery } from './core.js';
+import { app, state, pages, ui, esc, icon, brand, money, visibleMoney, shortDate, sameId, allAccounts, accountById, statusPill, accountOptions, mobileQuery } from './core.js';
 export const extraViews = {};
 import {businessFields,businessNotice} from './business.js';
 

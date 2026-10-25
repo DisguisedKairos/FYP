@@ -153,3 +153,12 @@ pgTest('DFT notification delivery rollback retains pending events for a later re
   await assert.rejects(workflows.markRead(f.db, f.recipient, unread.notifications[0].id, { now: f.now }), failure(404));
   assert.equal((await workflows.markRead(f.db, f.owner, 'all', { now: f.now })).unreadCount, 0);
 });
+
+
+pgTest('DFT slow valid screening does not expire queued schedules before they begin',async t=>{
+ let f;f=await setup(t,{assessModel:async input=>{f.advance(45000);return modelStub()(input);}});
+ await f.db.query("UPDATE fraud_rules SET enabled=false WHERE id='velocity'");
+ for(let index=0;index<8;index++)await f.create();f.advance(60000);
+ const result=await f.tick(),rows=await workflows.listSchedules(f.db,f.owner);
+ assert.equal(result.schedulesProcessed,8);assert.equal(rows.filter(s=>s.status==='completed').length,8,'Every queued payment must receive a fresh lease when its own screening starts.');assert.ok(rows.every(s=>s.runs[0].attempts===1));assert.equal(await f.balance(),92000);
+});

@@ -35,3 +35,23 @@ test('Staff analyse a completed payment, inspect its AI flag and record an indep
   assert.equal(await page.evaluate('document.querySelector("#modal").textContent.includes("independently verified")'), false);
   assert.deepEqual(page.errors, []);
 });
+
+
+test('Delayed fraud case reads and completed scans do not reopen dialogs after navigation',async t=>{
+ const f=await fixture(t,{assessModel:modelStub(80)}),client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
+ const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:account.id,billerId:'pub',reference:'DELAYED-CASE',amount:'1.00',requestId:randomUUID()}});assert.equal(paid.status,200);
+ await require('../banking/fraud-cases').scan(f.db,f.riskClient,{force:true,transactionId:paid.data.transaction.id});
+ const page=await launchChrome(t,{width:1280,height:900});await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');await page.fill('#email','reviewer@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');await page.click('[data-nav=fraud]');await page.waitFor('!!document.querySelector("[data-fraud-case]")');
+ const caseId=await page.evaluate('document.querySelector("[data-fraud-case]").dataset.fraudCase');
+ await page.evaluate("window.originalCaseFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.originalCaseFetch(...args);if(/\\/api\\/fraud\\/cases\\/[^/?]+$/.test(String(args[0]))){const body=await response.text();await new Promise(resolve=>window.releaseCaseRead=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+ await page.evaluate("import('/js/fraud-cases.js').then(m=>{window.pendingCaseRead=m.openFraudCase("+JSON.stringify(caseId)+");return true;})");await page.waitFor('typeof window.releaseCaseRead==="function"');if(await page.evaluate('document.querySelector("#modal").open'))await page.click('#modal [data-action=close-dialog]');await page.click('[data-nav=overview]');await page.click('[data-nav=fraud]');await page.evaluate('window.releaseCaseRead();window.pendingCaseRead');
+ const caseReopened=await page.evaluate('document.querySelector("#modal").open');if(caseReopened)await page.click('#modal [data-action=close-dialog]');
+ await page.evaluate("window.fetch=async(...args)=>{const response=await window.originalCaseFetch(...args);if(String(args[0])==='/api/fraud/scan'){const body=await response.text();await new Promise(resolve=>window.releaseScanRead=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+ await page.waitFor('!!document.querySelector("#fraud-scan-transaction")');await page.fill('#fraud-scan-transaction',paid.data.transaction.id);await page.evaluate("import('/js/fraud-cases.js').then(m=>{window.pendingScan=m.runFraudScan();return true;})");await page.waitFor('typeof window.releaseScanRead==="function"');await page.click('[data-nav=overview]');await page.click('[data-nav=fraud]');await page.evaluate('window.releaseScanRead();window.pendingScan');
+ assert.deepEqual({caseReopened,scanReopened:await page.evaluate('document.querySelector("#modal").open')},{caseReopened:false,scanReopened:false});
+ await page.waitFor('!!document.querySelector("[data-fraud-case]")');
+ await page.evaluate("window.fetch=(...args)=>String(args[0]).startsWith('/api/fraud/cases?')?Promise.resolve(new Response(JSON.stringify({error:'Case search temporarily unavailable.'}),{status:503,headers:{'Content-Type':'application/json'}})):window.originalCaseFetch(...args);");
+ await page.select('#fraud-case-filter','closed');await page.waitFor('document.querySelector("[data-fraud-cases]")?.textContent.includes("Case search temporarily unavailable")');
+ assert.equal(await page.evaluate('document.querySelectorAll("[data-fraud-case]").length'),0,'A failed filter must not show cases from the previous selection.');
+ await page.evaluate('window.fetch=window.originalCaseFetch');await page.click('[data-action=fraud-cases-retry]');await page.waitFor('!!document.querySelector("#fraud-case-filter") && document.querySelector("[data-fraud-cases]").textContent.includes("No cases match")');assert.deepEqual(page.errors,[]);
+});

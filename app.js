@@ -3,7 +3,7 @@
 const express = require('express');
 const http = require('node:http');
 const path = require('node:path');
-const { createDatabase } = require('./db');
+const { createDatabase } = require('./database');
 const { createAuth } = require('./banking/auth');
 const security = require('./banking/security');
 const ledger = require('./banking/ledger');
@@ -31,7 +31,7 @@ function trustProxy(value) {
   return entries;
 }
 const send = (res, value, status = 200) => res.status(status).json({ ok: true, ...value });
-const query = req => new URLSearchParams(req.originalUrl.split('?')[1] || '');
+const query = req => new URL(req.originalUrl, 'http://banking.local').searchParams;
 function accountName(value) {
   if (typeof value !== 'string') throw new HttpError(400, 'Enter an account name.');
   const name = value.trim().replace(/\s+/g, ' ');
@@ -202,7 +202,7 @@ async function createApplication(options = {}) {
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant', '/banking-insights', '/ai-audit']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/assistant', '/banking-insights', '/ai-audit']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
   app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error, _req, res, _next) => {

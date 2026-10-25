@@ -63,13 +63,20 @@ async function cancelSchedule(db,user,id,{now=Date.now}={}){
 }
 function nextOccurrence(row){if(row.frequency==='once')return null;const date=new Date(row.next_run_at);if(row.frequency==='weekly')date.setUTCDate(date.getUTCDate()+7);else{const anchor=new Date(row.scheduled_at).getUTCDate();date.setUTCDate(1);date.setUTCMonth(date.getUTCMonth()+1);date.setUTCDate(Math.min(anchor,new Date(Date.UTC(date.getUTCFullYear(),date.getUTCMonth()+1,0)).getUTCDate()));}return date.toISOString();}
 async function runDue(db,{riskClient,now=Date.now,maxAttempts=5}={}){
-  const owner=randomUUID(),date=instant(now);
-  const due=await db.transaction(async client=>{
-    const rows=(await client.query("SELECT * FROM scheduled_payments WHERE status='active' AND next_run_at<=$1 AND (lease_until IS NULL OR lease_until<=$1) ORDER BY next_run_at,id LIMIT 20 FOR UPDATE SKIP LOCKED",[date])).rows;
-    for(const row of rows){await client.query('UPDATE scheduled_payments SET lease_owner=$2,lease_until=$3 WHERE id=$1',[row.id,owner,new Date(now()+300000)]);await client.query("INSERT INTO scheduled_payment_runs(id,schedule_id,due_at,status,created_at,attempts) VALUES($1,$2,$3,'processing',$4,1) ON CONFLICT(schedule_id,due_at) DO UPDATE SET status='processing',attempts=scheduled_payment_runs.attempts+1,next_attempt_at=NULL",[randomUUID(),row.id,row.next_run_at,date]);}
-    return rows;
-  });
-  for(const row of due){let result=null,failure=null;try{
+  const owner=randomUUID(),seen=[],deadline=Date.now()+50000;
+  // Lease only the instruction about to run. Waiting in a batch must never
+  // consume a schedule's lease or a screening retry before it starts.
+  for(let index=0;index<20 && Date.now()<deadline;index++){
+    const date=instant(now),row=await db.transaction(async client=>{
+      const row=(await client.query("SELECT * FROM scheduled_payments WHERE status='active' AND next_run_at<=$1 AND (lease_until IS NULL OR lease_until<=$1) AND NOT(id=ANY($2::text[])) ORDER BY next_run_at,id LIMIT 1 FOR UPDATE SKIP LOCKED",[date,seen])).rows[0];
+      if(!row)return null;
+      await client.query('UPDATE scheduled_payments SET lease_owner=$2,lease_until=$3 WHERE id=$1',[row.id,owner,new Date(now()+300000)]);
+      await client.query("INSERT INTO scheduled_payment_runs(id,schedule_id,due_at,status,created_at,attempts) VALUES($1,$2,$3,'processing',$4,1) ON CONFLICT(schedule_id,due_at) DO UPDATE SET status='processing',attempts=scheduled_payment_runs.attempts+1,next_attempt_at=NULL",[randomUUID(),row.id,row.next_run_at,date]);
+      return row;
+    });
+    if(!row)break;
+    seen.push(row.id);
+    let result=null,failure=null;try{
     const user=(await db.query('SELECT id,name,email,role FROM users WHERE id=$1',[row.user_id])).rows[0],saved=row.payload_json;
     if(!user)throw new HttpError(404,'The account owner no longer exists.');
     const body={fromAccountId:saved.fromId,amount:(saved.amountCents/100).toFixed(2),requestId:`schedule:${row.id}:${new Date(row.next_run_at).getTime()}`,...(row.type==='transfer'?{toAccountNumber:saved.number,description:saved.note}:{billerId:saved.billerId,reference:saved.reference})};
@@ -94,7 +101,7 @@ async function runDue(db,{riskClient,now=Date.now,maxAttempts=5}={}){
       await client.query('UPDATE scheduled_payments SET status=$2,next_run_at=$3,last_run_at=$4,last_status=$5,last_error=$6,lease_owner=NULL,lease_until=NULL WHERE id=$1',[row.id,next?'active':failure?'failed':'completed',next,completedAt,status,message]);
       if(failure)await ledger.enqueue(client,{userId:row.user_id,type:'schedule.failed',title:'Scheduled payment failed',message:'A scheduled occurrence could not complete. Review its run history.',createdAt:completedAt,metadata:{scheduleId:row.id}});
     });
-  }return {schedulesProcessed:due.length};
+  }return {schedulesProcessed:seen.length};
 }
 async function dispatch(db,{now=Date.now}={}){return db.transaction(async client=>{const rows=(await client.query("SELECT * FROM notification_outbox WHERE status IN ('pending','processing') AND available_at<=$1 AND (locked_until IS NULL OR locked_until<=$1) ORDER BY created_at,id LIMIT 50 FOR UPDATE SKIP LOCKED",[instant(now)])).rows;for(const row of rows){const event=row.payload_json;await client.query('INSERT INTO notifications(id,user_id,type,title,message,transaction_id,metadata,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO NOTHING',[row.id,row.user_id,event.type,event.title,event.message,event.transactionId || null,event.metadata || {},event.createdAt || row.created_at]);await client.query("UPDATE notification_outbox SET status='delivered',delivered_at=$2,attempts=attempts+1,locked_until=NULL WHERE id=$1",[row.id,instant(now)]);}return {notificationsDelivered:rows.length,notificationsFailed:0};});}
 async function notifications(db,user,{unreadOnly=false}={}){const rows=(await db.query(`SELECT * FROM notifications WHERE user_id=$1 ${unreadOnly?'AND read_at IS NULL':''} ORDER BY created_at DESC,id DESC LIMIT 200`,[user.id])).rows;return {notifications:rows.map(row=>({id:row.id,type:row.type,title:row.title,message:row.message,transactionId:row.transaction_id,metadata:row.metadata,createdAt:iso(row.created_at),isRead:Boolean(row.read_at),readAt:iso(row.read_at)})),unreadCount:Number((await db.query('SELECT count(*) AS count FROM notifications WHERE user_id=$1 AND read_at IS NULL',[user.id])).rows[0].count)};}

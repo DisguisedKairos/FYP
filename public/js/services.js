@@ -70,11 +70,11 @@ export async function loadExtras(page, { force = false } = {}) {
       state.remote[page] = { data: result };
       if (page === 'fraud') {
         await ui.loadFraudCases?.({render:false});
-        try { const result = await backgroundGet('/fraud/model'); state.remote.model = { data: result.model || result }; }
-        catch (error) { state.remote.model = { error: error.message }; }
+        try { const result = await backgroundGet('/fraud/model'); if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.model = { data: result.model || result }; }
+        catch (error) { if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.model = { error: error.message }; }
         if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return;
-        try { const result = await backgroundGet('/fraud/model-activity'); if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.evaluation = { data: result.activity }; }
-        catch (error) { if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.evaluation = { error: error.message }; }
+        try { const result = await backgroundGet('/fraud/model-activity'); if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.modelActivity = { data: result.activity }; }
+        catch (error) { if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.modelActivity = { error: error.message }; }
       }
       if (state.route.page === page && !modal.open) ui.render();
     } catch (error) {
