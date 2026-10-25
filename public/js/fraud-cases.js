@@ -1,4 +1,4 @@
-import { state, ui, api, esc, money, fullDate, sameId, dialog, closeDialog, formBusy, formError, toast, recoverSession, authorizationField, modal } from './core.js';
+import { state, captureSession, ui, api, esc, money, fullDate, sameId, dialog, closeDialog, formBusy, formError, toast, recoverSession, authorizationField, modal } from './core.js';
 let generation = 0, detailGeneration = 0, sessionGeneration = 0,detailController;
 export function cancelFraudCaseDetail(){detailGeneration++;detailController?.abort();}
 export function cancelFraudCases() { generation++; cancelFraudCaseDetail(); sessionGeneration++; state.fraudScanBusy=false; }
@@ -76,13 +76,13 @@ export async function claimFraudCase(control) {
   finally { control.disabled = false; }
 }
 export async function submitFraudCaseReview(form) {
+  const active=captureSession();if(!active())return;
   if (state.modalBusy) return;
-  const userId = state.user?.id;
   state.modalBusy = true; formBusy(form, true);
   try {
     await api('/fraud/cases/' + encodeURIComponent(form.dataset.caseId) + '/review', { action: 'close', version: Number(form.dataset.version), outcome: form.elements.outcome.value, reason: form.elements.reason.value, authorizationPassword: form.elements.authorizationPassword.value }, 'POST');
-    if (!sameId(state.user?.id, userId)) return;
+    if(!active())return;
     state.modalBusy = false; closeDialog(); toast('Human review recorded. Payment balances and status were unchanged.'); await loadFraudCases();
-  } catch (error) { if (sameId(state.user?.id, userId) && !await recoverSession(error)) formError(form, error.message); }
-  finally { if (form.elements.authorizationPassword) form.elements.authorizationPassword.value = ''; state.modalBusy = false; formBusy(form, false); }
+  } catch (error) { if (active() && !await recoverSession(error)) formError(form, error.message); }
+  finally { if (form.elements.authorizationPassword) form.elements.authorizationPassword.value = ''; if(active()){state.modalBusy=false;formBusy(form,false);} }
 }

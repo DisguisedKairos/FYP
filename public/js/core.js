@@ -33,6 +33,11 @@ export const state = {
   menuOpen: false, modalBusy: false, modalOpener: null, pendingMoney: null,
   moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0,
 };
+let sessionEpoch=0;
+export function captureSession(){
+  const epoch=sessionEpoch,userId=state.user?.id;
+  return ()=>Boolean(userId) && epoch===sessionEpoch && sameId(state.user?.id,userId) && !state.signingOut;
+}
 export const esc = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 })[character]);
@@ -60,6 +65,8 @@ export class ApiError extends Error {
   constructor(message, status = 0) { super(message); this.name = 'ApiError'; this.status = status; }
 }
 export async function api(path, body, method = 'POST', options = {}) {
+  const epoch=sessionEpoch;
+  const assertSession=()=>{if(epoch!==sessionEpoch)throw new ApiError('This request belongs to an ended session.',-1);};
   const controller = new AbortController();
   const abort = () => controller.abort();
   if (options.signal?.aborted) controller.abort();
@@ -71,10 +78,12 @@ export async function api(path, body, method = 'POST', options = {}) {
       headers: { Accept: options.responseType === 'blob' ? 'text/csv' : 'application/json', ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...(state.csrf ? { 'X-CSRF-Token': state.csrf } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-    if (response.ok && options.responseType === 'blob') return { blob: await response.blob(), disposition: response.headers.get('Content-Disposition') || '' };
+    assertSession();
+    if (response.ok && options.responseType === 'blob') {const blob=await response.blob();assertSession();return { blob, disposition: response.headers.get('Content-Disposition') || '' };}
     let result;
     try { result = await response.json(); }
-    catch { if (options.signal?.aborted) throw new ApiError('Request cancelled.', -1); throw new ApiError('The server returned an unexpected response. Please try again.', response.status); }
+    catch { assertSession(); if (options.signal?.aborted) throw new ApiError('Request cancelled.', -1); throw new ApiError('The server returned an unexpected response. Please try again.', response.status); }
+    assertSession();
     if (!response.ok) {
       const error = new ApiError(result.error || 'We could not complete the request.', response.status);
       error.code = result.code;
@@ -124,10 +133,11 @@ export function closeDialog(force = false) {
   }
 }
 export function clearBankingState() {
+  sessionEpoch++;
   cancelDashboardReads();ui.cancelReads?.();
   closeDialog(true);
   modal.replaceChildren();
-  Object.assign(state, { data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
 }
 export async function recoverSession(error) {

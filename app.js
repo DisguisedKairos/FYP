@@ -4,7 +4,7 @@ const express = require('express');
 const http = require('node:http');
 const path = require('node:path');
 const { createDatabase } = require('./database');
-const { createAuth } = require('./banking/auth');
+const { createAuth, assertCurrentUser } = require('./banking/auth');
 const security = require('./banking/security');
 const ledger = require('./banking/ledger');
 const history = require('./banking/history');
@@ -118,7 +118,7 @@ async function createApplication(options = {}) {
   route('get', '/api/statements', async req => ({ statement: await history.statement(db, req.banking.user, query(req), now) }));
   route('post', '/api/accounts', async req => db.transaction(async client => {
     const name = accountName(req.body?.name), user = req.banking.user;
-    await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [user.id]);
+    await assertCurrentUser(client,user,{lock:true});
     await businesses.assertApproved(client,user);
     if (Number((await client.query("SELECT count(*) AS count FROM accounts WHERE user_id=$1 AND status='active'", [user.id])).rows[0].count) >= 8) throw new HttpError(409, 'You can have up to eight active savings accounts.');
     let account;
@@ -129,7 +129,7 @@ async function createApplication(options = {}) {
   }), 201);
   for (const method of ['patch', 'delete']) route(method, '/api/accounts/:id', async req => db.transaction(async client => {
     const user = req.banking.user, id = ledger.accountId(req.params.id);
-    await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE', [user.id]);
+    await assertCurrentUser(client,user,{lock:true});
     const account = (await client.query('SELECT * FROM accounts WHERE id=$1 AND user_id=$2 FOR UPDATE', [id, user.id])).rows[0];
     if (!account) throw new HttpError(404, 'Savings account not found.');
     await businesses.assertApproved(client,user,{accountId:account.id});

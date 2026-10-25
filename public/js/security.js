@@ -1,4 +1,4 @@
-import { modal, state, ui, api, esc, icon, dialog, formBusy, formError, toast, recoverSession } from './core.js';
+import { modal, state, captureSession, ui, api, esc, icon, dialog, formBusy, formError, toast, recoverSession } from './core.js';
 
 let profileGeneration=0,profileController;
 const passwordField = (id, name, label, { fresh = false } = {}) => `<div class="field"><label for="${id}">${label}</label><div class="password-wrap"><input id="${id}" name="${name}" type="password" autocomplete="${fresh ? 'new-password' : 'current-password'}" maxlength="128" ${fresh ? 'minlength="8" pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9]).{8,128}"' : ''} required><button type="button" class="password-toggle" data-action="password" data-input="${id}" aria-label="Show password" aria-pressed="false">${icon('eye')}</button></div>${fresh ? '<small>8–128 characters, with uppercase, lowercase and a number.</small>' : ''}</div>`;
@@ -76,6 +76,7 @@ export async function copyRecoveryCodes() {
 }
 
 export async function submitSecurity(form) {
+  const active=captureSession();if(!active())return;
   if (state.modalBusy) return;
   const values = Object.fromEntries(new FormData(form));
   if (form.id === 'security-password-form' && values.newPassword !== values.confirmPassword) return formError(form, 'The passwords do not match.');
@@ -88,6 +89,7 @@ export async function submitSecurity(form) {
   state.modalBusy = true; formBusy(form, true);
   try {
     const result = await api(endpoint, values);
+    if(!active())return;
     state.modalBusy = false;
     if (form.id === 'security-revoke-form') return ui.endSession('All devices have been signed out. Sign in again to continue.');
     if (result.user) { state.user = result.user; if (state.data) state.data.user = result.user; }
@@ -96,9 +98,9 @@ export async function submitSecurity(form) {
     if (form.id === 'security-mfa-confirm-form') return recoveryDialog(result.recoveryCodes);
     await profileDialog({ refresh: false });
     toast(form.id === 'security-password-form' ? 'Password updated. Other devices have been signed out.' : 'Authenticator disabled. Other devices have been signed out.');
-  } catch (error) { if (!await recoverSession(error)) formError(form, error.message); }
+  } catch (error) { if (active() && !await recoverSession(error)) formError(form, error.message); }
   finally {
     for (const input of form.querySelectorAll('input[type=password],input[name=otp]')) input.value = '';
-    state.modalBusy = false; formBusy(form, false);
+    if(active()){state.modalBusy=false;formBusy(form,false);}
   }
 }

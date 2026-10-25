@@ -1,4 +1,4 @@
-import { app, modal, state, ui, api, esc, icon, money, fullDate, sameId, accountById, amountDecimal, parseAmount, formBusy, formError, dialog, closeDialog, toast, loadDashboard, recoverSession, navigate, routeUrl, statusPill, authorizationField } from './core.js';
+import { app, modal, state, captureSession, ui, api, esc, icon, money, fullDate, sameId, accountById, amountDecimal, parseAmount, formBusy, formError, dialog, closeDialog, toast, loadDashboard, recoverSession, navigate, routeUrl, statusPill, authorizationField } from './core.js';
 
 export function accountNameDialog(id = '') {
   const account = id ? accountById(id) : null;
@@ -52,6 +52,7 @@ export async function authenticate(values, demo = false) {
   }
 }
 export async function submitAccount(form, closing = false) {
+  const active=captureSession();if(!active())return;
   if (state.modalBusy) return;
   state.modalBusy = true;
   formBusy(form, true);
@@ -59,6 +60,7 @@ export async function submitAccount(form, closing = false) {
   try {
     const values = Object.fromEntries(new FormData(form));
     const result = await api(`/accounts${id ? `/${encodeURIComponent(id)}` : ''}`, closing ? {} : values, closing ? 'DELETE' : id ? 'PATCH' : 'POST');
+    if(!active())return;
     if (closing) {
       state.data.accounts = state.data.accounts.filter(a => !sameId(a.id, id));
       state.data.closedAccounts = [...(state.data.closedAccounts ?? []), result.account];
@@ -67,10 +69,11 @@ export async function submitAccount(form, closing = false) {
     state.modalBusy = false;
     closeDialog();
     await loadDashboard({ render: false });
+    if(!active())return;
     if (state.data) navigate('accounts', { account: closing ? '' : result.account.id });
     toast(closing ? 'Savings account closed. Its history is still available.' : id ? 'Account name updated.' : 'Your new savings account is ready.');
-  } catch (error) { if (!await recoverSession(error)) formError(form, error.message); }
-  finally { state.modalBusy = false; formBusy(form, false); }
+  } catch (error) { if (active() && !await recoverSession(error)) formError(form, error.message); }
+  finally { if(active()){state.modalBusy=false;formBusy(form,false);} }
 }
 export function reviewMoney(form) {
   const type = form.dataset.type, bill = type === 'payments';
@@ -115,16 +118,19 @@ export function transactionDetails(transaction, receipt = null) {
   dialog(title, `${receipt ? `<div class="receipt-success ${complete ? '' : held ? 'held' : 'rejected'}">${icon(complete ? 'check' : 'shield')}<p>${complete ? 'Your request has completed.' : held ? 'No funds have moved. An independent reviewer will assess this request.' : 'No funds have moved. This request was not completed.'}</p></div>` : ''}<div class="receipt-amount ${transaction.amountCents > 0 ? 'incoming' : ''}">${transaction.amountCents > 0 ? '+' : ''}${money(transaction.amountCents)}</div><p class="receipt-description">${esc(transaction.description)}</p><dl class="review-list"><div><dt>Status</dt><dd>${statusPill(transaction.status)}</dd></div><div><dt>${transaction.amountCents > 0 ? 'Received into' : 'From account'}</dt><dd>${esc(transaction.accountName || source?.name || 'Savings account')}<small>${esc(transaction.accountNumber || source?.number || '')}</small></dd></div><div><dt>${transaction.amountCents > 0 ? 'From' : 'To'}</dt><dd>${esc(transaction.counterparty || receipt?.recipient || '—')}</dd></div><div><dt>Requested</dt><dd>${fullDate(transaction.requestedAt || transaction.createdAt)}</dd></div>${transaction.completedAt ? `<div><dt>Completed</dt><dd>${fullDate(transaction.completedAt)}</dd></div>` : ""}<div><dt>${bill ? 'Bill reference' : 'Reference'}</dt><dd class="reference-value">${esc(transaction.reference || '—')}</dd></div><div><dt>Transaction ID</dt><dd class="reference-value">${esc(transaction.id)}</dd></div>${transaction.authorization?.authorizedAt ? `<div><dt>Authorized</dt><dd>${fullDate(transaction.authorization.authorizedAt)}<small>Current password verified</small></dd></div>` : ''}${review ? `<div><dt>Review decision</dt><dd>${esc(review.decision || "")}<small>${esc(review.reason || "")}</small>${review.reviewedBy ? `<small>Reviewed by ${esc(review.reviewedBy.name)}</small>` : ""}${review.reviewedAt ? `<small>${fullDate(review.reviewedAt)}</small>` : ""}</dd></div>` : ''}</dl>${riskExplanation(transaction.risk, { admin: state.user.role === 'admin' })}${!complete ? '<div class="notice">This request has not changed the account balance.</div>' : ''}<div class="modal-actions"><button type="button" class="button secondary" data-action="close-dialog">Done</button>${receipt ? `<button type="button" class="button" data-nav="activity">View activity ${icon('arrow')}</button>` : ''}</div>`);
 }
 export async function confirmMoney(form) {
+  const active=captureSession();if(!active())return;
   if (state.modalBusy || !state.pendingMoney) return;
   state.modalBusy = true;
   formBusy(form, true);
   const pending = state.pendingMoney, password = form.elements.authorizationPassword.value;
   try {
     const result = await api(pending.type === 'payments' ? '/payments' : '/transfers', { ...pending.payload, authorizationPassword: password }, 'POST', {timeoutMs:75000});
+    if(!active())return;
     form.elements.authorizationPassword.value = '';
     state.moneyDraft[pending.type] = {};
     state.pendingMoney = null;
     const synced = await loadDashboard({ render: false });
+    if(!active())return;
     state.modalBusy = false;
     if (!state.data) return;
     if (!synced) state.refreshError = 'Your request was recorded. Refresh balances to see the latest activity.';
@@ -133,7 +139,7 @@ export async function confirmMoney(form) {
     ui.loadNotifications?.();
   } catch (error) {
     form.elements.authorizationPassword.value = '';
-    if (!await recoverSession(error)) formError(form, error.status === 0 ? 'Confirmation was interrupted. Retry this confirmation to check the same transaction safely; it will not be charged twice.' : error.message);
-  } finally { state.modalBusy = false; formBusy(form, false); }
+    if (active() && !await recoverSession(error)) formError(form, error.status === 0 ? 'Confirmation was interrupted. Retry this confirmation to check the same transaction safely; it will not be charged twice.' : error.message);
+  } finally { if(active()){state.modalBusy=false;formBusy(form,false);} }
 }
 export { updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './history.js';

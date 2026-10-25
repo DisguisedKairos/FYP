@@ -2,13 +2,14 @@
 import { heading } from './views.js';
 const inflight = new Map();
 const backgroundReads = new Set();
+let serviceEpoch=0,notificationSequence=0;
 async function backgroundGet(path) {
   const controller = new AbortController();
   backgroundReads.add(controller);
   try { return await api(path, undefined, 'GET', { signal: controller.signal }); }
   finally { backgroundReads.delete(controller); }
 }
-export function stopBackgroundReads() { for (const controller of backgroundReads) controller.abort(); backgroundReads.clear(); }
+export function stopBackgroundReads() { serviceEpoch++; notificationSequence++; for (const controller of backgroundReads) controller.abort(); backgroundReads.clear(); inflight.clear(); scheduleDraft={}; pendingSchedule=null; }
 const unread = notification => !(notification.isRead || notification.readAt || notification.read);
 let scheduleDraft = {}, pendingSchedule = null;
 
@@ -18,12 +19,13 @@ export function remoteContent(page, content) {
   if (remote.error) return `<div class="panel empty-state"><h2>We could not load this page.</h2><p>${esc(remote.error)}</p><button type="button" class="button" data-action="reload-page">Try again</button></div>`;
   return content(remote.data);
 }
-export async function loadNotifications({ renderPage = false } = {}) {
+export async function loadNotifications() {
   if (!state.user || state.signingOut) return;
-  const userId = state.user.id;
+  const userId = state.user.id,session=serviceEpoch,request=++notificationSequence;
+  const active=()=>session===serviceEpoch && request===notificationSequence && state.user && !state.signingOut && sameId(state.user.id,userId);
   try {
     const result = await backgroundGet('/notifications');
-    if (!state.user || !sameId(state.user.id,userId)) return;
+    if (!active()) return;
     state.notifications = result.notifications || [];
     state.unreadCount = result.unreadCount ?? state.notifications.filter(unread).length;
     state.remote.notifications = { data: result };
@@ -36,12 +38,12 @@ export async function loadNotifications({ renderPage = false } = {}) {
     const nav = app.querySelector('[data-nav="notifications"].nav-item');
     nav?.querySelector('.nav-count')?.remove();
     if (nav && state.unreadCount) nav.insertAdjacentHTML('beforeend', `<span class="nav-count">${state.unreadCount}</span>`);
-    if (renderPage && state.route.page === 'notifications') ui.render();
+    if (state.data && state.route.page === 'notifications') ui.render();
   } catch (error) {
-    if (error.status === -1 || !state.user || state.signingOut || !sameId(state.user.id,userId)) return;
-    if (await recoverSession(error)) return;
+    if (error.status === -1 || !active()) return;
+    if (await recoverSession(error) || !active()) return;
     state.remote.notifications = { error: error.message };
-    if (renderPage && state.route.page === 'notifications') ui.render();
+    if (state.data && state.route.page === 'notifications') ui.render();
   }
 }
 export async function loadExtras(page, { force = false } = {}) {
@@ -50,13 +52,14 @@ export async function loadExtras(page, { force = false } = {}) {
   if(page==='onboarding')return ui.loadBusinessApplications?.();
   if (!state.user || state.signingOut) return;
   if (page !== 'notifications') loadNotifications();
-  if (page === 'notifications') return loadNotifications({ renderPage: true });
+  if (page === 'notifications') return loadNotifications();
   if (page === 'activity') return ui.loadHistory?.();
   if (page === 'accounts' && state.route.account) return ui.loadAccountRecent?.(state.route.account);
   if (page === 'rules') ui.loadRuleAudit?.();
   const endpoints = { schedules: '/scheduled-payments', fraud: '/fraud/reviews', rules: '/fraud/rules' };
   if (!endpoints[page] || (['fraud','rules'].includes(page) && state.user.role !== 'admin')) return;
-  const userId = state.user.id;
+  const userId = state.user.id,session=serviceEpoch;
+  const active=()=>session===serviceEpoch && state.user && !state.signingOut && sameId(state.user.id,userId);
   const requestKey = `${userId}:${page}`;
   if (inflight.has(requestKey)) return inflight.get(requestKey);
   if (!state.remote[page]?.data || force) {
@@ -66,23 +69,24 @@ export async function loadExtras(page, { force = false } = {}) {
   const pending = (async () => {
     try {
       const result = await backgroundGet(endpoints[page]);
-      if (!state.user || !sameId(state.user.id,userId)) return;
+      if (!active()) return;
       state.remote[page] = { data: result };
       if (page === 'fraud') {
         await ui.loadFraudCases?.({render:false});
-        try { const result = await backgroundGet('/fraud/model'); if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.model = { data: result.model || result }; }
-        catch (error) { if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.model = { error: error.message }; }
-        if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return;
-        try { const result = await backgroundGet('/fraud/model-activity'); if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.modelActivity = { data: result.activity }; }
-        catch (error) { if (!state.user || state.signingOut || !sameId(state.user.id,userId)) return; state.remote.modelActivity = { error: error.message }; }
+        if(!active())return;
+        try { const result = await backgroundGet('/fraud/model'); if (!active()) return; state.remote.model = { data: result.model || result }; }
+        catch (error) { if (!active()) return; state.remote.model = { error: error.message }; }
+        if (!active()) return;
+        try { const result = await backgroundGet('/fraud/model-activity'); if (!active()) return; state.remote.modelActivity = { data: result.activity }; }
+        catch (error) { if (!active()) return; state.remote.modelActivity = { error: error.message }; }
       }
       if (state.route.page === page && !modal.open) ui.render();
     } catch (error) {
-      if (error.status === -1 || !state.user || state.signingOut || !sameId(state.user.id,userId)) return;
-      if (await recoverSession(error)) return;
+      if (error.status === -1 || !active()) return;
+      if (await recoverSession(error) || !active()) return;
       state.remote[page] = { error: error.message };
       if (state.route.page === page) ui.render();
-    } finally { inflight.delete(requestKey); }
+    } finally { if(inflight.get(requestKey)===pending)inflight.delete(requestKey); }
   })();
   inflight.set(requestKey,pending);
   return pending;
@@ -94,8 +98,10 @@ export function notificationsPage() {
   });
 }
 export async function markNotification(id) {
-  await api(`/notifications/${encodeURIComponent(id)}`, { read: true }, 'PATCH');
-  await loadNotifications({ renderPage: true });
+  const session=serviceEpoch,userId=state.user?.id;
+  if(!userId || state.signingOut)return;
+  await api('/notifications/'+encodeURIComponent(id), { read: true }, 'PATCH');
+  if(session===serviceEpoch && sameId(state.user?.id,userId) && !state.signingOut)await loadNotifications();
 }
 export function schedulesPage() {
   return heading('A little planning ahead.', 'Set a future transfer or bill payment and keep track of its progress.', `<button type="button" class="button" data-action="new-schedule">${icon('plus')}<span>Schedule payment</span></button>`) + `<div class="notice schedule-notice">Scheduled requests do not move or reserve money now. On the due date, available funds and fraud checks determine whether they complete, await review or fail.</div>` + remoteContent('schedules', result => {
@@ -105,7 +111,7 @@ export function schedulesPage() {
 }
 function localDateTime(date) { return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}T${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`; }
 export function scheduleDialog({ reset = true } = {}) {
-  if (reset) scheduleDraft = {};
+  if (reset) { scheduleDraft = {}; pendingSchedule=null; }
   const bill = scheduleDraft.type === 'bill', tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate()+1); tomorrow.setHours(9,0,0,0);
   dialog('Plan a payment.', `<p class="modal-intro">Times are shown in your browser’s local timezone (${esc(Intl.DateTimeFormat().resolvedOptions().timeZone)}). The server stores the due time in UTC.</p><form id="schedule-form"><div class="field"><label for="schedule-type">Payment type</label><select id="schedule-type" name="type"><option value="transfer" ${bill ? '' : 'selected'}>Internal transfer</option><option value="bill" ${bill ? 'selected' : ''}>Bill payment</option></select></div><div class="field"><label for="schedule-from">From account</label><select id="schedule-from" name="fromAccountId" required>${accountOptions(scheduleDraft.fromAccountId)}</select></div>${bill ? `<div class="field"><label for="schedule-biller">Biller</label><select id="schedule-biller" name="billerId" required><option value="">Choose a biller</option>${state.data.billers.map(b => `<option value="${esc(b.id)}" ${b.id === scheduleDraft.billerId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div><div class="field"><label for="schedule-reference">Bill reference</label><input id="schedule-reference" name="reference" value="${esc(scheduleDraft.reference)}" minlength="3" maxlength="64" required></div>` : `<div class="field"><label for="schedule-recipient">Recipient account number</label><input id="schedule-recipient" name="toAccountNumber" value="${esc(scheduleDraft.toAccountNumber)}" placeholder="10-digit GLDB business account number" inputmode="numeric" maxlength="20" required></div>`}<div class="field"><label for="schedule-amount">Amount (SGD)</label><input id="schedule-amount" name="amount" value="${esc(scheduleDraft.amount)}" placeholder="0.00" inputmode="decimal" maxlength="15" required></div><div class="field"><label for="schedule-date">First payment date and time</label><input id="schedule-date" name="scheduledAt" type="datetime-local" value="${esc(scheduleDraft.scheduledAt || localDateTime(tomorrow))}" min="${localDateTime(new Date(Date.now()+60000))}" required></div><div class="field"><label for="schedule-frequency">Repeat</label><select id="schedule-frequency" name="frequency">${[['once','One time'],['weekly','Every week'],['monthly','Every month']].map(([key,label]) => `<option value="${key}" ${key === scheduleDraft.frequency ? 'selected' : ''}>${label}</option>`).join('')}</select></div><div class="field"><label for="schedule-description">Description (optional)</label><input id="schedule-description" name="description" value="${esc(scheduleDraft.description)}" maxlength="100"></div><div class="error-message" role="alert"></div><button type="submit" class="button full">Review schedule ${icon('arrow')}</button></form>`);
   if (bill) modal.querySelector("#schedule-description").closest(".field").remove();
@@ -137,21 +143,25 @@ export function reviewSchedule(form) {
   dialog('Review your scheduled payment.', `<p class="modal-intro">No money moves when you create this schedule.</p><dl class="review-list"><div><dt>From</dt><dd>${esc(source.name)}</dd></div><div><dt>To</dt><dd>${esc(bill ? biller.name : values.toAccountNumber)}</dd></div><div><dt>Amount</dt><dd class="review-amount">${money(cents)}</dd></div><div><dt>First payment (SGT)</dt><dd>${fullDate(due.toISOString())}</dd></div><div><dt>Repeat</dt><dd>${esc(values.frequency === 'once' ? 'One time' : values.frequency === 'weekly' ? 'Every week' : 'Every month')}</dd></div></dl><form id="confirm-schedule-form"><div class="error-message" role="alert"></div>${authorizationField()}<div class="notice">Funds and security checks run at the due time. You can cancel future runs from Scheduled payments.</div><div class="modal-actions"><button type="button" class="button secondary" data-action="edit-schedule">Edit details</button><button type="submit" class="button">Create schedule ${icon('calendar')}</button></div></form>`);
 }
 export async function confirmSchedule(form) {
-  if (state.modalBusy || !pendingSchedule) return;
+  if (state.modalBusy || !pendingSchedule || !state.user || state.signingOut) return;
+  const session=serviceEpoch,userId=state.user.id,pending=pendingSchedule;
+  const active=()=>session===serviceEpoch && sameId(state.user?.id,userId) && !state.signingOut;
   state.modalBusy = true; formBusy(form,true);
   try {
-    await api('/scheduled-payments', { ...pendingSchedule.payload, authorizationPassword: form.elements.authorizationPassword.value });
+    await api('/scheduled-payments', { ...pending.payload, authorizationPassword: form.elements.authorizationPassword.value });
     form.elements.authorizationPassword.value = '';
+    if(!active())return;
     pendingSchedule = null; scheduleDraft = {}; state.modalBusy = false; closeDialog();
     state.remote.schedules = undefined;
     if (state.route.page !== 'schedules') { state.route = { page: 'schedules', account: '' }; history.pushState({},'','/scheduled-payments'); }
     await loadExtras('schedules',{force:true});
+    if(!active())return;
     toast('Scheduled payment created. No funds have moved.');
     loadNotifications();
   } catch (error) {
     form.elements.authorizationPassword.value = '';
-    if (!await recoverSession(error)) formError(form,error.status === 0 ? 'The response was interrupted. Retry this confirmation to check the same schedule safely.' : error.message);
-  } finally { state.modalBusy = false; formBusy(form,false); }
+    if (active() && !await recoverSession(error)) formError(form,error.status === 0 ? 'The response was interrupted. Retry this confirmation to check the same schedule safely.' : error.message);
+  } finally { if(active()){state.modalBusy = false; formBusy(form,false);} }
 }
 export function scheduleDetails(id) {
   const s = state.remote.schedules?.data?.schedules.find(s => sameId(s.id,id));
@@ -164,18 +174,22 @@ export function cancelScheduleDialog(id) {
   dialog('Cancel this scheduled payment?', `<p class="modal-intro">Future runs will be cancelled. Any request already processed remains in your transaction history.</p><dl class="review-list"><div><dt>Amount</dt><dd>${money(schedule.amountCents)}</dd></div><div><dt>Next payment (SGT)</dt><dd>${fullDate(schedule.nextRunAt || schedule.scheduledAt)}</dd></div></dl><form id="cancel-schedule-form" data-id="${esc(id)}"><div class="error-message" role="alert"></div><div class="modal-actions"><button type="button" class="button secondary" data-action="close-dialog">Keep schedule</button><button type="submit" class="button danger">Cancel schedule</button></div></form>`);
 }
 export async function cancelSchedule(form) {
-  if (state.modalBusy) return;
+  if (state.modalBusy || !state.user || state.signingOut) return;
+  const session=serviceEpoch,userId=state.user.id;
+  const active=()=>session===serviceEpoch && sameId(state.user?.id,userId) && !state.signingOut;
   state.modalBusy = true; formBusy(form,true);
   try {
-    await api(`/scheduled-payments/${encodeURIComponent(form.dataset.id)}`,{},'DELETE');
+    await api('/scheduled-payments/'+encodeURIComponent(form.dataset.id),{},'DELETE');
+    if(!active())return;
     state.modalBusy = false; closeDialog();
     await loadExtras('schedules',{force:true});
-    toast('Future payments cancelled.'); loadNotifications();
-  } catch (error) { if (!await recoverSession(error)) formError(form,error.message); }
-  finally { state.modalBusy = false; formBusy(form,false); }
+    if(active()){toast('Future payments cancelled.');loadNotifications();}
+  } catch (error) { if (active() && !await recoverSession(error)) formError(form,error.message); }
+  finally { if(active()){state.modalBusy = false; formBusy(form,false);} }
 }
 // Open an assistant-prepared schedule in the existing review/authorization flow.
 export function openScheduleDraft(draft={}) {
+  pendingSchedule=null;
   scheduleDraft={...draft,type:draft.type==='bill'?'bill':'transfer'};
   if(draft.scheduledAt){ const due=new Date(draft.scheduledAt); scheduleDraft.scheduledAt=Number.isFinite(due.getTime())?localDateTime(due):''; }
   if(!['once','weekly','monthly'].includes(scheduleDraft.frequency))scheduleDraft.frequency='once';

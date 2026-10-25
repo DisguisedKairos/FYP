@@ -61,3 +61,57 @@ test('Sign-out cancels dashboard reads and anonymous callbacks cannot start new 
  await page.evaluate("import('/js/core.js').then(m=>m.loadDashboard({render:false}))");
  assert.deepEqual({cancelled,anonymousReads:await page.evaluate('window.anonymousBalanceReads')},{cancelled:true,anonymousReads:0});
 });
+
+test('A delayed notification read cannot restore unread state or replace the next session results',async t=>{
+  const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+  const owner=(await f.db.query("SELECT id FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+  const note=await require('../banking/ledger').enqueue(f.db,{userId:owner.id,type:'account.update',title:'Notification ordering check',message:'Read state must remain current.'});await require('../banking/workflows').dispatch(f.db);
+  await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));await page.click('[data-nav=notifications]');await page.waitFor(exists('[data-read-notification]'));
+  await page.evaluate("window.noticeFetch=window.fetch;window.holdNotice=true;window.fetch=async(...args)=>{const response=await window.noticeFetch(...args);if(window.holdNotice && String(args[0])==='/api/notifications'){window.holdNotice=false;const body=await response.text();await new Promise(resolve=>window.releaseNotice=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+  await page.evaluate("import('/js/services.js').then(m=>{window.oldNoticeRead=m.loadNotifications({renderPage:true});return true;})");await page.waitFor('typeof window.releaseNotice==="function"');
+  await page.click('[data-read-notification="'+note.id+'"]');await page.waitFor('!document.querySelector("[data-read-notification]")');
+  await page.evaluate('window.releaseNotice();window.oldNoticeRead');
+  assert.equal(await page.evaluate('document.querySelectorAll(".notification-item.unread").length'),0,'An older read must not undo the read confirmation.');
+  await page.evaluate("window.holdNotice=true;delete window.releaseNotice;import('/js/services.js').then(m=>{window.previousSessionNotice=m.loadNotifications();return true;})");await page.waitFor('typeof window.releaseNotice==="function"');
+  await page.click('[data-action=logout]');await page.waitFor(exists('#auth-form'));
+  await f.db.query('UPDATE notifications SET title=$2 WHERE id=$1',[note.id,'Current session notification']);
+  await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));await page.click('[data-nav=notifications]');await page.waitFor('document.querySelector(".notification-list")?.textContent.includes("Current session notification")');
+  await page.evaluate('window.releaseNotice();window.previousSessionNotice');
+  assert.ok((await page.evaluate('document.querySelector(".notification-list").textContent')).includes('Current session notification'));assert.deepEqual(page.errors,[]);
+});
+
+test('Starting a new schedule after an interrupted confirmation creates a distinct authorized instruction',async t=>{
+  const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));await page.click('[data-nav=schedules]');await page.waitFor(exists('[data-action=new-schedule]'));
+  await page.evaluate("window.scheduleFetch=window.fetch;window.interruptSchedule=true;window.scheduleKeys=[];window.fetch=async(...args)=>{const response=await window.scheduleFetch(...args);if(String(args[0])==='/api/scheduled-payments' && args[1]?.method==='POST'){window.scheduleKeys.push(JSON.parse(args[1].body).requestId);if(window.interruptSchedule){window.interruptSchedule=false;await response.text();throw new TypeError('Controlled loss of a committed confirmation response');}}return response;};");
+  const review=async()=>{await page.click('[data-action=new-schedule]');await page.fill('#schedule-recipient','1020002001');await page.fill('#schedule-amount','1.00');await page.fill('#schedule-description','Distinct instruction');await submit(page,'#schedule-form');await page.fill('#authorizationPassword','Greenlink123!');};
+  await review();await submit(page,'#confirm-schedule-form');await page.waitFor('document.querySelector("#confirm-schedule-form .error-message")?.textContent.includes("Retry this confirmation")');
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count),1);
+  await page.click('#modal [data-action=close-dialog]');await review();await submit(page,'#confirm-schedule-form');await page.waitFor('!document.querySelector("#modal").open && document.querySelector(".schedule-list")');
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count),2,'A freshly opened form is a new authorized instruction, not a retry of the abandoned confirmation.');
+  const keys=await page.evaluate('window.scheduleKeys');assert.equal(new Set(keys).size,2);assert.deepEqual(page.errors,[]);
+});
+
+test('A completed schedule response from an ended session cannot close the next operator draft',async t=>{
+  const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+  const login=async email=>{await page.fill('#email',email);await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));};
+  await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await login('alex@greenlink.demo');await page.click('[data-nav=schedules]');await page.waitFor(exists('[data-action=new-schedule]'));
+  await page.evaluate("window.oldScheduleFetch=window.fetch;window.holdSchedule=true;window.fetch=async(...args)=>{const response=await window.oldScheduleFetch(...args);if(window.holdSchedule && String(args[0])==='/api/scheduled-payments' && args[1]?.method==='POST'){window.holdSchedule=false;const body=await response.text();await new Promise(resolve=>window.releaseSchedule=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+  await page.click('[data-action=new-schedule]');await page.fill('#schedule-recipient','1020002001');await page.fill('#schedule-amount','1.00');await submit(page,'#schedule-form');await page.fill('#authorizationPassword','Greenlink123!');await page.evaluate("import('/js/services.js').then(m=>{window.oldScheduleConfirmation=m.confirmSchedule(document.querySelector('#confirm-schedule-form'));return true;})");await page.waitFor('typeof window.releaseSchedule==="function"');
+  await page.evaluate("import('/js/core.js').then(m=>{m.ui.endSession('Session ended during confirmation.');return true;})");await page.waitFor(exists('#auth-form'));await login('jamie@greenlink.demo');
+  await page.evaluate("import('/js/services.js').then(m=>{m.scheduleDialog();return true;})");await page.fill('#schedule-description','Current operator private draft');
+  await page.evaluate('window.releaseSchedule();window.oldScheduleConfirmation');
+  assert.equal(await page.evaluate('document.querySelector("#modal").open && document.querySelector("#schedule-description")?.value'),'Current operator private draft');
+  assert.equal(await page.evaluate('location.pathname'),'/dashboard');assert.deepEqual(page.errors,[]);
+});
+
+test('An ended session account response cannot update the next operator accounts or dismiss their form',async t=>{
+  const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+  const login=async email=>{await page.fill('#email',email);await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));};
+  await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await login('alex@greenlink.demo');
+  await page.evaluate("window.accountFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.accountFetch(...args);if(String(args[0])==='/api/accounts' && args[1]?.method==='POST'){const body=await response.text();await new Promise(resolve=>window.releaseAccount=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
+  await page.evaluate("import('/js/workflows.js').then(m=>{m.accountNameDialog();return true;})");await page.fill('#account-name','Prior operator private account');await page.evaluate("import('/js/workflows.js').then(m=>{window.oldAccountWrite=m.submitAccount(document.querySelector('#account-form'));return true;})");await page.waitFor('typeof window.releaseAccount==="function"');
+  await page.evaluate("import('/js/core.js').then(m=>{m.ui.endSession('Previous session ended.');return true;})");await page.waitFor(exists('#auth-form'));await login('jamie@greenlink.demo');
+  await page.evaluate("import('/js/workflows.js').then(m=>{m.accountNameDialog();return true;})");await page.fill('#account-name','Current operator draft');await page.evaluate('window.releaseAccount();window.oldAccountWrite');
+  assert.equal(await page.evaluate('document.querySelector("#modal").open && document.querySelector("#account-name")?.value'),'Current operator draft');
+  assert.equal(await page.evaluate("import('/js/core.js').then(m=>m.state.data.accounts.some(a=>a.name==='Prior operator private account'))"),false);assert.deepEqual(page.errors,[]);
+});

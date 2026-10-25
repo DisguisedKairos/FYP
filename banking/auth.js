@@ -73,6 +73,12 @@ async function authorize(db, user, value, now = Date.now, { ip = 'internal', pur
   return { method: 'password', authorizedAt: date.toISOString(), userId: String(record.id), authVersion: record.auth_version, purpose };
 }
 
+async function assertCurrentUser(db,user,{lock=false}={}) {
+  const current=(await db.query('SELECT id,name,email,role,auth_version FROM users WHERE id=$1'+(lock?' FOR UPDATE':''),[user?.id])).rows[0];
+  if(!current || current.auth_version!==user.auth_version)throw new HttpError(409,'Account security changed. Sign in again.');
+  return current;
+}
+
 function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = false, authEncryptionKey = process.env.AUTH_ENCRYPTION_KEY } = {}) {
   if (!db?.query || !db?.transaction) throw new Error('Authentication requires the PostgreSQL database adapter.');
   const origin = publicOrigin ? security.normalizeOrigin(publicOrigin) : null;
@@ -227,9 +233,7 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
   }
 
   async function lockCurrentUser(client, context) {
-    const user = (await client.query('SELECT id,name,email,role,auth_version FROM users WHERE id=$1 FOR UPDATE', [context.user.id])).rows[0];
-    if (!user || user.auth_version !== context.user.auth_version) throw new HttpError(409, 'Account security changed. Sign in again.');
-    return user;
+    return assertCurrentUser(client,context.user,{lock:true});
   }
 
   async function mfaSetup(req, res, body, context) {
@@ -341,4 +345,4 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
   };
 }
 
-module.exports = { createAuth, authorize, consumeLimits, LIMITS };
+module.exports = { createAuth, assertCurrentUser, authorize, consumeLimits, LIMITS };

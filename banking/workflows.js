@@ -42,7 +42,7 @@ async function createSchedule(db,user,body,{authorize,now=Date.now}={}) {
 }
 async function cancelSchedule(db,user,id,{now=Date.now}={}){
   return db.transaction(async client=>{
-    await client.query('SELECT id FROM users WHERE id=$1 FOR UPDATE',[user.id]);
+    await require('./auth').assertCurrentUser(client,user,{lock:true});
     const row=(await client.query('SELECT * FROM scheduled_payments WHERE id=$1 AND user_id=$2 FOR UPDATE',[id,user.id])).rows[0];
     if(!row)throw new HttpError(404,'Scheduled payment not found.');
     if(row.status==='cancelled')return scheduleView(client,row);

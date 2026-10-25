@@ -131,3 +131,19 @@ pgTest('DFT query parsing preserves literal question marks and validates followi
  const r=await client.request('/api/transactions?q=QUERY-CHECK?EXACT');assert.equal(r.status,200);assert.equal(r.data.pagination.total,1);assert.equal(r.data.transactions[0].description,'QUERY-CHECK?EXACT');
  assert.equal((await client.request('/api/transactions?q=QUERY-CHECK?EXACT&page=0')).status,400);
 });
+
+for(const action of ['open','rename','close','cancel schedule'])pgTest('DFT '+action+' rechecks session authorization after a concurrent security change',async t=>{
+  const f=await fixture(t,{http:false});let invalidate=false;
+  const db={...f.db,transaction:async(...args)=>{if(invalidate){invalidate=false;await f.db.query("UPDATE users SET auth_version=auth_version+1 WHERE email='alex@greenlink.demo'");}return f.db.transaction(...args);}};
+  await f.start({db});const client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
+  let endpoint='/api/accounts',method='POST',body={name:'Stale session account'};
+  if(action==='rename'||action==='close'){
+    const created=await client.request(endpoint,{method:'POST',body:{name:'Original account name'}});assert.equal(created.status,201);endpoint+='/'+created.data.account.id;method=action==='rename'?'PATCH':'DELETE';
+  }else if(action==='cancel schedule'){
+    const created=await client.request('/api/scheduled-payments',{method:'POST',body:{type:'bill',fromAccountId:account.id,billerId:'pub',reference:'STALE-CANCELLATION',amount:'1.00',scheduledAt:new Date(Date.now()+600000).toISOString(),frequency:'once',requestId:randomUUID()}});assert.equal(created.status,201);
+    endpoint='/api/scheduled-payments/'+created.data.schedule.id;method='DELETE';body=undefined;
+  }
+  const before={accounts:(await f.db.query('SELECT id,name,status FROM accounts ORDER BY id')).rows,schedules:(await f.db.query('SELECT id,status,next_run_at FROM scheduled_payments ORDER BY id')).rows};
+  invalidate=true;const result=await client.request(endpoint,{method,body});assert.equal(result.status,409,JSON.stringify(result.data));
+  assert.deepEqual({accounts:(await f.db.query('SELECT id,name,status FROM accounts ORDER BY id')).rows,schedules:(await f.db.query('SELECT id,status,next_run_at FROM scheduled_payments ORDER BY id')).rows},before);
+});

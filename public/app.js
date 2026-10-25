@@ -12,7 +12,7 @@ import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview 
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
-Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { stopBackgroundReads(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
 Object.assign(extraViews,{ aiAudit: aiAuditPage, assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
@@ -31,7 +31,6 @@ async function signOut(control) {
   control.disabled = true;
   state.signingOut = true;
   ui.cancelReads();
-  stopBackgroundReads();
   try {
     await api('/auth/logout',{});
     endSession('You have signed out.');
@@ -42,7 +41,7 @@ async function signOut(control) {
 }
 function endSession(notice) {
   state.signingOut = true;
-  ui.cancelReads(); stopBackgroundReads(); clearBankingState(); clearSecuritySecrets();
+  ui.cancelReads(); clearBankingState(); clearSecuritySecrets();
   state.intendedRoute = null; state.authMode = 'login'; state.authNotice = notice;
   history.pushState({}, '', '/login'); auth({ focus: true });
   state.signingOut = false;
@@ -251,7 +250,7 @@ async function start() {
   } catch (error) { connectionError(error.message); }
 }
 // Refresh operational updates while the browser is open, without interrupting forms.
-setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !state.modalBusy) loadNotifications({ renderPage: state.route.page === 'notifications' }); }, 30000);
+setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !state.modalBusy) loadNotifications(); }, 30000);
 window.addEventListener('focus', async () => {
   if (!state.user || state.modalBusy || state.signingOut) return;
   await loadDashboard({ render: false });

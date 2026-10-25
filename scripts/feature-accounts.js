@@ -148,7 +148,7 @@ async function seedExamples(db, manifest, password, riskClient, { now = Date.now
     const record = await once('schedule-' + key, async () => workflows.createSchedule(db, await user('business'), { type: 'bill', fromAccountId: manifest.accounts.business,
       amount: '12.50', billerId: 'pub', reference: 'GLFT-' + key.toUpperCase(), frequency, scheduledAt: new Date(now() + days * 86400000).toISOString(),
       requestId: FIXTURE + ':schedule-' + key, authorizationPassword: password }, options));
-    if (key === 'cancelled') await once('cancel-schedule', () => workflows.cancelSchedule(db, { id: manifest.users.business }, record.id, options));
+    if (key === 'cancelled') await once('cancel-schedule', async () => workflows.cancelSchedule(db, await user('business'), record.id, options));
     outcome.schedules[key] = { id: record.id, status: key === 'cancelled' ? 'cancelled' : record.status };
   }
   for (const [key, owner] of [['execute', 'business'], ['insufficient', 'empty']]) {
