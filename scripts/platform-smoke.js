@@ -39,6 +39,9 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
     await client.request('/api/agents/assistant',{message:'test'},'POST',503);
     await client.request('/api/transfers',{fromAccountId:before.accounts[0].id,toAccountNumber:'1020002001',amount:'1.25',authorizationPassword:password,requestId:randomUUID()},'POST',503);
     assert.deepEqual((await client.request('/api/dashboard')).accounts.map(a=>a.balanceCents),before.accounts.map(a=>a.balanceCents));
+    const failures=await client.request('/api/ai-audit?type=failure');
+    assert.ok(failures.pagination.total>=2);
+    for(const entry of failures.entries){const d=(await client.request('/api/ai-audit/failure/'+entry.id)).record;assert.equal(d.evidence.guardrails.status,'failed');}
     console.log('No local model in this fixture: Ollama-only assistant and payment screening fail closed; account reads remain available and balances are unchanged. Run with installed Ollama for real inference coverage.');return;
   }
   assert.equal(modelResponse.status,200);
@@ -73,6 +76,9 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
     assert.equal(assistantBalance.engine, 'ollama');
     assert.ok(assistantBalance.evidenceReferences.some(e=>e.tool==='get_accounts'));
     assert.equal(assistantBalance.privacy.externalServices, false);
+    const audit=(await alex.request('/api/ai-audit/agent/'+assistantBalance.runId)).record;
+    assert.ok(audit.modelCalls.length>=2);assert.ok(audit.modelCalls.every(c=>c.model===localAgent.model && c.executed && c.durationMs>=0));assert.ok(audit.evidence.tools.some(t=>t.tool==='get_accounts'));
+    assert.ok(['validated_evidence','withheld'].includes(audit.evidence.guardrails.narrative));
     const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 to 1020002001' });
     assert.equal(assistantDraft.actions[0].type, 'draft_transfer');
     assert.equal(assistantDraft.requiresAuthorization, true);
@@ -87,6 +93,8 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   first.transaction=await settleHeld(first.transaction);
   assert.equal(first.transaction.status, 'completed');
   assert.equal(typeof first.transaction.risk.score, 'number');
+  const aiPayment=(await alex.request('/api/ai-audit/payment/'+first.transaction.id)).record;
+  assert.equal(aiPayment.evidence.guardrails.payloadBinding,true);assert.equal(aiPayment.evidence.decisionSummary.aiScore,first.transaction.risk.modelScore);assert.ok(aiPayment.modelCalls.some(c=>c.modelSha256===first.transaction.risk.modelSha256));
   const afterFirst = await alex.request('/api/dashboard');
   assert.equal(afterFirst.accounts.find(a => a.id === source.id).balanceCents, source.balanceCents - 125);
 
@@ -139,7 +147,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   }
   assert.ok(notifications.notifications.some(n => n.transactionId === first.transaction.id));
   assert.equal((await alex.request('/api/notifications/all', { read: true }, 'PATCH')).unreadCount, 0);
-  console.log('DFT smoke passed: authenticated FastAPI contracts, Express/PostgreSQL banking, local-model availability boundary, screening/review, transfers/bills, schedules, notifications, history/statements and rule audit.');
+  console.log('DFT smoke passed: authenticated FastAPI contracts, Express/PostgreSQL banking, local-model availability boundary, screening/review, transfers/bills, schedules, notifications, history/statements, rule audit and authorized AI evaluation evidence.');
 }
 
 async function unusedPort() {

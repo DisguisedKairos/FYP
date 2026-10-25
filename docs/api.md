@@ -63,6 +63,15 @@ All routes require the existing session. POST routes additionally require CSRF a
 
 Reports return `{run:{id,kind,engine,status,report,steps,...}}`. Unsupported fields/tools fail closed. Raw messages are not stored; reports, tool evidence and structured draft context are retained in PostgreSQL. Follow [agent privacy, limits and walkthrough](banking-agents.md).
 
+## AI audit log (2.11.0)
+
+- GET `/api/ai-audit`: searchable saved evidence summaries. Filters: type=all|agent|payment|monitoring|failure, q (maximum 150 characters; literal matching), days=1..90 (default 30), page=1..10000, pageSize=1..100 (default 20). Duplicate/unknown filters return 400. Response: entries, pagination, filters, scope and explanation.
+- GET `/api/ai-audit/:kind/:id`: returns {record:{kind,id,createdAt,evidence,modelCalls,modelCallsTruncated,interpretation,provenanceNote}}. Payment detail distinguishes AI-selected reasons from financial rule matches and retains canonical input/policy binding. Monitoring includes its saved assessment and current human case outcome. Agent detail includes permitted tool arguments/results, displayed report and narrative safety outcome. No context_json or raw chat is returned.
+
+Both are authenticated, read-only PostgreSQL operations. Business operators see owned runs/payment assessments and their failed model calls. Staff see global payment/monitoring evidence but only their own assistant runs and assistant failures. Cross-owner private detail returns 404; monitoring detail requires staff (403). Historical records do not require a running model to read. A maximum of 100 request metadata entries is returned per record. There are no audit mutation endpoints.
+
+New inference calls append ai.model_call metadata to the protected audit_log. Metadata is allowlisted: local provider/model, subject, phase, attempt, timestamps, duration, available digests, proposed tool names, status and bounded error code. Availability failures have executed=false. executed=true identifies an attempt through the local adapter/gateway; it does not prove that Ollama completed inference. Request completion does not establish guardrail acceptance or financial settlement. Detailed timing is not retroactively synthesized. Browser JSON export uses this same authorized detail response.
+
 ## Financial payloads
 
 Registration additionally requires `business:{legalName,registrationNumber,country:"SG",legalForm,industry,registeredAddress}`. Legal form is `company`, `partnership` or `institution`; personal onboarding is rejected. The business starts pending review regardless of client-supplied status. Approval requires a fresh bank staff password and `verificationConfirmed:true`; review cannot be performed by the business's own primary operator. Version mismatches and already-reviewed applications return409. Approved identity changes require bank assistance.

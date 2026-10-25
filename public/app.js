@@ -1,3 +1,4 @@
+import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit} from './js/ai-audit.js';
 import { assistantPage, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
@@ -11,8 +12,8 @@ import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview 
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
-Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); } });
-Object.assign(extraViews,{ assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
+Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(extraViews,{ aiAudit: aiAuditPage, assistant: assistantPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
 ui.loadFraudCases=loadFraudCases;
@@ -59,6 +60,7 @@ document.addEventListener('submit',async event => {
   if (!form.reportValidity()) return;
   try {
     switch (form.id) {
+      case 'ai-audit-filters': await loadAiAudit({form}); break;
       case 'assistant-form': await sendAssistant(form.elements.message.value); break;
       case 'auth-form': {
         const values = Object.fromEntries(new FormData(form));
@@ -106,6 +108,7 @@ document.addEventListener('click',async event => {
   if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
+    if (control.dataset.aiAuditId) { if(state.route.page!=='aiAudit')navigate('aiAudit'); return showAiAudit(control.dataset.aiAuditKind,control.dataset.aiAuditId); }
     if (control.dataset.fraudCase) return openFraudCase(control.dataset.fraudCase);
     if (control.dataset.claimFraudCase) return claimFraudCase(control);
     if (control.dataset.agentRun) { if(state.route.page!=='agents')navigate('agents'); return showAgentRun(control.dataset.agentRun); }
@@ -121,6 +124,9 @@ document.addEventListener('click',async event => {
     if (control.dataset.reviewTransaction) return reviewDialog(control.dataset.reviewTransaction);
     if (control.dataset.reviewBusiness) return reviewBusinessDialog(control.dataset.reviewBusiness);
     switch (control.dataset.action) {
+      case 'ai-audit-prev': await loadAiAudit({page:(state.aiAudit?.page || 1)-1}); break;
+      case 'ai-audit-next': await loadAiAudit({page:(state.aiAudit?.page || 1)+1}); break;
+      case 'ai-audit-download': downloadAiAudit(); break;
       case 'auth-switch': switchAuth(); break;
       case 'refresh-business-applications': await loadBusinessApplications(); break;
       case 'assistant-clear': clearAssistant(); break;

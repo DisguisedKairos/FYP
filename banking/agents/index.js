@@ -1,6 +1,7 @@
 'use strict';
 
-const { randomUUID } = require('node:crypto');
+const { randomUUID, createHash } = require('node:crypto');
+const aiAudit = require('../ai-audit');
 const { HttpError } = require('../../models/errors');
 const { consumeLimits } = require('../auth');
 const { bucketKey } = require('../security');
@@ -101,15 +102,27 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
     const conversational=kind==='assistant' && CONVERSATIONAL.test(message.trim());
     const engine=body.engine===undefined?'ollama':body.engine;
     if(engine!=='ollama')throw new HttpError(400,'Only the local Ollama model is supported.');
-    if(!(await model.inspect()).available)throw new HttpError(503,'The local tool-capable model is unavailable. Start Ollama with the configured model and retry.');
     await consumeLimits(db,[{key:bucketKey('agents:user',String(user.id)),maximum:40},{key:bucketKey('agents:ip',ip),maximum:120}],new Date(now()));
-    const id=randomUUID();
+    const id=randomUUID(),availabilityStarted=Date.now(),availabilityStartedAt=iso(now());
+    if(!(await model.inspect()).available){
+      await aiAudit.record(db,{kind:'agent',subjectId:id,userId:user.id,actorId:user.id,model:model.model,phase:'availability',status:'failed',executed:false,startedAt:availabilityStartedAt,durationMs:Date.now()-availabilityStarted,errorCode:'MODEL_UNAVAILABLE',createdAt:iso(now())});
+      throw new HttpError(503,'The local tool-capable model is unavailable. Start Ollama with the configured model and retry.');
+    }
     await db.transaction(async client=>{
       await client.query('SELECT pg_advisory_xact_lock(783456122)');
       if(Number((await client.query("SELECT count(*) FROM agent_runs WHERE status='running' AND created_at>$1",[iso(now()-120000)])).rows[0].count)>=2)throw new HttpError(429,'Two investigations are already running. Try again shortly.');
       await client.query('INSERT INTO agent_runs(id,user_id,auth_version,kind,engine,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,user.id,actor.auth_version,kind,engine,iso(now())]);
     });
-    let step=0,context={...previous}, results=[];
+    let step=0,context={...previous}, results=[],attempt=0;
+    const promptSha256=createHash('sha256').update(SYSTEM).digest('hex');
+    async function trackedChat(messages,tools,options,phase='banking_task'){
+      const started=Date.now(),base={kind:'agent',subjectId:id,userId:user.id,actorId:user.id,model:model.model,promptSha256,phase,attempt:++attempt,startedAt:iso(now())};
+      let response;
+      try{response=await model.chat(messages,tools,options);}
+      catch(error){await aiAudit.record(db,{...base,status:'failed',errorCode:error instanceof HttpError?'HTTP_'+error.status:'MODEL_UNAVAILABLE',durationMs:Date.now()-started,createdAt:iso(now())});throw error;}
+      await aiAudit.record(db,{...base,status:'completed',toolNames:(response.tool_calls || []).map(c=>c?.function?.name),durationMs:Date.now()-started,createdAt:iso(now())});
+      return response;
+    }
     const allowed=Object.keys(properties).filter(name=>actor.role==='admin' || !['investigate_transaction','simulate_rule'].includes(name));
     const toolNames=kind==='assistant'?(engine==='ollama' && conversational?[]:allowed):kind==='fraud_investigation'?['investigate_transaction','get_related_payments']:kind==='liquidity'?['get_accounts','get_schedules','project_liquidity']:kind==='rule_simulation'?['simulate_rule']:['reconcile_accounts'];
     async function call(name,args){
@@ -159,7 +172,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
           const remaining=deadline-Date.now();if(remaining<=0)throw new HttpError(504,'The local agent time limit was reached. Start Ollama and retry.');
           // A local model may need to load its weights on the first request.
           // Give that call more of the same bounded total task budget.
-          const response=await model.chat(messages,toolNames.map(toolSchema),{signal:AbortSignal.timeout(Math.min(round===0?45000:30000,remaining))});
+          const response=await trackedChat(messages,toolNames.map(toolSchema),{signal:AbortSignal.timeout(Math.min(round===0?45000:30000,remaining))});
           modelRequests++;
           if(!response.tool_calls?.length){
             if(!step){
@@ -192,7 +205,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
         // it as financial evidence or changing any authoritative tool facts.
         if(!clarification && narrativeIssue(reply,report,{results,evidence:references(id,results),requireCitations:true}) && modelRequests<4 && deadline-Date.now()>1000){
           try{
-            const revised=await model.chat([...messages,{role:'assistant',content:reply},{role:'user',content:'Validation failure: '+narrativeIssue(reply,report,{results,evidence:references(id,results),requireCitations:true})+' Rewrite as a short qualitative paragraph. Cite supplied tool references such as [E1]. Apart from references, do not include ANY digits or numbers written as words, monetary amounts, scores, counts, dates, thresholds, account IDs or numbered lists. The banking screen displays exact facts. Never claim execution, certainty of fraud, guaranteed funding, or facts contradicted by tool results. Reconciliation does not assess fraud. Only describe the retrieved scope and what a human should verify.'}],[],{signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))});
+            const revised=await trackedChat([...messages,{role:'assistant',content:reply},{role:'user',content:'Validation failure: '+narrativeIssue(reply,report,{results,evidence:references(id,results),requireCitations:true})+' Rewrite as a short qualitative paragraph. Cite supplied tool references such as [E1]. Apart from references, do not include ANY digits or numbers written as words, monetary amounts, scores, counts, dates, thresholds, account IDs or numbered lists. The banking screen displays exact facts. Never claim execution, certainty of fraud, guaranteed funding, or facts contradicted by tool results. Reconciliation does not assess fraud. Only describe the retrieved scope and what a human should verify.'}],[],{signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))},'narrative_repair');
             if(!revised.tool_calls?.length && revised.content.trim())reply=revised.content.slice(0,5000);
           }catch{
             // An optional wording repair must not discard a valid evidence
@@ -210,6 +223,7 @@ function createAgents({db,now=Date.now,model=createLocalModel()}={}){
       if(!report)report={title:'Business banking enquiry',reply,actions:[],items:[]};
       if(results.length)report={...report,evidenceReferences:references(id,results)};
       if(narrativeProblem)report={...report,narrativeWithheld:true,narrativeIssue:narrativeProblem};
+      report={...report,aiAudit:{provider:'ollama',model:model.model || null,promptSha256,modelRequests:attempt,outcome:narrativeProblem?'withheld':clarification?'help_without_banking_claims':'validated_evidence',reason:narrativeProblem || null}};
       await db.transaction(async client=>{
         await validateSession();
         await reports.assertActor(client,acting);

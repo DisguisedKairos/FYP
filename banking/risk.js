@@ -1,6 +1,7 @@
 'use strict';
 
 const { HttpError } = require('../models/errors');
+const aiAudit=require('./ai-audit');
 const MODEL_REVIEW_THRESHOLD = 65;
 const MAX_CENTS = 9000000000000;
 const asIso = value => new Date(value).toISOString();
@@ -97,7 +98,14 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
   async function getRules() { return db.transaction(client => readPolicy(client), { isolation: 'REPEATABLE READ', readOnly: true }); }
   async function analyze(input,options={}) {
     validateInput(input);
-    return validateModel(assessModel ? await assessModel(input) : (await call('/internal/assess', input,options)).risk, input);
+    const started=Date.now();let result;
+    try{result=validateModel(assessModel ? await assessModel(input) : (await call('/internal/assess', input,options)).risk, input);}
+    catch(error){
+      if(options.audit)await aiAudit.record(db,{...options.audit,userId:input.userId,phase:'fraud_scoring',model:process.env.AGENT_MODEL || 'qwen3.5:4b',status:'failed',startedAt:new Date(started).toISOString(),durationMs:Date.now()-started,errorCode:error instanceof HttpError?'HTTP_'+error.status:'MODEL_UNAVAILABLE'});
+      throw error;
+    }
+    if(options.audit)await aiAudit.record(db,{...options.audit,userId:input.userId,phase:'fraud_scoring',model:result.modelName,modelSha256:result.modelSha256,promptSha256:result.promptSha256,status:'completed',startedAt:new Date(started).toISOString(),durationMs:Date.now()-started});
+    return result;
   }
   async function assess(input) {
     validateInput(input);
@@ -115,7 +123,7 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
     });
     if (record.result_json) return record.result_json;
     const bound = record.input_json, policy = record.policy_json;
-    const model = await analyze(bound);
+    const model = await analyze(bound,{audit:{kind:'payment',subjectId:bound.transactionId,actorId:bound.userId}});
     const matches = evaluateRules(policy.rules, bound);
     const decision = matches.some(reason => reason.action === 'block') ? 'block' : matches.length || model.decision === 'review' ? 'review' : 'allow';
     const result = { ...model, decision, score: decision === 'block' ? 95 : matches.length ? Math.max(70, model.score) : model.score, ruleVersion: policy.version,

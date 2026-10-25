@@ -1,10 +1,12 @@
-# DFT verification record - 2.10.1
+# DFT verification record - 2.11.0
 
-Verified locally on 25 October 2026 (Asia/Singapore): 167 Node functional/security tests, 21 Python contract/delivery tests and nine browser workflows passed. Syntax checks covered 82 JavaScript files. The suite uses controlled adapters only inside tests; production cannot select them.
+Verified locally on 25 October 2026 (Asia/Singapore): 175 Node functional/security tests, 21 Python contract/delivery tests and ten browser workflows passed. Syntax checks covered 85 JavaScript files. The suite uses controlled adapters only inside tests; production cannot select them.
 
 The earlier 2.10.0 local qwen3.5:4b fraud comparison returned 5 for a routine sample and 68 for a contrasting amount/velocity/balance-use sample. These are observed model outputs, not preset demonstration scores or validated fraud-performance metrics.
 
-The real Express/PostgreSQL/FastAPI process check passed with installed Ollama. It exercised actual fraud scoring, assistant balance and draft tools, authorized transfers/bills, independent review, schedules, notifications, statements and rule audit. A held instruction is settled only through a separately authorized reviewer in that disposable fixture. When no model is installed, process/container checks instead verify explicit unavailability and unchanged balances.
+The 2.11.0 real Express/PostgreSQL/FastAPI process check passed with installed Ollama, including linked model request metadata, owned assistant/tool evidence, payment input binding and matching fraud model provenance. It exercised actual fraud scoring, assistant balance and draft tools, authorized transfers/bills, independent review, schedules, notifications, statements and rule audit. A held instruction is settled only through a separately authorized reviewer in that disposable fixture. When no model is installed, process/container checks instead verify explicit unavailability and unchanged balances.
+
+AI audit checks cover authentication, strict and parameterized search, customer/staff access boundaries, private assistant records even from other staff, model availability/inference failures, metadata privacy allowlists, historical records without fabricated timing, unsafe narrative withholding and its bounded repair request, AI-versus-financial-rule reasons, and refusal to settle when model-call audit persistence fails. The mobile workflow searches records, inspects the timeline/tool evidence and downloads an actual JSON file. New metadata reuses the existing append-only audit_log; no schema migration or historical backfill is introduced.
 
 Patch regressions reproduced the prior failures before the fixes: incomplete/wrong-model assistant envelopes, expired conversation references trapped in retries, bill drafts accepted with undersized references, and missing incoming-receipt model provenance. All now pass. Incoming receipts retain provenance without copying sender history/context. The cancellation browser assertion also waits through the normal loading state instead of reading a missing card.
 

@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.10.1**
+**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.11.0**
 
 Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **local Ollama**. Sample funds, business checks and bill settlement are educational project flows.
 
@@ -12,7 +12,7 @@ Offline/parser engines, the logistic model and dataset, training/evaluation scri
 
 AI scores are qualitative indicators, not validated fraud probabilities. Deterministic financial rules, integer-cent calculations, database locks, password authorization and independent human review remain application controls. The model has no payment execution or rule-changing tool.
 
-Version 2.10.1 rejects incomplete or wrong-model assistant responses, lets expired conversations restart safely, aligns bill-draft reference validation with payment forms, and preserves model provenance on incoming transfer receipts.
+Version 2.11.0 adds a searchable AI audit log with saved input/tool evidence, model request timing, risk reasons, policy decisions, safety outcomes and JSON download. Open **AI audit log** in the sidebar or **View AI audit** below an assistant response.
 
 ## Features
 
@@ -21,13 +21,21 @@ Version 2.10.1 rejects incomplete or wrong-model assistant responses, lets expir
 | Accounts | Business registration and independent approval, savings management, dashboard and balance enquiry |
 | Transactions | Password-authorized internal transfers, simulated bill settlement, one-time/weekly/monthly schedules |
 | Experience | History/search, CSV exports, printable/PDF statements, private local-model assistant and payment drafts |
-| Operations | Durable notifications, independent payment review, versioned fraud rules, audit history |
+| Operations | Durable notifications, independent payment review, versioned fraud rules, financial audit history and AI evaluation audit |
 | Fraud | Ollama risk scores using authoritative historical aggregates, grounded explanation codes, automatic monitoring, human-review cases |
 | Banking insights | Local-model investigation, liquidity scenarios, historical rule comparisons and reconciliation findings |
 | Security | Scrypt hashes, role/ownership checks, CSRF/origin protection, durable limits, session revocation, TOTP/recovery codes |
 | Financial controls | Atomic settlement, integer cents, row locking, payload-bound request keys, replay protection and reconciled statements |
 
 There are two permission roles: customer (authorized business operator) and admin (bank staff). Registration creates a pending business with no spendable opening funds. Approved business ownership is required for banking changes and payments. Makers cannot independently approve their own flagged requests.
+
+## AI evaluation audit
+
+The audit screen at `/ai-audit` shows assistant/insight runs, payment assessments, staff monitoring evidence and failed local-model requests. Inspect a record to compare selected reasons, AI and combined scores, matched financial rules, validated input/policy snapshots and permitted tool results. New model requests record their model name, prompt-template digest, duration, proposed tool names and completion/failure status. A completed request means a response was received; the separate guardrail result determines whether the application accepted its interpretation.
+
+Business operators see their own runs and outgoing-payment evidence. Staff see bank-wide payment and monitoring evidence, plus only their own assistant/insight runs. Conversations remain private to their initiating user, including from other staff. Search is paginated and limited to the previous 90 days; older known records remain accessible by their permitted detail URL. JSON exports contain banking evidence and should be handled as private records.
+
+This is an evidence trace, not hidden model reasoning. Raw prompts, user messages, passwords and hidden thoughts are not copied into the new metadata log. Existing reports can contain generated paraphrases and tool arguments can contain permitted search/draft details. Earlier records show their saved evidence with an explicit notice when detailed timing was never recorded. No historical trace is invented. Existing PostgreSQL tables are reused; model metadata is appended to `audit_log`, which the restricted runtime role cannot update or delete. Failed screening still changes no balances.
 
 ## Start the existing local project
 
@@ -88,6 +96,6 @@ npm run package
 npm run package:verify
 ~~~
 
-The source archive is releases/greenlink-digital-bank-2.10.1.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
+The source archive is releases/greenlink-digital-bank-2.11.0.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
 
 See [local banking agents](docs/banking-agents.md), [Ollama fraud contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md) and [APIs](docs/api.md).

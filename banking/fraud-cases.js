@@ -96,7 +96,7 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
       if (Date.now() + 8000 > deadline) break;
       await validateSession();
       if (actor) await assertActor(db, actor, { admin: true });
-      const model = bindingMatches(row.input_json, row) ? await riskClient.analyze(row.input_json,{timeoutMs:Math.min(50000,deadline-Date.now())}) : null;
+      const model = bindingMatches(row.input_json, row) ? await riskClient.analyze(row.input_json,{timeoutMs:Math.min(50000,deadline-Date.now()),audit:{kind:'monitoring',subjectId:row.id,actorId:actor?.id || null,detectorVersion:detector}}) : null;
       if (model && active.modelSha256 && model.modelSha256 !== active.modelSha256) throw new HttpError(503, 'The scorer changed during analysis. Retry after verifying the model.');
       const evidence = finding(row, { model, policy, prior: await historyBefore(db, row, policy), now });
       const saved = await saveFinding(db, row, evidence, detector, lease, { actor, now, validateSession });

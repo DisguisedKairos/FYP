@@ -13,6 +13,7 @@ const MANIFEST_NAME = 'PACKAGE-MANIFEST.json';
 for(const name of ['tests/dft-agent-model.js','public/js/model-activity.js','tests/dft-model-activity.test.js'])REQUIRED_FILES.add(name);
 for (const file of ['banking/fraud-cases.js', 'database/migrations/008_fraud_monitoring.sql', 'public/js/fraud-cases.js', 'tests/dft-fraud-cases.test.js', 'tests/dft-fraud-cases-browser.js', 'docs/fraud-monitoring.md']) REQUIRED_FILES.add(file);
 for (const file of ['banking/fraud-monitoring.js', 'banking/agents/evidence.js', 'tests/dft-assistant-evaluation.test.js', 'docs/ai-evaluation.md']) REQUIRED_FILES.add(file);
+for(const name of ['banking/ai-audit.js','public/js/ai-audit.js','tests/dft-ai-audit.test.js'])REQUIRED_FILES.add(name);
 const MAX_FILES = 10000;
 const MAX_ENTRY_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;

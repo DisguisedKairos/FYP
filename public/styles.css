@@ -471,3 +471,6 @@ dialog.wide-dialog { width:900px; }
 .fraud-cases-panel .pagination { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px; }
 @media(max-width:1000px) { .agent-layout { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:500px) { .agent-metrics { grid-template-columns:minmax(0,1fr); }.agent-report { padding:16px; }.agent-report .section-heading { align-items:start;gap:12px;flex-wrap:wrap; } }
+
+/* AI audit evidence viewer */
+.ai-audit-filters{display:grid;grid-template-columns:minmax(180px,2fr) repeat(2,minmax(130px,1fr)) auto;gap:16px;align-items:end;margin-bottom:24px}.ai-audit-filters .field{margin:0}.ai-audit-table{width:100%;font-size:.9rem}.ai-audit-table td{vertical-align:top}.ai-audit-table small{display:block;max-width:240px;overflow-wrap:anywhere;color:var(--text-muted,#69746e);margin-top:5px}.ai-audit-timeline{padding-left:24px}.ai-audit-timeline>li{margin:16px 0;padding-left:6px}.ai-audit-timeline p{margin:6px 0}.metadata-json{max-height:420px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:1000px){.ai-audit-filters{grid-template-columns:1fr 1fr}.ai-audit-filters .field:first-child{grid-column:1/-1}}@media(max-width:500px){.ai-audit-filters{grid-template-columns:1fr}.ai-audit-filters .field:first-child{grid-column:auto}.ai-audit-table{min-width:680px}}

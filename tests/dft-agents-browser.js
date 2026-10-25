@@ -92,3 +92,23 @@ test('Model connection checks show help, while banking answers link saved owned 
   const unexpected=page.errors.filter(e=>!(e.source==='network' && e.url?.endsWith('/api/agents/assistant') && /status of 409/.test(e.text)));
   assert.deepEqual(unexpected,[]);
 });
+
+
+test('AI audit supports mobile search, model timeline, owned tool evidence and JSON download',async t=>{
+ const fs=require('node:fs'),downloadPath=path.resolve('test-results','ai-audit-download');fs.mkdirSync(downloadPath,{recursive:true});
+ const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ await page.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath});
+ await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant [data-ai-audit-id]")');
+ const runId=await page.evaluate('document.querySelector(".from-assistant [data-ai-audit-id]").dataset.aiAuditId');
+ await page.click('.from-assistant [data-ai-audit-id]');await page.waitFor('location.pathname==="/ai-audit" && document.querySelector("#modal").open');
+ assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/Model request timeline/);assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/get_accounts/);assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/not a transcript of hidden model thoughts/);
+ assert.ok(await page.evaluate('document.querySelectorAll(".ai-audit-timeline li").length>=3'));assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+ await page.click('[data-action="ai-audit-download"]');
+ const filename=path.join(downloadPath,'greenlink-ai-audit-agent-'+runId+'.json');
+ const deadline=Date.now()+5000;while(!fs.existsSync(filename) && Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,60));
+ assert.ok(fs.existsSync(filename));const saved=JSON.parse(fs.readFileSync(filename,'utf8'));assert.equal(saved.id,runId);assert.ok(saved.modelCalls.length);assert.equal(saved.evidence.tools[0].tool,'get_accounts');fs.unlinkSync(filename);
+ await page.click('[data-action="close-dialog"]');await page.fill('#ai-audit-query',runId);await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector("[data-ai-audit-count]")?.textContent.startsWith("1 matching")');
+ assert.equal(await page.evaluate('document.querySelector("[data-ai-audit-id]").dataset.aiAuditId'),runId);
+ await page.fill('#ai-audit-query','NO-SUCH-AUDIT-RECORD');await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector(".empty-state")?.textContent.includes("No matching AI records")');
+ await page.screenshot(path.resolve('test-results','ai-audit-mobile.png'));assert.deepEqual(page.errors,[]);
+});

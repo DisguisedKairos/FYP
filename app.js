@@ -192,6 +192,8 @@ async function createApplication(options = {}) {
   } });
   // Compatibility endpoint uses the same local model and security boundaries.
   route('post', '/api/assistant/messages', req => runAgent(req, 'assistant'));
+  route('get','/api/ai-audit',req=>require('./banking/ai-audit').list(db,req.banking.user,query(req),{now}));
+  route('get','/api/ai-audit/:kind/:id',async req=>({record:await require('./banking/ai-audit').detail(db,req.banking.user,req.params.kind,req.params.id)}));
   route('get', '/api/agents/status', async () => ({ agent: await agents.status() }));
   route('get', '/api/agents/runs', async req => ({ runs: await agents.list(req.banking.user) }));
   route('get', '/api/agents/runs/:id', async req => ({ run: await agents.detail(req.banking.user, req.params.id) }));
@@ -200,7 +202,7 @@ async function createApplication(options = {}) {
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant', '/banking-insights']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/schedules', '/notifications', '/fraud-monitoring', '/fraud-rules', '/fraud', '/statements', '/assistant', '/banking-insights', '/ai-audit']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
   app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error, _req, res, _next) => {

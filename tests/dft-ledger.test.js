@@ -71,7 +71,8 @@ pgTest('DFT completed transfers atomically conserve value and persist both ledge
   for(const key of ['provider','modelName','modelScore','modelSha256','promptSha256'])assert.equal(records[1].risk_json[key],result.risk[key],`Incoming receipt must retain ${key} from its originating assessment.`);
   assert.equal(records[1].risk_json.context, undefined, 'Recipient must not receive sender behavioural aggregates.');
   assert.equal(Number((await f.db.query('SELECT count(*) FROM notification_outbox')).rows[0].count), 2);
-  assert.equal(Number((await f.db.query('SELECT count(*) FROM audit_log')).rows[0].count), 1);
+  assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type='transaction.completed'")).rows[0].count), 1);
+  assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type='ai.model_call'")).rows[0].count), 1);
 });
 
 pgTest('DFT duplicate concurrent confirmations settle a payment once and replay the same receipt', async t => {
@@ -198,5 +199,7 @@ pgTest('DFT a downstream database failure rolls back balances, both ledger sides
   assert.equal(await f.balance(f.source), 1000000);
   assert.equal(await f.balance(f.target), 500000);
   assert.equal(await f.total(), before);
-  for (const table of ['transactions', 'requests', 'notification_outbox', 'audit_log']) assert.equal(Number((await f.db.query(`SELECT count(*) FROM ${table}`)).rows[0].count), 0);
+  for (const table of ['transactions', 'requests', 'notification_outbox']) assert.equal(Number((await f.db.query(`SELECT count(*) FROM ${table}`)).rows[0].count), 0);
+  assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type LIKE 'transaction.%'")).rows[0].count),0);
+  assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type='ai.model_call'")).rows[0].count),1,'Completed AI evidence survives a rolled-back payment.');
 });
