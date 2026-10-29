@@ -119,6 +119,10 @@ Functional/security tests use clearly isolated controlled model adapters. They d
 
 The original native login table is in `data/testing/README.md`; Neon logins are in `data/testing/neon/FEATURE-TESTING.md`; generated initial passwords and MFA material are in `data/testing/FEATURE-TESTING.md`. See [feature testing](docs/feature-testing.md). The selected synthetic test login files under `data/testing/` are included in Git. Application secrets, PostgreSQL credentials and live database files remain excluded; source packages exclude the entire data directory.
 
+## Vercel multi-service hosting
+
+**Work in progress:** the Vercel CLI static-routing issue described in [Vercel setup](docs/vercel.md) must be resolved before deployment. The proposed `vercel.json` configures the Express website/banking API as `banking` and FastAPI scoring as an internal `fraud` service. Banking calls fraud through the runtime-injected `FRAUD_SERVICE_BINDING_URL`. Tests are not deployed as services. The free Hobby configuration uses a daily authenticated job for scheduled payments, monitoring and notifications. See [Vercel setup, environment variables and verification](docs/vercel.md). Service names, public routing and binding await confirmation before deployment.
+
 ## Delivery and package
 
 The requested [reference CI/container pipeline](docs/devops.md) verifies the application and its Docker boundaries. Compose defaults to OpenAI. Set OPENAI_API_KEY privately before starting:

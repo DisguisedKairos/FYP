@@ -81,14 +81,25 @@ function positivePage(value, fallback, maximum) {
   return Number(value);
 }
 
-function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://127.0.0.1:4011', token = process.env.SERVICE_TOKEN, assessModel = null, modelInfo = null } = {}) {
+function fraudServiceUrl({ url = process.env.FRAUD_SERVICE_URL || 'http://127.0.0.1:4011', bindingUrl = process.env.FRAUD_SERVICE_BINDING_URL } = {}) {
+  const bound = Boolean(bindingUrl);
+  let base;
+  try { base = new URL(bound ? bindingUrl : url); }
+  catch { throw new Error(bound ? 'Invalid Vercel fraud service binding.' : 'Invalid FRAUD_SERVICE_URL.'); }
+  if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) throw new Error(bound ? 'Fraud service bindings require HTTP(S) without credentials, query or fragment.' : 'FRAUD_SERVICE_URL must use loopback or the private Compose fraud service; remote model endpoints are refused without a Vercel binding.');
+  if (!bound && (base.protocol !== 'http:' || !['127.0.0.1','localhost','[::1]','fraud'].includes(base.hostname) || base.pathname !== '/')) throw new Error('FRAUD_SERVICE_URL must use loopback or the private Compose fraud service; remote model endpoints are refused without a Vercel binding.');
+  // A binding can contain a path prefix. Relative routes retain that prefix.
+  if (!base.pathname.endsWith('/')) base.pathname += '/';
+  return base;
+}
+
+function createRiskClient({ db, url, bindingUrl, token = process.env.SERVICE_TOKEN, assessModel = null, modelInfo = null } = {}) {
   if (!db?.transaction || !db?.query) throw new Error('A PostgreSQL database is required for risk orchestration.');
-  const origin = new URL(url);
-  if (origin.protocol !== 'http:' || !['127.0.0.1','localhost','[::1]','fraud'].includes(origin.hostname) || origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash) throw new Error('FRAUD_SERVICE_URL must use loopback or the private Compose fraud service; remote model endpoints are refused.');
+  const origin = fraudServiceUrl({ url, bindingUrl });
   async function call(pathname, body, {timeoutMs=pathname==='/internal/assess'?50000:8000}={}) {
     if (!token || token.length < 24) throw new HttpError(503, 'The fraud service is not securely configured.');
     try {
-      const response = await fetch(new URL(pathname, origin), { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
+      const response = await fetch(new URL(pathname.replace(/^\/+/, ''), origin), { method: body ? 'POST' : 'GET', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
       const result = await response.json();
       if (!response.ok || result.ok !== true) throw new Error('Fraud service rejected the assessment.');
@@ -177,4 +188,4 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
   return { assess, analyze, getRules, getAudit, updateRule, getModelInfo: async () => modelInfo || (await call('/internal/model')).model, close() {} };
 }
 
-module.exports = { createRiskClient, readPolicy, evaluateRules, validateInput, validateModel, sameBinding };
+module.exports = { fraudServiceUrl, createRiskClient, readPolicy, evaluateRules, validateInput, validateModel, sameBinding };

@@ -234,7 +234,14 @@ async function createApplication(options = {}) {
   server.once('close', () => { stopped = true; clearInterval(timer); });
   return server;
 }
-module.exports = { createApplication, trustProxy };
+// Vercel's Express adapter discovers app.js and needs a callable application.
+// Defer hosted initialization until a request; native callers keep the factories.
+const hostedEntry = express();
+hostedEntry.disable('x-powered-by');
+hostedEntry.use((req, res, next) => require('./deploy/vercel')(req, res, next));
+module.exports = hostedEntry;
+module.exports.createApplication = createApplication;
+module.exports.trustProxy = trustProxy;
 if (require.main === module) (async () => {
   const server = await createApplication(), port = Number(process.env.PORT || 3000), host = process.env.HOST || '127.0.0.1';
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be 1–65535.');
