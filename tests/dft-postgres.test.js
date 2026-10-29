@@ -59,7 +59,7 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   let report = await inspectDatabase(f.app);
   assert.equal(report.ready, true);
   assert.equal(report.tables, 28);
-  assert.equal(report.migrations.length, 8);
+  assert.equal(report.migrations.length, 9);
   assert.deepEqual(report.discrepancies, []);
   const denied = [
     'CREATE TABLE injected(id int)',

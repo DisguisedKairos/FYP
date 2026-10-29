@@ -6,7 +6,7 @@ const { readSecret, databaseUrl } = require('./configuration');
 function runtimeEnvironment(env = process.env, directory = '/run/secrets') {
   const result = { ...env, DATABASE_URL: databaseUrl(env, 'greenlink_app', readSecret('app_password', directory)),
     SERVICE_TOKEN: readSecret('service_token', directory), AUTH_ENCRYPTION_KEY: readSecret('auth_encryption_key', directory), SEED_DEMO: 'false' };
-  for (const key of Object.keys(result)) if (/^(?:ADMIN_DATABASE_URL|MIGRATION_DATABASE_URL|APPLICATION_DATABASE_URL|TEST_DATABASE_URL|PG[A-Z_]*|GREENLINK_STAFF_PASSWORD)$/i.test(key)) delete result[key];
+  for (const key of Object.keys(result)) if (/^(?:AGENT_[A-Z_]+|OLLAMA_[A-Z_]+|GREENLINK_OLLAMA_[A-Z_]+|GREENLINK_AI_PROVIDER|ADMIN_DATABASE_URL|MIGRATION_DATABASE_URL|APPLICATION_DATABASE_URL|DATABASE_URL_UNPOOLED|NEON_[A-Z_]+|TEST_DATABASE_URL|PG[A-Z_]*|GREENLINK_STAFF_PASSWORD)$/i.test(key)) delete result[key];
   return result;
 }
 function run() {

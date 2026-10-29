@@ -13,7 +13,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from .model import OllamaFraudModel
+from .model import OpenAIFraudModel
 from .schemas import AssessmentRequest
 
 BODY_LIMIT = 16 * 1024
@@ -108,11 +108,11 @@ class ServiceBoundary:
         await self.app(scope, replay_receive, protected_send)
 
 
-def create_app(*, token: str | None = None, model: OllamaFraudModel | None = None) -> FastAPI:
+def create_app(*, token: str | None = None, model: OpenAIFraudModel | None = None) -> FastAPI:
     configured_token = os.environ.get("SERVICE_TOKEN", "") if token is None else token
     if not isinstance(configured_token, str) or not re.fullmatch(r"[A-Za-z0-9._~-]{24,512}", configured_token):
         raise ValueError("SERVICE_TOKEN must contain 24-512 visible token characters.")
-    model = model or OllamaFraudModel()
+    model = model or OpenAIFraudModel()
     application = FastAPI(title="Greenlink private fraud model", docs_url=None, redoc_url=None, openapi_url=None, redirect_slashes=False)
     application.add_middleware(ServiceBoundary, token=configured_token)
 
@@ -124,14 +124,14 @@ def create_app(*, token: str | None = None, model: OllamaFraudModel | None = Non
 
     @application.get("/internal/health")
     async def health() -> dict[str, Any]:
-        return {"ok": True, "service": "fraud", "status": "ready", "provider": "ollama", "modelVersion": model.version}
+        return {"ok": True, "service": "fraud", "status": "ready", "provider": model.provider, "modelVersion": model.version}
 
     @application.get("/internal/model")
     async def metadata() -> dict[str, Any]:
         try:
             return {"ok": True, "model": await asyncio.to_thread(model.info)}
         except (OSError, ValueError, TimeoutError, RecursionError):
-            return JSONResponse({"error": "The configured local Ollama model is unavailable."}, status_code=503)
+            return JSONResponse({"error": "The configured AI provider is unavailable."}, status_code=503)
 
     @application.post("/internal/assess")
     async def assess(payload: AssessmentRequest) -> dict[str, Any]:

@@ -2,6 +2,7 @@
 
 const { HttpError } = require('../models/errors');
 const aiAudit=require('./ai-audit');
+const {validProvenance}=require('./ai-provider');
 const MODEL_REVIEW_THRESHOLD = 65;
 const MAX_CENTS = 9000000000000;
 const asIso = value => new Date(value).toISOString();
@@ -32,9 +33,9 @@ function validateInput(input) {
 function validateModel(risk, input) {
   const invalid = () => new HttpError(503, 'The fraud model returned an invalid or unbound assessment. No funds moved.');
   if (!object(risk) || !sameBinding(risk, input) || !integer(risk.score, 94) || risk.modelScore !== risk.score
-    || risk.decision !== (risk.score >= MODEL_REVIEW_THRESHOLD ? 'review' : 'allow') || risk.provider !== 'ollama'
-    || typeof risk.modelName !== 'string' || !/^[A-Za-z0-9._:/-]{1,100}$/.test(risk.modelName) || /cloud/i.test(risk.modelName)
-    || !/^[a-f0-9]{64}$/.test(risk.modelSha256 || '') || !/^[a-f0-9]{64}$/.test(risk.promptSha256 || '')
+    || risk.decision !== (risk.score >= MODEL_REVIEW_THRESHOLD ? 'review' : 'allow') || !validProvenance(risk)
+    || typeof risk.modelName !== 'string' || !/^[A-Za-z0-9._:/-]{1,100}$/.test(risk.modelName)
+    || !/^[a-f0-9]{64}$/.test(risk.promptSha256 || '')
     || typeof risk.modelVersion !== 'string' || risk.modelVersion.length < 1 || risk.modelVersion.length > 150
     || typeof risk.assessedAt !== 'string' || !Number.isFinite(Date.parse(risk.assessedAt))
     || !object(risk.features) || !object(risk.context) || !Array.isArray(risk.reasons) || risk.reasons.length > 100
@@ -47,8 +48,7 @@ function validateModel(risk, input) {
     || !integer(context.averageOutgoingCents, MAX_CENTS) || context.averageOutgoingCents !== Math.round(summary.averageOutgoingCents)
     || !integer(context.outgoingCount10m) || context.outgoingCount10m !== summary.outgoingCount10m
     || !integer(context.dailyOutgoingCents) || context.dailyOutgoingCents !== summary.dailyOutgoingCents
-    || context.knownPayee !== Boolean(input.isInternal || summary.knownPayee)
-    || (risk.modelSha256 !== undefined && !/^[a-f0-9]{64}$/.test(risk.modelSha256))) throw invalid();
+    || context.knownPayee !== Boolean(input.isInternal || summary.knownPayee)) throw invalid();
   if (!risk.reasons.every(reason => object(reason) && typeof reason.code === 'string' && reason.code.length <= 150
     && typeof reason.message === 'string' && reason.message.length <= 1000 && Number.isFinite(reason.contribution))) throw invalid();
   return risk;
@@ -93,7 +93,7 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
       const result = await response.json();
       if (!response.ok || result.ok !== true) throw new Error('Fraud service rejected the assessment.');
       return result;
-    } catch { throw new HttpError(503, 'Local Ollama transaction screening is unavailable. Your balance has not changed.'); }
+    } catch { throw new HttpError(503, 'AI transaction screening is unavailable. Your balance has not changed.'); }
   }
   async function getRules() { return db.transaction(client => readPolicy(client), { isolation: 'REPEATABLE READ', readOnly: true }); }
   async function analyze(input,options={}) {
@@ -101,10 +101,10 @@ function createRiskClient({ db, url = process.env.FRAUD_SERVICE_URL || 'http://1
     const started=Date.now();let result;
     try{result=validateModel(assessModel ? await assessModel(input) : (await call('/internal/assess', input,options)).risk, input);}
     catch(error){
-      if(options.audit)await aiAudit.record(db,{...options.audit,userId:input.userId,phase:'fraud_scoring',model:process.env.AGENT_MODEL || 'qwen3.5:4b',status:'failed',startedAt:new Date(started).toISOString(),durationMs:Date.now()-started,errorCode:error instanceof HttpError?'HTTP_'+error.status:'MODEL_UNAVAILABLE'});
+      if(options.audit)await aiAudit.record(db,{...options.audit,userId:input.userId,phase:'fraud_scoring',provider:'openai',model:process.env.OPENAI_MODEL || 'gpt-6-luna',status:'failed',startedAt:new Date(started).toISOString(),durationMs:Date.now()-started,errorCode:error instanceof HttpError?'HTTP_'+error.status:'MODEL_UNAVAILABLE'});
       throw error;
     }
-    if(options.audit)await aiAudit.record(db,{...options.audit,userId:input.userId,phase:'fraud_scoring',model:result.modelName,modelSha256:result.modelSha256,promptSha256:result.promptSha256,status:'completed',startedAt:new Date(started).toISOString(),durationMs:Date.now()-started});
+    if(options.audit)await aiAudit.record(db,{...options.audit,userId:input.userId,phase:'fraud_scoring',provider:result.provider,model:result.modelName,modelIdentitySha256:result.modelIdentitySha256,responseId:result.responseId,resolvedModel:result.resolvedModel,promptSha256:result.promptSha256,status:'completed',startedAt:new Date(started).toISOString(),durationMs:Date.now()-started});
     return result;
   }
   async function assess(input) {

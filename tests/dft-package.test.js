@@ -181,7 +181,7 @@ test('packaging rejects source junctions and refuses output under shipped source
   assert.throws(() => buildPackage({ root, outputDirectory: path.join(root, 'public', 'releases') }), /outside allowlisted source directories/);
 });
 
-test('DFT package requires the PostgreSQL, Python, local Ollama boundary and locked dependency source', t => {
+test('DFT package requires the PostgreSQL, Python, OpenAI boundary and locked dependency source', t => {
   const { root } = fixture(t);
   for (const name of ['package-lock.json', 'main.py', 'requirements.txt', 'database/index.js', 'fraud_service/model.py', 'banking/totp.js']) {
     const filename = path.join(root, ...name.split('/')), bytes = fs.readFileSync(filename);

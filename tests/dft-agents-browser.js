@@ -14,7 +14,7 @@ async function open(t,width,email){
 async function visit(page,base,route){await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');}
 test('Business users project liquidity, inspect reconciliation and build a multi-turn draft on mobile',async t=>{
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
-  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Local model ready")');
+  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');
   assert.equal(await page.evaluate('!!document.querySelector("#agent-fraud-form,#agent-simulation-form")'),false);
   await page.fill('#agent-days','14');
   await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
@@ -46,8 +46,8 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   await page.fill('#agent-transaction',paid.data.transaction.id);await page.click('#agent-fraud-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Fraud investigation brief")');
   await visit(page,f.baseUrl,'/fraud-monitoring');await page.waitFor('!!document.querySelector("[data-investigate-transaction]")');
   await page.waitFor('!!document.querySelector("[data-model-activity]")');
-  assert.match(await page.evaluate('document.querySelector("[data-model-activity]").textContent'),/Local Ollama activity/);
-  assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/current local model/);
+  assert.match(await page.evaluate('document.querySelector("[data-model-activity]").textContent'),/AI model activity/);
+  assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/current configured model/);
   await page.click('[data-investigate-transaction]');await page.waitFor('location.pathname==="/banking-insights" && document.querySelector("[data-agent-report]")?.textContent.includes("'+held.data.transaction.id+'")');
   await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/changed decisions/);
@@ -58,11 +58,11 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
 });
 
 test('Model connection checks show help, while banking answers link saved owned evidence',async t=>{
-  const agentModel={mode:'ollama',model:'controlled-local',inspect:async()=>({mode:'ollama',available:true,configured:true,model:'controlled-local'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
+  const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
   const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
-  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("Local model ready")');
+  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');
   await visit(page,f.baseUrl,'/assistant');assert.equal(await page.evaluate('!!document.querySelector("#assistant-engine")'),false);
   await page.fill('#assistant-message','test');await page.click('#assistant-form button[type=submit]');
   await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("Assistant is responding")');

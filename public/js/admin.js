@@ -8,10 +8,10 @@ import { riskExplanation, transactionDetails } from './workflows.js';
 
 function modelCard() {
   const remote = state.remote.model;
-  if (!remote) return '<section class="panel model-card"><h2>Local fraud scoring model</h2><p>Loading model information…</p></section>';
+  if (!remote) return '<section class="panel model-card"><h2>AI fraud scoring model</h2><p>Loading model information…</p></section>';
   if (remote.error) return `<section class="panel model-card"><h2>Scoring model</h2><p>${esc(remote.error)}</p></section>`;
   const m=remote.data;
-  return '<section class="panel model-card"><div class="section-heading"><h2>Local Ollama fraud scoring</h2><span class="tag">'+esc(m.modelName)+'</span></div><p>'+esc(m.scoreMeaning)+'</p><p>Every new AI score requires inference from this installed local model. No trained baseline or simulated score is substituted.</p><ul>'+m.limitations.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul><details><summary>Local model provenance</summary><pre class="metadata-json">'+esc(JSON.stringify(m,null,2))+'</pre></details></section>';
+  return '<section class="panel model-card"><div class="section-heading"><h2>AI fraud scoring</h2><span class="tag">'+esc(m.modelName)+'</span></div><p>'+esc(m.scoreMeaning)+'</p><p>Every new AI score requires inference from the configured AI provider. No trained baseline or simulated score is substituted.</p><ul>'+m.limitations.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul><details><summary>AI provider provenance</summary><pre class="metadata-json">'+esc(JSON.stringify(m,null,2))+'</pre></details></section>';
 }
 export function fraudPage() {
   if (state.user?.role !== 'admin') return '';

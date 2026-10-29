@@ -1,10 +1,20 @@
 # Local installation and migration
 
-Required: Node.js 22.13+, PostgreSQL 16+, Python 3.11+ with a virtual environment, and Ollama with an installed local model. The application uses Express and `pg`; run `npm ci`. Create `.venv` and install `requirements.txt` using its interpreter. The local launcher discovers `.venv`, or accepts `PYTHON` as an executable path.
+Required: Node.js 22.13+, PostgreSQL 16+, Python 3.11+ with a virtual environment, and an OpenAI API key. The application uses Express and `pg`; run `npm ci`. Create `.venv` and install `requirements.txt` using its interpreter. The local launcher discovers `.venv`, or accepts `PYTHON` as an executable path.
+
+For Windows PowerShell, install Python dependencies from the project root using the project interpreter:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -c "import fastapi, uvicorn; print('FastAPI and Uvicorn ready')"
+```
+
+Create `.venv` only if it does not exist. On macOS/Linux, use `python3 -m venv .venv` and `.venv/bin/python -m pip install -r requirements.txt`. Activating the environment is optional when its interpreter is used explicitly. Both `npm start` and `npm run start:fraud` select `.venv` automatically; an explicit `PYTHON` setting overrides that choice. If you see `No module named fastapi`, install the requirements using the same interpreter that starts the service. `npm ci` installs Node dependencies only.
 
 Run `npm run setup` once. It preserves existing configuration and generates missing private service/encryption keys. Follow the [database guide](database.md): start PostgreSQL, copy `database/admin.env.example` to ignored `.env.database-admin`, set the administrator maintenance URL, then run `npm run db:setup` and `npm run db:check`. Setup preserves existing Green Link Digital Bank data and saves a restricted `DATABASE_URL` in `.env`; do not place real values in examples. `PUBLIC_ORIGIN` is the exact browser origin, including scheme and port. An HTTPS origin enables Secure cookies. Local HTTP uses ordinary HttpOnly/SameSite cookies. Direct use does not require proxy trust.
 
-Configure `AGENT_MODE=ollama`, `AGENT_MODEL=qwen3.5:4b` and `AGENT_OLLAMA_URL=http://127.0.0.1:11434` in `.env`. Start the local Ollama service with `npm run agent:start` if it is not already running, then explicitly install the weights once with `ollama pull qwen3.5:4b`. Banking and FastAPI use the same model. No cloud provider, offline assistant or alternative fraud model is supported. Payments and AI tasks return an unavailable response if the model is missing or its output fails validation; balances remain unchanged.
+Configure `OPENAI_MODEL=gpt-6-luna` and a private `OPENAI_API_KEY` in `.env`. Run `npm run ai:check` to check model access, then `npm start`. No model installation or download is required. Chat and permitted banking evidence are sent to OpenAI; the fraud prompt uses limited historical aggregates without customer/account identifiers. See [OpenAI setup and guardrails](openai.md). Failed inference never moves funds or substitutes a preset score.
 
 Optionally seed a new empty demo database with `npm run db:seed`, then `npm start`. Existing data needs no seed. Future migrations use `npm run db:migrate`, which loads migration credentials only for that command. Startup requires the configured PostgreSQL server, usable secrets and a healthy authenticated Python validation gateway. The scorer binds to loopback by default and receives no database or MFA encryption credentials. Scheduled payments and outbox delivery run inside the banking process with persistent PostgreSQL leases and records. An external email/SMS sender is not included; notifications are in-app.
 

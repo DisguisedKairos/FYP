@@ -13,7 +13,7 @@ function modelResult(input, score = 5) {
   const known = input.isInternal || summary.knownPayee;
   return {
     ...Object.fromEntries(['transactionId', 'userId', 'sourceAccountId', 'payloadHash', 'type', 'amountCents', 'payee', 'isInternal'].map(key => [key, input[key]])),
-    modelScore: score, score, decision: score >= 65 ? 'review' : 'allow', provider:'ollama',modelName:'controlled-local',modelSha256:'a'.repeat(64),promptSha256:'b'.repeat(64), modelVersion: 'explicit-test-model', assessedAt: input.createdAt,
+    modelScore: score, score, decision: score >= 65 ? 'review' : 'allow', provider:'openai',modelName:'controlled-openai',modelIdentitySha256:require('../banking/ai-provider').identity('controlled-openai'),promptSha256:'b'.repeat(64), modelVersion: 'explicit-test-model', assessedAt: input.createdAt,
     features: { amountLog: 0.1, amountDeviation: 0, velocity: 0, newPayee: known ? 0 : 1, balanceUtilization: Math.min(1.5, input.amountCents / Math.max(1, input.accountBalanceCents)), unusualHour: 0, recentValue: 0 },
     context: { historicalTransactions: summary.historyCount, averageOutgoingCents: summary.averageOutgoingCents, outgoingCount10m: summary.outgoingCount10m, dailyOutgoingCents: summary.dailyOutgoingCents, knownPayee: known },
     reasons: [{ code: 'test_fixture', message: 'Explicit test-only model response.', contribution: 0 }],

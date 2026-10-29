@@ -36,7 +36,7 @@ The functional/security suites test concurrency, rollback, idempotency, independ
 
 ## Agent boundaries
 
-The 2.7.0 agent layer has read/report and form-draft tools only. Tools repeat role/ownership checks; HTTP tasks recheck their session and all tasks recheck the security version before returning results. The assistant and private FastAPI fraud-scoring gateway require the configured local Ollama model for inference. Banking reads remain available without it. There is no agent tool for SQL, shell access, settlement, transaction decisions, rule changes or repairing balances.
+The 2.7.0 agent layer has read/report and form-draft tools only. Tools repeat role/ownership checks; HTTP tasks recheck their session and all tasks recheck the security version before returning results. The assistant and private FastAPI fraud-scoring gateway require the configured OpenAI model for inference. Banking reads remain available without it. There is no agent tool for SQL, shell access, settlement, transaction decisions, rule changes or repairing balances.
 
 Numerical facts are rendered from authoritative tool results. Generated numerical claims and unauthorized execution claims are withheld. Qualitative interpretations remain subject to reviewer verification. Historical rule simulations never alter policies, and liquidity projections include assumptions rather than guaranteed funds. Existing password authorization, independent review, binding keys and settlement guardrails apply to every draft completed through banking forms. See [agent controls and evidence](banking-agents.md).
 

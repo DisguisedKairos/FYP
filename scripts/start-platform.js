@@ -21,8 +21,8 @@ function childEnvironment(env, service) {
   const result = { ...env };
   // Local operator/test credentials never belong in either service process.
   for (const key of Object.keys(result)) {
-    if (/^(?:ADMIN_DATABASE_URL|MIGRATION_DATABASE_URL|APPLICATION_DATABASE_URL|TEST_DATABASE_URL|GREENLINK_STAFF_PASSWORD|PGPASSWORD|PGPASSFILE|PGSERVICE|PGSERVICEFILE)$/i.test(key)
-      || (service === 'fraud' && /^(?:DATABASE_URL|AUTH_ENCRYPTION_KEY|PG[A-Z_]*|AGENT_(?!MODE$|MODEL$|OLLAMA_URL$)[A-Z_]*)$/i.test(key))) delete result[key];
+    if (/^(?:AGENT_[A-Z_]+|OLLAMA_[A-Z_]+|GREENLINK_OLLAMA_[A-Z_]+|GREENLINK_AI_PROVIDER|ADMIN_DATABASE_URL|MIGRATION_DATABASE_URL|APPLICATION_DATABASE_URL|DATABASE_URL_UNPOOLED|NEON_[A-Z_]+|TEST_DATABASE_URL|GREENLINK_STAFF_PASSWORD|PGPASSWORD|PGPASSFILE|PGSERVICE|PGSERVICEFILE)$/i.test(key)
+      || (service === 'fraud' && /^(?:DATABASE_URL|AUTH_ENCRYPTION_KEY|PG[A-Z_]*)$/i.test(key))) delete result[key];
   }
   return result;
 }

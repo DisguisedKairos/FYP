@@ -7,7 +7,7 @@ function validateTmpfs(mounts) {
 }
 function validateCompose(model) {
   const services = model.services;
-  for (const name of ['banking', 'fraud', 'ollama', 'database-setup', 'nginx']) {
+  for (const name of ['banking', 'fraud', 'database-setup', 'nginx']) {
     const service = services[name];
     assert.ok(service?.read_only, `${name} must have a read-only root filesystem.`);
     validateTmpfs(service.tmpfs);
@@ -22,10 +22,9 @@ function validateCompose(model) {
   assert.deepEqual(Object.keys(services).filter(name => services[name].ports?.length), ['nginx']);
   assert.equal(services.nginx.ports[0].host_ip, '127.0.0.1');
   assert.equal(model.networks.backend.internal, true);
-  assert.equal(services.ollama.environment.OLLAMA_NO_CLOUD,'1');
-  assert.equal(services.banking.environment.AGENT_MODEL,services.fraud.environment.AGENT_MODEL);
-  assert.equal(services.banking.environment.AGENT_OLLAMA_URL,'http://ollama:11434');
-  assert.equal(services.fraud.environment.AGENT_OLLAMA_URL,'http://ollama:11434');
+  assert.equal(services.banking.environment.OPENAI_MODEL,services.fraud.environment.OPENAI_MODEL);
+  assert.equal(services.banking.environment.OPENAI_API_KEY,services.fraud.environment.OPENAI_API_KEY);
+  assert.ok(services.banking.networks['ai-egress']);assert.ok(services.fraud.networks['ai-egress']);
   assert.equal(services.banking.environment.FRAUD_SERVICE_URL, 'http://fraud:4011');
   assert.equal(services.banking.environment.TRUST_PROXY, services.nginx.networks.frontend.ipv4_address + '/32');
   console.log('Compose boundaries verified: temporary mounts, private service ports, trusted proxy and service-specific credentials.');

@@ -2,7 +2,9 @@
 
 The active application uses PostgreSQL exclusively through [`database/index.js`](../database/index.js). Express authentication, banking, fraud records and jobs all use the same transactional database. Python scores requests without database credentials. SQL migrations are the authoritative schema; no external cloud or container setup is required.
 
-## Current local installation
+For the configured Neon environment, see [Neon PostgreSQL setup](neon.md). The original native database below is retained separately; Neon setup uses fresh synthetic test data.
+
+## Original native installation
 
 | Setting | Value |
 | --- | --- |

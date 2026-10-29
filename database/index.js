@@ -8,7 +8,15 @@ const { createHash } = require('node:crypto');
 function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptions = {} } = {}) {
   if (!connectionString && !poolOptions.host) throw new Error('DATABASE_URL is required. PostgreSQL is the active banking database.');
   const pool = new Pool({ connectionString, max: 10, connectionTimeoutMillis: 5000, idleTimeoutMillis: 30000, ...poolOptions });
-  pool.on('error', error => console.error('Idle PostgreSQL connection failed:', error.message));
+  const connectionErrors = new WeakMap();
+  const reportConnectionError = error => {
+    const code = typeof error?.code === 'string' && /^[A-Z0-9_]{1,30}$/.test(error.code) ? ' [' + error.code + ']' : '';
+    console.error('PostgreSQL connection interrupted' + code + '; affected work fails and the pool can reconnect.');
+  };
+  pool.on('error', reportConnectionError);
+  // Checked-out clients can disconnect between queries, when no query promise
+  // owns the error. Handle the event and refuse to commit interrupted work.
+  pool.on('connect', client => client.on('error', error => { connectionErrors.set(client, error); reportConnectionError(error); }));
   const query = (text, values) => pool.query(text, values);
   async function transaction(work, { isolation = 'READ COMMITTED', readOnly = false } = {}) {
     if (!['READ COMMITTED', 'REPEATABLE READ', 'SERIALIZABLE'].includes(isolation)) throw new Error('Unsupported transaction isolation.');
@@ -17,12 +25,13 @@ function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptio
       await client.query(`BEGIN ISOLATION LEVEL ${isolation}${readOnly ? ' READ ONLY' : ''}`);
       await client.query("SET LOCAL statement_timeout = '15s'; SET LOCAL lock_timeout = '10s'");
       const result = await work(client);
+      if (connectionErrors.has(client)) throw new Error('PostgreSQL connection interrupted before commit.');
       await client.query('COMMIT');
       return result;
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch {}
       throw error;
-    } finally { client.release(); }
+    } finally { client.release(connectionErrors.has(client)); }
   }
   async function migrate() {
     return transaction(async client => {

@@ -38,8 +38,9 @@ function connection(adminUrl, database, role, password) {
   return url.href;
 }
 function rolePassword() { return randomBytes(32).toString('hex'); }
-async function provision({ adminUrl, databaseName = 'greenlink_dft', ownerRole = 'greenlink_owner', appRole = 'greenlink_app', ownerPassword = rolePassword(), appPassword = rolePassword(), ownerKnown = false, appKnown = false }) {
+async function provision({ adminUrl, databaseName = 'greenlink_dft', ownerRole = 'greenlink_owner', appRole = 'greenlink_app', ownerPassword = rolePassword(), appPassword = rolePassword(), ownerKnown = false, appKnown = false, managedNeon = false }) {
   for (const name of [databaseName, ownerRole, appRole]) identifier(name);
+  if (managedNeon && !new URL(adminUrl).hostname.endsWith('.neon.tech')) throw new Error('Managed Neon setup requires a Neon database endpoint.');
   if (ownerRole === appRole) throw new Error('Application and migration logins must be different.');
   // PostgreSQL role passwords cannot be query parameters. Only generated hex
   // passwords are accepted here, never arbitrary SQL fragments or logging.
@@ -53,6 +54,7 @@ async function provision({ adminUrl, databaseName = 'greenlink_dft', ownerRole =
     // Validate the entire plan before adopting roles or tables. Never take over
     // a pre-existing unrelated role merely because its name matches a default.
     const exists = (await admin.query('SELECT 1 FROM pg_database WHERE datname=$1', [databaseName])).rowCount;
+    if (managedNeon && !exists) throw new Error('The linked Neon database must already exist; setup does not create another cloud database.');
     for (const [name, known, secret] of [[ownerRole, ownerKnown, ownerPassword], [appRole, appKnown, appPassword]]) {
       const existing = (await admin.query('SELECT rolsuper,rolcreatedb,rolcreaterole,rolreplication,rolbypassrls FROM pg_roles WHERE rolname=$1', [name])).rows[0];
       if (existing && (!known || Object.values(existing).some(Boolean))) throw new Error(`Existing role ${name} was not provisioned with these saved credentials, or has elevated privileges.`);
@@ -78,11 +80,18 @@ async function provision({ adminUrl, databaseName = 'greenlink_dft', ownerRole =
       if (!present) await admin.query(`CREATE ROLE ${identifier(name)} LOGIN PASSWORD '${secret}' NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS`);
     }
     if (!exists) await admin.query(`CREATE DATABASE ${identifier(databaseName)} OWNER ${identifier(ownerRole)} TEMPLATE template0 ENCODING 'UTF8'`);
+    if (managedNeon) {
+      // SQL-created roles receive no neon_superuser membership. The bootstrap
+      // owner needs SET ROLE permission to assign schema objects to the migrator.
+      await admin.query(`GRANT ${identifier(ownerRole)} TO ${identifier(administrator)}`);
+      await admin.query(`GRANT CONNECT, CREATE ON DATABASE ${identifier(databaseName)} TO ${identifier(ownerRole)}`);
+      await admin.query(`GRANT USAGE, CREATE ON SCHEMA public TO ${identifier(ownerRole)}`);
+    }
     database = createDatabase({ connectionString: connection(adminUrl, databaseName) });
     await database.migrate();
     await database.transaction(async client => {
       await grantRuntime(client, { ownerRole, appRole });
-      await client.query(`ALTER DATABASE ${identifier(databaseName)} OWNER TO ${identifier(ownerRole)}`);
+      if (!managedNeon) await client.query(`ALTER DATABASE ${identifier(databaseName)} OWNER TO ${identifier(ownerRole)}`);
       await client.query(`REVOKE ALL ON DATABASE ${identifier(databaseName)} FROM PUBLIC`);
       await client.query(`GRANT CONNECT ON DATABASE ${identifier(databaseName)} TO ${identifier(appRole)}`);
     });

@@ -23,9 +23,22 @@ test('A blocked migration in one schema does not block initialization of an inde
     let timer;
     try{await Promise.race([other.migrate(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('An unrelated schema migration blocked initialization.')),2500);})]);}
     finally{clearTimeout(timer);}
-    assert.equal(Number((await other.query('SELECT count(*) FROM schema_migrations')).rows[0].count),8);
+    assert.equal(Number((await other.query('SELECT count(*) FROM schema_migrations')).rows[0].count),9);
   }finally{
     await blocker.query('ROLLBACK');if(pending)await pending;await other.close();
     assert.match(schema,/^dft_[a-f0-9]{32}$/);await blocker.query(`DROP SCHEMA ${schema} CASCADE`);await blocker.end();
   }
+});
+
+test('A checked-out PostgreSQL connection error cannot crash the app or commit interrupted work',{skip:!process.env.TEST_DATABASE_URL},async t=>{
+  const f=await fixture(t,{http:false,seed:false});
+  const messages=[];t.mock.method(console,'error',(...args)=>messages.push(args.join(' ')));
+  await assert.rejects(f.db.transaction(async client=>{
+    await client.query("INSERT INTO audit_log(event_type,metadata) VALUES('test.interrupted_transaction','{}')");
+    client.emit('error',Object.assign(new Error('private upstream connection details'),{code:'ECONNRESET'}));
+  }),/interrupted before commit/);
+  assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type='test.interrupted_transaction'")).rows[0].count),0);
+  assert.equal((await f.db.query('SELECT true AS ready')).rows[0].ready,true);
+  assert.ok(messages.some(message=>message.includes('ECONNRESET')));
+  assert.equal(messages.join(' ').includes('private upstream'),false);
 });

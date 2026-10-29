@@ -71,7 +71,7 @@ pgTest('DFT search escapes SQL and LIKE metacharacters, validates filters and ex
 pgTest('DFT private assistant uses owned PostgreSQL data, redacts secrets and only prepares authorized form drafts',async t=>{
   const f=await fixture(t),client=f.client();await client.login();const before=await client.dashboard();
   const ask=message=>client.request('/api/assistant/messages',{method:'POST',body:{message}});
-  const balance=await ask('What is my balance?');assert.equal(balance.status,200,JSON.stringify(balance.data));assert.equal(balance.data.engine,'ollama');
+  const balance=await ask('What is my balance?');assert.equal(balance.status,200,JSON.stringify(balance.data));assert.equal(balance.data.engine,'openai');
   assert.deepEqual(balance.data.items.map(a=>a.amountCents).sort((a,b)=>a-b),before.accounts.filter(a=>a.status==='active').map(a=>a.balanceCents).sort((a,b)=>a-b));
   const other=await ask('What is the balance of account 1020002001?');assert.equal(other.status,200);assert.deepEqual(other.data.items,balance.data.items);
   const draft=await ask('Transfer 25 to 1020002001');assert.equal(draft.data.actions[0].type,'draft_transfer');assert.equal(draft.data.requiresAuthorization,true);

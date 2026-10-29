@@ -42,7 +42,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
     const failures=await client.request('/api/ai-audit?type=failure');
     assert.ok(failures.pagination.total>=2);
     for(const entry of failures.entries){const d=(await client.request('/api/ai-audit/failure/'+entry.id)).record;assert.equal(d.evidence.guardrails.status,'failed');}
-    console.log('No local model in this fixture: Ollama-only assistant and payment screening fail closed; account reads remain available and balances are unchanged. Run with installed Ollama for real inference coverage.');return;
+    console.log('No configured AI service in this fixture: Configured AI assistant and payment screening fail closed; account reads remain available and balances are unchanged. Configure model credentials for real inference coverage.');return;
   }
   assert.equal(modelResponse.status,200);
   const rawModel=(await modelResponse.json()).risk;
@@ -50,7 +50,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   assert.ok(Number.isInteger(rawModel.score) && rawModel.score>=0 && rawModel.score<=94);
   assert.equal(rawModel.modelScore,rawModel.score);
   assert.equal(rawModel.decision,rawModel.score>=65?'review':'allow');
-  assert.equal(rawModel.provider,'ollama');assert.equal(rawModel.synthetic,undefined);assert.match(rawModel.modelSha256,/^[a-f0-9]{64}$/);
+  assert.ok(require('../banking/ai-provider').validProvenance(rawModel));assert.equal(rawModel.synthetic,undefined);
   assert.equal(rawModel.ruleVersion,undefined);
   const malformed=await fetch(new URL('/internal/assess',fraudUrl),{method:'POST',headers:pythonHeaders,body:JSON.stringify({...bound,amountCents:'100',authorizationPassword:'Never-echo-this-secret-123!'})});
   assert.equal(malformed.status,422);
@@ -73,20 +73,20 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   const localAgent=(await alex.request('/api/agents/status')).agent;
   if(localAgent.available){
     const assistantBalance = await alex.request('/api/assistant/messages', { message: 'What is my balance?' });
-    assert.equal(assistantBalance.engine, 'ollama');
+    assert.equal(assistantBalance.engine, localAgent.mode);
     assert.ok(assistantBalance.evidenceReferences.some(e=>e.tool==='get_accounts'));
-    assert.equal(assistantBalance.privacy.externalServices, false);
+    assert.equal(assistantBalance.privacy.externalServices, localAgent.mode==='openai');
     const audit=(await alex.request('/api/ai-audit/agent/'+assistantBalance.runId)).record;
     assert.ok(audit.modelCalls.length>=2);assert.ok(audit.modelCalls.every(c=>c.model===localAgent.model && c.executed && c.durationMs>=0));assert.ok(audit.evidence.tools.some(t=>t.tool==='get_accounts'));
     assert.ok(['validated_evidence','withheld'].includes(audit.evidence.guardrails.narrative));
-    const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 to 1020002001' });
+    const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 from ' + source.name + ' to 1020002001' });
     assert.equal(assistantDraft.actions[0].type, 'draft_transfer');
     assert.equal(assistantDraft.requiresAuthorization, true);
-    console.log('Local Ollama assistant evidence and draft checks passed.');
+    console.log('Configured AI assistant evidence and draft checks passed.');
   }else{
     await alex.request('/api/assistant/messages', { message: 'What is my balance?' }, 'POST', 503);
     await alex.request('/api/agents/reconciliation', {}, 'POST', 503);
-    console.log('Ollama is not installed in this fixture: verified explicit AI unavailability with no offline fallback. Run demo:agents locally for real model coverage.');
+    console.log('AI credentials/model unavailable in this fixture: verified explicit AI unavailability with no offline fallback. Run demo:agents locally for real model coverage.');
   }
   assert.equal((await alex.request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, source.balanceCents);
   const first = await alex.request('/api/transfers', { fromAccountId: source.id, toAccountNumber: '1020002001', amount: '1.25', description: 'Service smoke transfer', authorizationPassword: password, requestId: randomUUID() });
@@ -94,7 +94,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   assert.equal(first.transaction.status, 'completed');
   assert.equal(typeof first.transaction.risk.score, 'number');
   const aiPayment=(await alex.request('/api/ai-audit/payment/'+first.transaction.id)).record;
-  assert.equal(aiPayment.evidence.guardrails.payloadBinding,true);assert.equal(aiPayment.evidence.decisionSummary.aiScore,first.transaction.risk.modelScore);assert.ok(aiPayment.modelCalls.some(c=>c.modelSha256===first.transaction.risk.modelSha256));
+  assert.equal(aiPayment.evidence.guardrails.payloadBinding,true);assert.equal(aiPayment.evidence.decisionSummary.aiScore,first.transaction.risk.modelScore);assert.ok(aiPayment.modelCalls.some(c=>require('../banking/ai-provider').fingerprint(c)===require('../banking/ai-provider').fingerprint(first.transaction.risk)));
   const afterFirst = await alex.request('/api/dashboard');
   assert.equal(afterFirst.accounts.find(a => a.id === source.id).balanceCents, source.balanceCents - 125);
 
@@ -120,7 +120,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   assert.equal(schedule.schedule.status, 'active');
   await alex.request(`/api/scheduled-payments/${schedule.schedule.id}`, {}, 'DELETE');
   assert.equal((await alex.request('/api/fraud/rules')).rules.length, 5);
-  assert.equal((await alex.request('/api/fraud/model')).model.provider, 'ollama');
+  assert.equal((await alex.request('/api/fraud/model')).model.provider, rawModel.provider);
   const history = await alex.request('/api/transactions?q=Service%20smoke%20transfer&pageSize=1');
   assert.equal(history.transactions[0].id, first.transaction.id);
   assert.equal(history.pagination.total, 1);
@@ -147,7 +147,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   }
   assert.ok(notifications.notifications.some(n => n.transactionId === first.transaction.id));
   assert.equal((await alex.request('/api/notifications/all', { read: true }, 'PATCH')).unreadCount, 0);
-  console.log('DFT smoke passed: authenticated FastAPI contracts, Express/PostgreSQL banking, local-model availability boundary, screening/review, transfers/bills, schedules, notifications, history/statements, rule audit and authorized AI evaluation evidence.');
+  console.log('DFT smoke passed: authenticated FastAPI contracts, Express/PostgreSQL banking, AI-provider availability boundary, screening/review, transfers/bills, schedules, notifications, history/statements, rule audit and authorized AI evaluation evidence.');
 }
 
 async function unusedPort() {

@@ -1,12 +1,12 @@
-"""Service security and local Ollama contracts. Controlled transport is test-only."""
+"""Service security and OpenAI contracts. Controlled transport is test-only."""
 from __future__ import annotations
 import copy
+import hashlib
 import json
 import unittest
-from unittest.mock import patch
 from fastapi.testclient import TestClient
 from fraud_service.application import BODY_LIMIT, create_app
-from fraud_service.model import OllamaFraudModel
+from fraud_service.model import OpenAIFraudModel
 from fraud_service.schemas import AssessmentRequest
 
 TOKEN = "python-fraud-contract-test-token-123456789"
@@ -27,32 +27,27 @@ class ControlledTransport:
     def __init__(self):
         self.calls = []
         self.output = {"modelScore": 12, "reasonCodes": ["model_context"]}
-        self.digest = "a" * 64
-        self.remote = False
         self.fail = False
-        self.mutate_digest = False
-        self.done_reason = "stop"
+        self.refusal = False
+        self.response_model = "controlled-openai"
+        self.status = "completed"
 
     def __call__(self, method, url, body, timeout):
         self.calls.append((method, url, copy.deepcopy(body), timeout))
         if self.fail:
             raise OSError("Do not expose connection diagnostics or secrets")
-        if url.endswith("/api/show"):
-            return {"capabilities": ["completion", "tools"], **({"remote_host": "https://remote.example"} if self.remote else {})}
-        if url.endswith("/api/tags"):
-            return {"models": [{"name": "controlled-local", "digest": self.digest}]}
-        if url.endswith("/api/chat"):
-            if self.mutate_digest:
-                self.digest = "b" * 64
-            return {"model": "controlled-local", "done": True, "done_reason": self.done_reason,
-                    "message": {"role": "assistant", "content": self.output if isinstance(self.output, str) else json.dumps(self.output)}}
+        if url.endswith("/models/controlled-openai"):
+            return {"id": "controlled-openai"}
+        if url.endswith("/responses"):
+            content = {"type": "refusal", "refusal": "declined"} if self.refusal else {"type": "output_text", "text": self.output if isinstance(self.output, str) else json.dumps(self.output)}
+            return {"id": "resp_controlled", "model": self.response_model, "status": self.status,
+                    "output": [{"type": "message", "role": "assistant", "content": [content]}]}
         raise AssertionError("Unexpected model endpoint")
-
 
 class ServiceTests(unittest.TestCase):
     def setUp(self):
         self.transport = ControlledTransport()
-        self.model = OllamaFraudModel(model_name="controlled-local", request=self.transport)
+        self.model = OpenAIFraudModel(model_name="controlled-openai", request=self.transport)
         self.client = TestClient(create_app(token=TOKEN, model=self.model))
         self.addCleanup(self.client.close)
 
@@ -65,13 +60,14 @@ class ServiceTests(unittest.TestCase):
         self.assertEqual(self.client.post("/internal/assess", content="not-json").status_code, 401)
         self.assertEqual(len(self.transport.calls), 0)
 
-    def test_metadata_reports_actual_local_provenance_without_simulated_metrics(self):
+    def test_metadata_reports_actual_api_provenance_without_simulated_metrics(self):
         health = self.client.get("/internal/health", headers=HEADERS)
-        self.assertEqual(health.json()["provider"], "ollama")
+        self.assertEqual(health.json()["provider"], "openai")
         metadata = self.client.get("/internal/model", headers=HEADERS).json()["model"]
-        self.assertTrue(metadata["localOnly"])
-        self.assertEqual(metadata["modelName"], "controlled-local")
-        self.assertEqual(metadata["modelSha256"], "a" * 64)
+        self.assertFalse(metadata["localOnly"])
+        self.assertEqual(metadata["modelName"], "controlled-openai")
+        self.assertEqual(metadata["modelIdentitySha256"], hashlib.sha256(b"openai:controlled-openai").hexdigest())
+        self.assertNotIn("modelSha256", metadata)
         self.assertNotIn("metrics", metadata)
         self.assertNotIn("training", metadata)
 
@@ -83,19 +79,19 @@ class ServiceTests(unittest.TestCase):
             self.assertEqual(risk[key], source[key])
         self.assertEqual(risk["modelScore"], 28)
         self.assertEqual(risk["decision"], "allow")
-        self.assertEqual(risk["provider"], "ollama")
+        self.assertEqual(risk["provider"], "openai")
+        self.assertEqual(risk["responseId"], "resp_controlled")
         self.assertNotIn("synthetic", risk)
 
     def test_prompt_omits_customer_identifiers_and_uses_schema_and_bounded_generation(self):
         self.post(payload())
-        _, _, request, timeout = next(c for c in self.transport.calls if c[1].endswith("/api/chat"))
-        prompt = json.dumps(request["messages"])
+        _, _, request, timeout = next(c for c in self.transport.calls if c[1].endswith("/responses"))
+        prompt = json.dumps(request["input"])
         for private in ("txn-private", "user-private", "source-private", "1020002001", "payloadHash"):
             self.assertNotIn(private, prompt)
-        self.assertEqual(request["format"]["properties"]["modelScore"]["maximum"], 94)
-        self.assertEqual(request["options"]["temperature"], 0)
-        self.assertFalse(request["stream"])
-        self.assertFalse(request["think"])
+        self.assertEqual(request["text"]["format"]["schema"]["properties"]["modelScore"]["maximum"], 94)
+        self.assertFalse(request["store"])
+        self.assertTrue(request["text"]["format"]["strict"])
         self.assertEqual(timeout, 45)
 
     def test_high_score_needs_grounded_pattern_and_requests_human_review(self):
@@ -111,12 +107,12 @@ class ServiceTests(unittest.TestCase):
         self.transport.output = {"modelScore": 20, "reasonCodes": ["recent_activity"]}
         self.assertEqual(self.post(payload()).status_code, 503)
 
-    def test_changed_digest_during_inference_is_refused(self):
-        self.transport.mutate_digest = True
+    def test_mismatched_api_response_model_is_refused(self):
+        self.transport.response_model = "unrequested-model"
         self.assertEqual(self.post(payload()).status_code, 503)
 
-    def test_remote_backed_model_and_outage_fail_closed(self):
-        for flag in ("remote", "fail"):
+    def test_provider_refusal_and_outage_fail_closed(self):
+        for flag in ("refusal", "fail"):
             setattr(self.transport, flag, True)
             response = self.post(payload())
             self.assertEqual(response.status_code, 503)
@@ -138,7 +134,7 @@ class ServiceTests(unittest.TestCase):
                 self.assertEqual(self.post(payload()).status_code, 503)
 
     def test_truncated_generation_is_not_used(self):
-        self.transport.done_reason = "length"
+        self.transport.status = "incomplete"
         self.assertEqual(self.post(payload()).status_code, 503)
 
     def test_scoring_concurrency_is_bounded_without_inference_fallback(self):
@@ -146,7 +142,7 @@ class ServiceTests(unittest.TestCase):
         self.model.slot.acquire()
         try:
             self.assertEqual(self.post(payload()).status_code, 503)
-            self.assertFalse(any(c[1].endswith("/api/chat") for c in self.transport.calls))
+            self.assertFalse(any(c[1].endswith("/responses") for c in self.transport.calls))
         finally:
             self.model.slot.release()
             self.model.slot.release()
@@ -174,8 +170,8 @@ class ServiceTests(unittest.TestCase):
 
     def test_singapore_hour_uses_the_timestamp_instant(self):
         self.post(payload(createdAt="2026-10-24T17:00:00.000Z"))
-        request = next(c[2] for c in self.transport.calls if c[1].endswith("/api/chat"))
-        facts = json.loads(request["messages"][-1]["content"])
+        request = next(c[2] for c in self.transport.calls if c[1].endswith("/responses"))
+        facts = json.loads(request["input"][-1]["content"])
         self.assertEqual(facts["singaporeHour"], 1)
         self.assertIn("unusual_hour", facts["evidenceCodes"])
 
@@ -186,31 +182,19 @@ class ConfigurationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 create_app(token=token)
 
-    def test_external_urls_cloud_names_and_offline_mode_are_refused(self):
-        for url in ("https://example.com", "http://example.com", "http://u:p@localhost", "http://localhost/path", "http://localhost?x=1"):
-            with self.assertRaises(ValueError):
-                OllamaFraudModel(url=url)
+    def test_invalid_model_identifiers_and_missing_key_are_refused(self):
+        for name in ("https://example.com/model", "invalid model", "", "gpt/example"):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                OpenAIFraudModel(model_name=name)
         with self.assertRaises(ValueError):
-            OllamaFraudModel(model_name="qwen-cloud")
-        with patch.dict("os.environ", {"AGENT_MODE": "workflow"}):
-            with self.assertRaises(ValueError):
-                OllamaFraudModel()
+            OpenAIFraudModel(api_key="").info()
 
-    def test_missing_installed_model_digest_and_malformed_metadata_are_refused(self):
-        fake = ControlledTransport()
-        fake.digest = "missing"
-        with self.assertRaises(ValueError):
-            OllamaFraudModel(model_name="controlled-local", request=fake).info()
-        for endpoint, result in (("/api/show", {"capabilities": None}),
-                                 ("/api/show", {"capabilities": "completion"}),
-                                 ("/api/show", {"capabilities": [["completion"]]}),
-                                 ("/api/tags", {"models": [{"name": [], "model": {}, "digest": "a" * 64}]})):
-            with self.subTest(result=result):
-                base = ControlledTransport()
-                def malformed(method, url, body, timeout):
-                    return result if url.endswith(endpoint) else base(method, url, body, timeout)
-                with self.assertRaises(ValueError):
-                    OllamaFraudModel(model_name="controlled-local", request=malformed).info()
+    def test_unavailable_or_mismatched_model_metadata_is_refused(self):
+        for identifier in (None, [], "different-model"):
+            def request(method, url, body, timeout):
+                return {"id": identifier}
+            with self.subTest(identifier=identifier), self.assertRaises(ValueError):
+                OpenAIFraudModel(model_name="controlled-openai", request=request).info()
 
 
 if __name__ == "__main__":

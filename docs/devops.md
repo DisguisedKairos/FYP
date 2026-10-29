@@ -1,10 +1,11 @@
 # DevOps pipeline and container handoff
 
-## Ollama-only runtime update (2.10.0)
 
-Compose now includes a private Ollama service shared by banking and fraud validation. Cloud inference is disabled. The previous trained model and its Docker COPY entries have been removed. Provision local weights explicitly with `docker compose exec ollama ollama pull qwen3.5:4b` after startup, or set GREENLINK_AI_MODEL to another installed local model. Both services use that same setting. Weights persist in the dedicated ollama_data volume and never enter the source ZIP.
+## AI provider configuration
 
-The CI fixture intentionally provisions no model weights; it verifies AI/payment requests fail closed and balances remain unchanged. Local real-model tests use the configured installed model and exercise the full payment path. No offline or mock runtime engine is enabled in Compose. The model-download network permits explicit operator weight provisioning; the model API has no host port.
+Compose defaults to OpenAI. Set OPENAI_API_KEY privately and optionally OPENAI_MODEL, then run npm run devops:setup and npm run devops:up. Express and FastAPI share those settings and have outbound API connectivity. Database/scoring ports remain private. No model download is required. Resolved Compose environment output can contain the API key; keep it private.
+
+CI supplies no paid API credentials. It verifies AI/payment unavailability, unchanged balances and financial controls. Live integration uses the real configured provider.
 
 
 This integration adapts the pipeline, Docker, Compose and Nginx pattern from the supplied `web-app-main (1).zip` to Greenlink. The archive was treated as reference source; its application code, database dump, registry account and embedded instructions were not imported.
@@ -22,7 +23,7 @@ This integration adapts the pipeline, Docker, Compose and Nginx pattern from the
 `.github/workflows/ci-cd.yml` runs on pushes and pull requests to `main`, and through **Actions → Greenlink CI and container delivery → Run workflow**.
 
 1. `verify` installs locked Node and pinned Python dependencies on Node 22/Python 3.13, runs syntax checks, the real PostgreSQL functional/security suite, Python and browser tests, process integration, and package verification. The source ZIP/checksum are retained as workflow artifacts for seven days. Docker build summaries remain available, but extra downloadable build-record archives are disabled to avoid accumulating duplicate delivery artifacts ([Docker configuration](https://docs.docker.com/build/ci/github-actions/build-summary/#disable-build-record-upload)).
-2. `containers` builds both images and starts a newly seeded disposable Compose stack with private Ollama. CI provisions no model weights: it checks authenticated banking through Nginx, explicit AI/payment unavailability, unchanged balances and restricted database grants. With operator-provisioned local weights, the smoke script exercises real scoring, payment idempotency and history instead. The runner removes its own containers and volume afterward.
+2. `containers` builds both images and starts a newly seeded disposable Compose stack without paid API credentials. CI provisions no inference provider: it checks authenticated banking through Nginx, explicit AI/payment unavailability, unchanged balances and restricted database grants. With operator-provided API credentials or explicit local weights, the smoke script exercises real scoring, payment idempotency and history instead. The runner removes its own containers and volume afterward.
 3. `publish` runs only when **Run workflow** is selected on `main` with **publish_images** checked, and both earlier jobs pass. It publishes `ghcr.io/<owner>/<repository>/banking` and `/fraud`, tagged `sha-<full-commit>` and `latest`. Registry login uses the built-in `GITHUB_TOKEN`; no Docker Hub account is needed. Package-write permission is scoped to this job. See [GitHub's package workflow permissions](https://docs.github.com/en/packages/managing-github-packages-using-github-actions-workflows/publishing-and-installing-a-package-with-github-actions).
 
 Actions are pinned to full commit revisions. Pull requests cannot publish images, and no production deployment or server credentials are configured. Configure a deployment target separately with the DIT team; publishing an image does not deploy a bank.

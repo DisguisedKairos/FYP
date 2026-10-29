@@ -45,6 +45,16 @@ async function originalSnapshot(db, ids = []) {
 async function assertSameTarget(owner, runtime) {
   const sql = 'SELECT current_database() AS database,current_schema() AS schema,inet_server_addr()::text AS address,inet_server_port() AS port';
   const [operator, application] = await Promise.all([owner.query(sql), runtime.query(sql)]);
+  const operatorUrl = owner.pool?.options?.connectionString, applicationUrl = runtime.pool?.options?.connectionString;
+  const isNeon = value => { try { return new URL(value).hostname.endsWith('.neon.tech'); } catch { return false; } };
+  if (isNeon(operatorUrl) || isNeon(applicationUrl)) {
+    assert.ok(require('../database/neon').sameTarget(operatorUrl, applicationUrl), 'Operator and application must use the same Neon endpoint and database.');
+    const fields = row => ({ database: row.database, schema: row.schema });
+    assert.deepEqual(fields(operator.rows[0]), fields(application.rows[0]), 'Neon connections must use the same database/schema.');
+    // Direct and pooled Neon connections expose different internal addresses.
+    // Bind the fixture to the actual client endpoint instead of those addresses.
+    return { ...operator.rows[0], address: new URL(operatorUrl).hostname.replace('-pooler.', '.'), port: Number(new URL(operatorUrl).port || 5432) };
+  }
   assert.deepEqual(operator.rows[0], application.rows[0], 'Operator and application connections must target the same local database/schema before any test data is written.');
   return operator.rows[0];
 }
@@ -214,7 +224,7 @@ async function prepareMfaAndVerify(db, manifest, credentials, filename, riskClie
         await session.request('/api/fraud/rules', undefined, 403);
         await session.request('/api/transactions?accountId=' + manifest.accounts.recipient, undefined, 404);
         const assistant = await session.request('/api/assistant/messages', { message: 'What is my balance?' });
-        assert.equal(assistant.engine, 'ollama');
+        assert.equal(assistant.engine, 'openai');
         assert.ok(assistant.evidenceReferences?.some(e=>e.tool==='get_accounts'));
         assert.ok(assistant.items?.some(a=>a.amountCents!==undefined));
       }
@@ -258,8 +268,11 @@ function renderGuide(manifest, credentials, examples, verified) {
 async function main() {
   const origin = new URL(process.env.PUBLIC_ORIGIN || 'http://localhost:3000');
   const databaseUrl = new URL(process.env.DATABASE_URL);
-  if (!['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname) || !['localhost', '127.0.0.1', '[::1]'].includes(databaseUrl.hostname)) throw new Error('Feature fixtures are restricted to an explicit local development database and browser origin.');
-  const directory = path.resolve(__dirname, '..', 'data', 'testing'), filename = path.join(directory, 'feature-accounts.json');
+  const neon = process.argv.includes('--neon');
+  const localOrigin = ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
+  const matchingNeon = neon && require('../database/neon').sameTarget(process.env.MIGRATION_DATABASE_URL, databaseUrl.href);
+  if (!localOrigin || (neon ? !matchingNeon : !['localhost', '127.0.0.1', '[::1]'].includes(databaseUrl.hostname))) throw new Error('Use a loopback application and an explicit local database, or --neon with matching Neon migration/runtime endpoints.');
+  const directory = path.resolve(__dirname, '..', 'data', 'testing', ...(neon ? ['neon'] : [])), filename = path.join(directory, 'feature-accounts.json');
   const owner = createOperatorDatabase(), runtime = createDatabase();
   let lock;
   try {
@@ -301,7 +314,9 @@ async function main() {
     const discrepancy = (await runtime.query(`SELECT a.id FROM accounts a LEFT JOIN transactions t ON t.account_id=a.id AND t.status='completed'
       GROUP BY a.id HAVING a.balance_cents<>a.opening_balance_cents+COALESCE(sum(t.amount_cents),0)`)).rows;
     assert.equal(discrepancy.length, 0, 'A ledger balance does not reconcile.');
-    savePrivate(path.join(directory, 'FEATURE-TESTING.md'), renderGuide(manifest, credentials, examples, verified));
+    let guide = renderGuide(manifest, credentials, examples, verified);
+    if (neon) guide = guide.replaceAll('npm run test:accounts:otp', 'npm run test:accounts:otp:neon').replaceAll('data/testing/', 'data/testing/neon/');
+    savePrivate(path.join(directory, 'FEATURE-TESTING.md'), guide);
     await owner.query("INSERT INTO audit_log(event_type,metadata) VALUES('operator.feature_tour_ready',$1)", [{ fixture: FIXTURE, users: manifest.users, examples, verifiedSignIns: verified.length,
       originalRecordsPreserved: true, originalFingerprint: digest(before) }]);
     console.table(ACCOUNTS.map(a => ({ email: a.email, role: a.role, business: a.status || 'none', account: a.number || 'staff only' })));
@@ -313,7 +328,7 @@ async function main() {
 }
 
 async function printOtp() {
-  const filename = path.resolve(__dirname, '..', 'data', 'testing', 'feature-accounts.json');
+  const filename = path.resolve(__dirname, '..', 'data', 'testing', ...(process.argv.includes('--neon') ? ['neon'] : []), 'feature-accounts.json');
   const saved = JSON.parse(fs.readFileSync(filename, 'utf8'));
   if (!saved.mfa?.secret) throw new Error('Run test:accounts first to enroll the dedicated MFA tester.');
   const db = createDatabase();
@@ -327,7 +342,7 @@ async function printOtp() {
 }
 module.exports = { ACCOUNTS, FIXTURE, ensureAccounts, seedExamples, originalSnapshot, assertSameTarget, prepareMfaAndVerify, renderGuide, Session };
 if (require.main === module) {
-  const args = process.argv.slice(2);
-  (args.length === 0 ? main() : args.length === 1 && args[0] === '--otp' ? printOtp() : Promise.reject(new Error('Use test:accounts or test:accounts:otp.')))
+  const args = process.argv.slice(2).filter(value => value !== '--neon');
+  (args.length === 0 ? main() : args.length === 1 && args[0] === '--otp' ? printOtp() : Promise.reject(new Error('Use test:accounts, test:accounts:neon, or the matching test:accounts:otp command.')))
     .catch(error => { console.error('Feature setup failed:', error.message); process.exitCode = 1; });
 }

@@ -37,7 +37,7 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | PATCH | `/api/fraud/rules/:id` | Admin `{enabled?,threshold?,action?,version,authorizationPassword}` |
 | GET | `/api/fraud/rules/audit` | Admin paginated policy history |
 | GET | `/api/fraud/model` | Admin model provenance and evaluation |
-| GET | `/api/fraud/model-activity` | Staff-only recorded current Ollama activity, with no synthetic metrics; optional `days=1..90` |
+| GET | `/api/fraud/model-activity` | Staff-only recorded current OpenAI activity, with no synthetic metrics; optional `days=1..90` |
 | POST | `/api/fraud/scan` | Staff-only bounded monitoring scan; `{limit?:1..25,transactionId?}` |
 | GET | `/api/fraud/analysis/:id` | Staff-only saved monitoring analysis for an outgoing transaction |
 | GET | `/api/fraud/cases` | Staff-only suspicious cases, counts and scan status; `status`, `page` |
@@ -48,11 +48,11 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 
 ## Private banking agents (2.7.0)
 
-All routes require the existing session. POST routes additionally require CSRF and the same-origin guard. Run records are private to their initiating user. All generation requests require the local Ollama model. The optional `engine` field accepts only `ollama`; `workflow` and other providers are rejected with 400. Local-model unavailability returns 503 with no alternate response engine. `/api/assistant/messages` is a compatibility URL for this same model-backed assistant.
+All routes require the existing session. POST routes additionally require CSRF and the same-origin guard. Run records are private to their initiating user. All generation requests require OpenAI. The optional `engine` field accepts only `openai`; `workflow` and other providers are rejected with 400. OpenAI unavailability returns 503 with no alternate response engine. `/api/assistant/messages` is a compatibility URL for this same model-backed assistant.
 
 | Method | Path | Payload/result |
 | --- | --- | --- |
-| GET | `/api/agents/status` | Local model configuration/availability; no model credentials |
+| GET | `/api/agents/status` | OpenAI configuration/availability; no model credentials |
 | GET | `/api/agents/runs` | Latest 30 owned run summaries |
 | GET | `/api/agents/runs/:id` | Owned report and permitted tool evidence |
 | POST | `/api/agents/assistant` | `{message,previousRunId?,engine?}`; response has reply, authoritative fact cards, form-draft actions, run ID and tool names |
@@ -70,7 +70,7 @@ Reports return `{run:{id,kind,engine,status,report,steps,...}}`. Unsupported fie
 
 Both are authenticated, read-only PostgreSQL operations. Business operators see owned runs/payment assessments and their failed model calls. Staff see global payment/monitoring evidence but only their own assistant runs and assistant failures. Cross-owner private detail returns 404; monitoring detail requires staff (403). Historical records do not require a running model to read. A maximum of 100 request metadata entries is returned per record. There are no audit mutation endpoints.
 
-New inference calls append ai.model_call metadata to the protected audit_log. Metadata is allowlisted: local provider/model, subject, phase, attempt, timestamps, duration, available digests, proposed tool names, status and bounded error code. Availability failures have executed=false. executed=true identifies an attempt through the local adapter/gateway; it does not prove that Ollama completed inference. Request completion does not establish guardrail acceptance or financial settlement. Detailed timing is not retroactively synthesized. Browser JSON export uses this same authorized detail response.
+New inference calls append ai.model_call metadata to the protected audit_log. Metadata is allowlisted: provider/model, subject, phase, attempt, timestamps, duration, available digests, proposed tool names, status and bounded error code. Availability failures have executed=false. executed=true identifies an attempt through the OpenAI adapter/gateway; it does not prove that OpenAI completed inference. Request completion does not establish guardrail acceptance or financial settlement. Detailed timing is not retroactively synthesized. Browser JSON export uses this same authorized detail response.
 
 ## Financial payloads
 

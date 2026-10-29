@@ -15,7 +15,7 @@ function modelResult(input, score = 5) {
   const summary = input.historySummary, known = input.isInternal || summary.knownPayee;
   return {
     ...Object.fromEntries(['transactionId', 'userId', 'sourceAccountId', 'payloadHash', 'type', 'amountCents', 'payee', 'isInternal'].map(key => [key, input[key]])),
-    modelScore: score, score, decision: score >= 65 ? 'review' : 'allow', provider:'ollama',modelName:'controlled-local',modelSha256:'a'.repeat(64),promptSha256:'b'.repeat(64), modelVersion: 'explicit-test-model', assessedAt: input.createdAt,
+    modelScore: score, score, decision: score >= 65 ? 'review' : 'allow', provider:'openai',modelName:'controlled-openai',modelIdentitySha256:require('../banking/ai-provider').identity('controlled-openai'),promptSha256:'b'.repeat(64), modelVersion: 'explicit-test-model', assessedAt: input.createdAt,
     features: { amountLog: 0.1, amountDeviation: 0, velocity: 0, newPayee: known ? 0 : 1, balanceUtilization: Math.min(1.5, input.amountCents / Math.max(1, input.accountBalanceCents)), unusualHour: 0, recentValue: 0 },
     context: { historicalTransactions: summary.historyCount, averageOutgoingCents: summary.averageOutgoingCents, outgoingCount10m: summary.outgoingCount10m, dailyOutgoingCents: summary.dailyOutgoingCents, knownPayee: known },
     reasons: [{ code: 'test_fixture', message: 'Explicit test-only model response.', contribution: 0 }],
@@ -68,7 +68,7 @@ pgTest('DFT completed transfers atomically conserve value and persist both ledge
   assert.ok(records.every(row => row.completed_at && row.settlement_seq));
   assert.equal(records[0].reference, records[1].reference);
   assert.equal(records[1].risk_json.assessmentId, result.id);
-  for(const key of ['provider','modelName','modelScore','modelSha256','promptSha256'])assert.equal(records[1].risk_json[key],result.risk[key],`Incoming receipt must retain ${key} from its originating assessment.`);
+  for(const key of ['provider','modelName','modelScore','modelIdentitySha256','promptSha256'])assert.equal(records[1].risk_json[key],result.risk[key],`Incoming receipt must retain ${key} from its originating assessment.`);
   assert.equal(records[1].risk_json.context, undefined, 'Recipient must not receive sender behavioural aggregates.');
   assert.equal(Number((await f.db.query('SELECT count(*) FROM notification_outbox')).rows[0].count), 2);
   assert.equal(Number((await f.db.query("SELECT count(*) FROM audit_log WHERE event_type='transaction.completed'")).rows[0].count), 1);

@@ -1,10 +1,10 @@
 'use strict';
 
 // Controlled tool-selection double for functional/security tests only.
-// Production always uses the loopback Ollama adapter. Real inference is
+// Production uses the OpenAI adapter. Real inference is
 // exercised separately by demo:agents; this double is not an AI benchmark.
 function createTestAgentModel(){
-  return {mode:'ollama',model:'controlled-test-model',inspect:async()=>({mode:'ollama',model:'controlled-test-model',configured:true,available:true,localOnly:true}),chat:async(messages,tools)=>{
+  return {mode:'openai',model:'controlled-test-model',inspect:async()=>({mode:'openai',model:'controlled-test-model',configured:true,available:true,localOnly:false}),chat:async(messages,tools)=>{
     const last=[...messages].reverse().find(m=>m.role==='tool');
     if(last){
       const value=JSON.parse(last.content),draft=last.tool_name==='prepare_payment_draft';

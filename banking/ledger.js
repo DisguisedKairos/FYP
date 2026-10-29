@@ -1,4 +1,5 @@
 'use strict';
+const {validProvenance}=require('./ai-provider');
 
 const { createHash, randomUUID } = require('node:crypto');
 const { HttpError } = require('../models/errors');
@@ -129,7 +130,7 @@ function validateAssessment(risk, input) {
   if (!risk || !sameBinding(risk, input) || !Number.isInteger(risk.score) || risk.score < 0 || risk.score > 100
     || !Number.isInteger(risk.modelScore) || risk.modelScore < 0 || risk.modelScore > 94 || !['allow', 'review', 'block'].includes(risk.decision)
     || !Number.isSafeInteger(risk.ruleVersion) || risk.ruleVersion < 1 || !Array.isArray(risk.reasons) || !risk.policy || !Array.isArray(risk.policy.rules)
-    || !risk.features || !risk.modelVersion || !Number.isFinite(Date.parse(risk.assessedAt)) || risk.provider !== 'ollama' || typeof risk.modelName!=='string' || !/^[a-f0-9]{64}$/.test(risk.modelSha256 || '') || !/^[a-f0-9]{64}$/.test(risk.promptSha256 || '')
+    || !risk.features || !risk.modelVersion || !Number.isFinite(Date.parse(risk.assessedAt)) || !validProvenance(risk) || typeof risk.modelName!=='string' || !/^[a-f0-9]{64}$/.test(risk.promptSha256 || '')
     || (risk.decision === 'block' && risk.score < 95) || (risk.decision !== 'block' && risk.score > 94)
     || (risk.decision === 'allow' && risk.modelScore >= 65)) throw new HttpError(503, 'Screening returned an invalid bound result. No funds moved.');
 }
@@ -144,7 +145,7 @@ async function settle(client, user, payload, resolved, transactionId, reference,
   if (resolved.target) {
     await client.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1', [resolved.target.id, payload.amountCents]);
     const incomingId = randomUUID();
-    const associated = { provider: risk.provider, modelName: risk.modelName, modelScore: risk.modelScore, modelSha256: risk.modelSha256, promptSha256: risk.promptSha256,
+    const associated = { provider: risk.provider, modelName: risk.modelName, modelScore: risk.modelScore, modelSha256: risk.modelSha256, modelIdentitySha256:risk.modelIdentitySha256, identityKind:risk.identityKind, resolvedModel:risk.resolvedModel, promptSha256: risk.promptSha256,
       score: risk.score, decision: risk.decision, modelVersion: risk.modelVersion, ruleVersion: risk.ruleVersion,
       assessedAt: risk.assessedAt, assessmentId: transactionId, reasons: [{ code: 'associated_transfer', message: 'Screened with the originating transfer.', contribution: 0 }] };
     await client.query(`INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq,payee,risk_json)

@@ -5,13 +5,12 @@ const {randomUUID}=require('node:crypto');
 const {fixture,accountNamed}=require('./dft-helpers');
 const reports=require('../banking/agents/reports');
 const {createAgents,narrativeIssue}=require('../banking/agents');
-const {createLocalModel}=require('../banking/agents/model');
 const available=Boolean(process.env.TEST_DATABASE_URL);
 const pg=(name,fn)=>test(name,{skip:!available},fn);
 async function financialSnapshot(db){return (await db.query('SELECT id,balance_cents,opening_balance_cents FROM accounts ORDER BY id')).rows;}
 async function actors(db){return Object.fromEntries((await db.query('SELECT id,name,email,role,auth_version FROM users')).rows.map(u=>[u.email.split('@')[0],u]));}
 const post=(client,kind,body={})=>client.request('/api/agents/'+kind,{method:'POST',body});
-const fakeModel=chat=>({mode:'ollama',model:'test-local',inspect:async()=>({available:true,configured:true,model:'test-local',mode:'ollama',localOnly:true}),chat});
+const fakeModel=chat=>({mode:'openai',model:'test-openai',inspect:async()=>({available:true,configured:true,model:'test-openai',mode:'openai',localOnly:false}),chat});
 
 pg('Banking agents enforce authentication, CSRF, customer ownership and staff-only tools',async t=>{
   const f=await fixture(t),anonymous=f.client();
@@ -28,18 +27,17 @@ pg('Banking agents enforce authentication, CSRF, customer ownership and staff-on
   assert.equal((await post(other,'liquidity',{days:30,userId:'2'})).status,400);
 });
 
-pg('Every AI endpoint requires the local model and rejects removed offline engines',async t=>{
+pg('Every AI endpoint requires OpenAI and rejects removed offline engines',async t=>{
   let attempts=0;
   const agentModel=fakeModel(async()=>assert.fail('Unavailable model cannot generate a report'));
-  agentModel.inspect=async()=>{attempts++;return {available:false,mode:'ollama'};};
+  agentModel.inspect=async()=>{attempts++;return {available:false,mode:'openai'};};
   const f=await fixture(t,{agentModel}),client=f.client();await client.login();
   for(const [kind,body] of [['assistant',{message:'test'}],['liquidity',{days:7}],['fraud_investigation',{transactionId:randomUUID()}],['rule_simulation',{ruleId:'high_value',threshold:5000}],['reconciliation',{}]]){
     const result=await post(client,kind,body);assert.equal(result.status,503,JSON.stringify(result.data));assert.doesNotMatch(JSON.stringify(result.data),/offline workflow/i);
-    for(const engine of ['workflow','openai',false,null,''])assert.equal((await post(client,kind,{...body,engine})).status,400);
+    for(const engine of ['workflow','ollama',false,null,''])assert.equal((await post(client,kind,{...body,engine})).status,400);
   }
   assert.equal((await client.request('/api/assistant/messages',{method:'POST',body:{message:'What is my balance?'}})).status,503);
   assert.equal(attempts,6);assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_runs')).rows[0].count),0);
-  assert.throws(()=>createLocalModel({mode:'workflow'}),/must be ollama/);
 });
 
 pg('Multi-turn payment planning asks for missing details and creates only authorized-form drafts',async t=>{
@@ -117,7 +115,7 @@ pg('Model-directed agent selects banking tools and records evidence without expo
   });
   const agent=createAgents({db:f.db,model}),before=await financialSnapshot(f.db);
   const response=await agent.execute(users.jamie,'assistant',{message:'Can my business cover upcoming bills?'});
-  assert.equal(response.engine,'ollama');assert.deepEqual(response.steps.map(s=>s.tool),['get_accounts','project_liquidity']);assert.deepEqual(await financialSnapshot(f.db),before);
+  assert.equal(response.engine,'openai');assert.deepEqual(response.steps.map(s=>s.tool),['get_accounts','project_liquidity']);assert.deepEqual(await financialSnapshot(f.db),before);
   const saved=await agent.detail(users.jamie,response.runId);assert.equal(saved.status,'completed');assert.equal(saved.steps.length,2);
   let revision=0;
   const rewrite=fakeModel(async(_messages,tools)=>{
@@ -139,7 +137,7 @@ pg('Injected and overprivileged model tool calls fail closed and have no financi
   assert.equal(Number((await f.db.query("SELECT count(*) FROM agent_runs WHERE status='failed'")).rows[0].count),3);assert.deepEqual(await financialSnapshot(f.db),before);
 });
 
-pg('Local assistant greets connection checks without banking evidence or ungrounded model claims',async t=>{
+pg('Assistant greets connection checks without banking evidence or ungrounded model claims',async t=>{
   let calls=0;
   const agentModel=fakeModel(async(_messages,tools)=>{
     calls++;assert.equal(tools.length,0);
@@ -148,10 +146,10 @@ pg('Local assistant greets connection checks without banking evidence or ungroun
   const f=await fixture(t,{agentModel}),client=f.client();await client.login('jamie@greenlink.demo');
   const before=await financialSnapshot(f.db),tx=Number((await f.db.query('SELECT count(*) FROM transactions')).rows[0].count);
   for(const message of ['test','Hello!','Are you working?','What can you do?']){
-    const answer=await post(client,'assistant',{message,engine:'ollama'});
+    const answer=await post(client,'assistant',{message,engine:'openai'});
     assert.equal(answer.status,200,JSON.stringify(answer.data));
     assert.match(answer.data.reply,/Assistant is responding/);assert.equal(answer.data.clarification,true);
-    assert.equal(answer.data.engine,'ollama');assert.deepEqual(answer.data.steps,[]);assert.deepEqual(answer.data.actions,[]);
+    assert.equal(answer.data.engine,'openai');assert.deepEqual(answer.data.steps,[]);assert.deepEqual(answer.data.actions,[]);
     assert.equal(answer.data.evidenceReferences,undefined);assert.equal(answer.data.narrativeWithheld,undefined);
     assert.ok(answer.data.suggestions.includes('What is my balance?'));assert.ok(!JSON.stringify(answer.data).includes('999999'));
     const saved=(await client.request('/api/agents/runs/'+answer.data.runId)).data.run;
@@ -212,12 +210,6 @@ pg('Agent loops are bounded and authorization changes invalidate results and dra
   assert.equal(Number((await f.db.query("SELECT count(*) FROM agent_runs WHERE status='completed'")).rows[0].count),0);
 });
 
-test('Local model adapter refuses remote origins, cloud models, redirects and unsupported tool models',async()=>{
-  for(const url of ['https://example.com','http://example.com','http://127.0.0.1:11434/path','http://u:p@localhost:11434'])assert.throws(()=>createLocalModel({mode:'ollama',model:'local-model',url}));
-  assert.throws(()=>createLocalModel({mode:'ollama',model:'model-cloud'}));
-  let calls=0;const adapter=createLocalModel({mode:'ollama',model:'test-local',fetchImpl:async(url,options)=>{calls++;assert.equal(url.hostname,'127.0.0.1');assert.equal(options.redirect,'error');return new Response(JSON.stringify({capabilities:['completion'],remote_model:'cloud-model'}));}});
-  assert.equal((await adapter.inspect()).available,false);assert.equal(calls,1);
-});
 test('Financial narrative checks withhold invented score scales and unauthorized execution claims',()=>{
   assert.ok(narrativeIssue('Model Score: 9/10'));
   assert.ok(narrativeIssue('I have approved your payment.'));
@@ -249,27 +241,11 @@ pg('Failed optional model wording repair retains authoritative evidence and with
   const model=fakeModel(async()=>{
     if(++calls===1)return {role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
     if(calls===2)return {role:'assistant',content:'Your balance is SGD 999999.'};
-    throw new (require('../models/errors').HttpError)(503,'Local model timed out.');
+    throw new (require('../models/errors').HttpError)(503,'Model timed out.');
   });
   const result=await createAgents({db:f.db,model}).execute(users.jamie,'assistant',{message:'Show balances.'});
   assert.equal(result.narrativeWithheld,true);assert.equal(result.items[0].amountCents,120000);
   assert.ok(!result.reply.includes('999999'));assert.equal((await f.db.query('SELECT status FROM agent_runs WHERE id=$1',[result.runId])).rows[0].status,'completed');
-});
-
-
-test('Local model adapter validates model identity, completed generation and tool response shape',async()=>{
-  const complete={model:'test-local',done:true,done_reason:'stop',message:{role:'assistant',content:'Use the recorded evidence.'}};
-  const ask=(body,model='test-local')=>createLocalModel({model,fetchImpl:async()=>new Response(JSON.stringify(body))}).chat([],[]);
-  assert.equal((await ask(complete)).content,complete.message.content);
-  assert.equal((await ask({...complete,model:'test-local:latest'})).role,'assistant');
-  const tool={function:{name:'get_accounts',arguments:{}}};
-  assert.deepEqual((await ask({...complete,message:{role:'assistant',content:'',tool_calls:[tool]}})).tool_calls,[tool]);
-  for(const response of [null,[],{...complete,model:'different-local-model'},{...complete,done:false},
-    {...complete,done_reason:'length'},{...complete,done:undefined},{...complete,error:'generation failed'},
-    {...complete,message:{role:'assistant',content:'',tool_calls:[null]}},
-    {...complete,message:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:[]}}]}}]){
-    await assert.rejects(ask(response),e=>e.status===503,JSON.stringify(response));
-  }
 });
 
 

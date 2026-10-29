@@ -68,22 +68,6 @@ services:
       database-setup:
         condition: service_completed_successfully
 
-  ollama:
-    <<: *runtime
-    image: ollama/ollama:0.34.3
-    restart: unless-stopped
-    environment:
-      OLLAMA_HOST: 0.0.0.0:11434
-      OLLAMA_NO_CLOUD: '1'
-    volumes:
-      - ollama_data:/root/.ollama
-    networks: [backend, model-download]
-    healthcheck:
-      test: [CMD, ollama, list]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
   fraud:
     <<: *runtime
     image: ${GREENLINK_FRAUD_IMAGE:-greenlink-fraud:local}
@@ -93,14 +77,10 @@ services:
     restart: unless-stopped
     environment:
       SERVICE_TOKEN_FILE: /run/secrets/service_token
-      AGENT_MODE: ollama
-      AGENT_MODEL: ${GREENLINK_AI_MODEL:-qwen3.5:4b}
-      AGENT_OLLAMA_URL: http://ollama:11434
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
     secrets: [service_token]
-    networks: [backend]
-    depends_on:
-      ollama:
-        condition: service_healthy
+    networks: [backend, ai-egress]
 
   banking:
     <<: [*banking-image, *runtime]
@@ -111,12 +91,11 @@ services:
       DB_NAME: greenlink_dft
       PUBLIC_ORIGIN: ${GREENLINK_PUBLIC_ORIGIN:-http://localhost:8080}
       FRAUD_SERVICE_URL: http://fraud:4011
-      AGENT_MODE: ollama
-      AGENT_MODEL: ${GREENLINK_AI_MODEL:-qwen3.5:4b}
-      AGENT_OLLAMA_URL: http://ollama:11434
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-6-luna}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       TRUST_PROXY: 172.30.5.10/32
     secrets: [app_password, service_token, auth_encryption_key]
-    networks: [backend, frontend]
+    networks: [backend, frontend, ai-egress]
     depends_on:
       database-setup:
         condition: service_completed_successfully
@@ -146,7 +125,7 @@ services:
       retries: 6
 
 networks:
-  model-download:
+  ai-egress:
   backend:
     internal: true
   frontend:
@@ -155,7 +134,6 @@ networks:
         - subnet: 172.30.5.0/24
 
 volumes:
-  ollama_data:
   postgres_data:
 
 secrets:

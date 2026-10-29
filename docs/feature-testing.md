@@ -1,4 +1,9 @@
-# Local accounts and complete feature walkthrough
+# Test accounts and complete feature walkthrough
+
+
+For the current Neon-backed app, open the verified private login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The remaining walkthrough applies to both environments. See [Neon setup](neon.md).
+
+## Original native setup
 
 Run `npm run test:accounts` explicitly with the native local PostgreSQL configuration and the Python scorer available (`npm start`). It adds ten dedicated test logins to the native app at `http://localhost:3000`. The Docker app on port 8080 and the isolated fraud demo on port 3001 have their own databases and logins.
 
@@ -45,12 +50,12 @@ The feature setup uses the real configured Python scorer and the existing rule p
 1. Sign in as the reviewer tester. In Fraud monitoring, open **high-value-awaiting-review** or **maker-awaiting-independent-review**. Inspect AI score, combined score, model explanation, matched controls and recorded authorization. Approve one with a verified sample reason; reject another. Refresh the business sender to see the final receipt and balance.
 2. The maker tester can see its held payment in Activity. Its own transaction is excluded from its review queue, and a direct self-approval request returns 403. The fixture has verified this guard. A different administrator can review it.
 3. As staff/reviewer, open Fraud rules. For a small rule-management demonstration, record the initial threshold, change the high-value threshold from SGD 10,000 to SGD 9,500, authorize and inspect the audit entry. Restore the original threshold afterward and inspect the second audit event. Rule edits affect the shared local policy; the fixture itself does not edit it. Ordinary customer accounts cannot use these administrator APIs.
-4. Use npm run demo:agents for actual local Ollama scoring and all five analysis features in a disposable schema. Old preset fraud simulations have been removed.
+4. Use npm run demo:agents for actual configured AI scoring and all five analysis features in a disposable schema. Old preset fraud simulations have been removed.
 
 ## Login security, MFA and sessions
 
 1. All new identities use the generated initial password in the private guide. Only the MFA tester initially requires a second factor. Wrong credentials are refused and durable throttles remain enabled.
-2. For the MFA tester, add the private guide's secret/URI to an authenticator, or run **`npm run test:accounts:otp`** for a current local test code. Each accepted code can be used once; wait for the next 30-second slot after using it.
+2. For the MFA tester, add the private guide's secret/URI to an authenticator, or run **`npm run test:accounts:otp:neon`** for the current Neon app, or **`npm run test:accounts:otp`** for the original native database. Each accepted code can be used once; wait for the next 30-second slot after using it.
 3. Use an unused recovery code from the private guide to test recovery login. It becomes invalid after use. One initial code was consumed by the setup's successful recovery-login check; nine remain initially.
 4. On an ordinary customer account, open Profile & security and enroll/confirm your own authenticator, inspect the ten one-use recovery codes, then test code login and disabling MFA with the current password and a fresh code.
 5. Sign into the same test identity in two browser profiles. Change its password in one; the old password and other session stop working. Test Revoke all sessions and confirm both sessions are signed out. Setup reruns preserve these changes and never reset passwords or MFA.
@@ -60,6 +65,6 @@ The feature setup uses the real configured Python scorer and the existing rule p
 
 Run `npm run test:accounts` again to locate the private guide. It recognizes its own audited fixture, checks identity ownership and leaves modified passwords, balances, approvals, reviews and MFA settings intact. It refuses a reserved email, registration or account-number collision instead of adopting an existing customer. A failed partial run can resume the idempotent examples. Financial writes retain fixed request IDs and actual password authorization.
 
-Initial deposits are explicitly labelled synthetic fixture credits. New payment examples pass through current financial rules and real Python scoring; MFA is enrolled through Express, with encrypted secrets and hashed recovery codes in PostgreSQL. The script verifies original users, passwords, roles, MFA records, accounts, transactions, businesses and fraud settings match their pre-run snapshot, and checks that every account balance reconciles. Existing sessions are allowed to refresh normally.
+Initial deposits are explicitly labelled synthetic fixture credits. New payment examples pass through current financial rules and real configured scoring; MFA is enrolled through Express, with encrypted secrets and hashed recovery codes in PostgreSQL. The script verifies original users, passwords, roles, MFA records, accounts, transactions, businesses and fraud settings match their pre-run snapshot, and checks that every account balance reconciles. Existing sessions are allowed to refresh normally.
 
 The command is explicit local-development tooling, never called by `npm start`, database migrations, normal seeding, or CI/container startup. `tests/dft-feature-accounts.test.js` checks collision refusal, preservation, replay, onboarding, schedules, maker/checker controls, MFA and ownership against isolated PostgreSQL fixtures; those unit/integration fixtures use a controlled model, while the live setup uses the configured Python service.

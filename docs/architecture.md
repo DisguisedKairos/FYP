@@ -1,6 +1,6 @@
 # DFT application architecture
 
-The active application has an Express banking API, a Python FastAPI fraud validation gateway, a shared local Ollama model, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. The local launcher remains available, alongside the requested reference Nginx/Compose topology and GitHub Actions pipeline; see [DevOps setup](devops.md).
+The active application has an Express banking API, a Python FastAPI fraud validation gateway, the OpenAI Responses API, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. The local launcher remains available, alongside the requested reference Nginx/Compose topology and GitHub Actions pipeline; see [DevOps setup](devops.md).
 
 This is a digital wholesale banking project. `businesses` stores the legal customer; `users` stores authorized operators and bank staff. `accounts.business_id` links the legal owner while `user_id` retains the primary operator authorization boundary. A database trigger enforces that binding. Migration 005 adds this model without rewriting existing customer names, passwords, balances or history. No business identity is fabricated for a legacy user. New applications require independent bank review before account changes or funds movement.
 
@@ -9,8 +9,8 @@ flowchart LR
   Browser[Browser application] --> Express[Express banking API]
   Express --> PG[(PostgreSQL)]
   Express -->|Authenticated bound assessment| Python[Python FastAPI scorer]
-  Python -->|Validated structured inference| Ollama[Local Ollama model]
-  Express -->|Banking analysis tools| Ollama
+  Python -->|Validated structured inference| OpenAI[OpenAI Responses API]
+  Express -->|Banking analysis tools| OpenAI
   Jobs[Schedule and outbox jobs] --> PG
   Jobs --> Express
   PG --> Alerts[In-app notifications]

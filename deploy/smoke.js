@@ -32,16 +32,16 @@ async function run(base) {
     await request('/api/transfers',payload,503);
     await request('/api/agents/assistant',{message:'test'},503);
     assert.equal((await request('/api/dashboard')).accounts.find(a=>a.id===source.id).balanceCents,source.balanceCents);
-    console.log('Compose: no model weights provisioned; AI/payment requests fail closed without fallback and balances are unchanged.');return;
+    console.log('Compose: AI provider unavailable; AI/payment requests fail closed without fallback and balances are unchanged.');return;
   }
-  assert.equal(model.model.provider,'ollama');
+  assert.ok(require('../banking/ai-provider').validProvenance(model.model));
   const payment=(await request('/api/transfers',payload)).transaction;
-  assert.equal(payment.risk.provider,'ollama');
+  assert.equal(payment.risk.provider,model.model.provider);
   assert.equal((await request('/api/transfers',payload)).transaction.id,payment.id);
   const expected=source.balanceCents-(payment.status==='completed'?125:0);
   assert.equal((await request('/api/dashboard')).accounts.find(a=>a.id===source.id).balanceCents,expected);
   const activity=(await request('/api/fraud/model-activity')).activity;
-  assert.equal(activity.provider,'ollama');assert.equal(activity.accuracy,undefined);
+  assert.equal(activity.provider,model.model.provider);assert.equal(activity.accuracy,undefined);
   let scan;
   for(let attempt=0;attempt<20;attempt++){
     const response=await request('/api/fraud/scan', { transactionId: payment.id },[200,409]);

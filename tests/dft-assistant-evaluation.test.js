@@ -6,7 +6,7 @@ const { fixture } = require('./dft-helpers');
 const { createAgents } = require('../banking/agents');
 const { narrativeIssue, relevanceIssue } = require('../banking/agents/evidence');
 const pg = (name, fn) => test(name, { skip: !process.env.TEST_DATABASE_URL }, fn);
-const model = chat => ({ mode: 'ollama', inspect: async () => ({ available: true }), chat });
+const model = chat => ({ mode: 'openai', inspect: async () => ({ available: true }), chat });
 const tool = (name, args = {}) => ({ role: 'assistant', content: '', tool_calls: [{ function: { name, arguments: args } }] });
 const evidence = [{ id: 'E1' }];
 const context = (report, results = []) => ({ report, options: { evidence, results, requireCitations: true } });

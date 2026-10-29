@@ -13,12 +13,15 @@ async function actor(db,user){
 // Existing protected tables remain the authoritative evidence store.
 async function record(db,event){
   if(!['agent','payment','monitoring'].includes(event.kind)||typeof event.subjectId!=='string'||event.subjectId.length>150)throw new Error('Invalid AI audit subject.');
-  const metadata={schemaVersion:1,subjectKind:event.kind,subjectId:event.subjectId,provider:'ollama',localOnly:true,
+  const provider=event.provider || 'openai';
+  if(provider!=='openai')throw new Error('Invalid AI audit provider.');
+  const metadata={schemaVersion:1,subjectKind:event.kind,subjectId:event.subjectId,provider,localOnly:false,externalServices:true,
     model:typeof event.model==='string'?event.model.slice(0,100):null,phase:event.phase,attempt:event.attempt || 1,
     status:event.status,executed:event.executed!==false,startedAt:event.startedAt,durationMs:Math.max(0,Math.round(event.durationMs || 0)),
     toolNames:(event.toolNames || []).filter(v=>typeof v==='string' && /^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(v)).slice(0,4),
     errorCode:event.errorCode || null,detectorVersion:event.detectorVersion || null};
-  for(const field of ['modelSha256','promptSha256'])if(/^[a-f0-9]{64}$/.test(event[field] || ''))metadata[field]=event[field];
+  for(const field of ['modelIdentitySha256','promptSha256'])if(/^[a-f0-9]{64}$/.test(event[field] || ''))metadata[field]=event[field];
+  for(const field of ['responseId','resolvedModel'])if(typeof event[field]==='string' && /^[A-Za-z0-9._-]{1,150}$/.test(event[field]))metadata[field]=event[field];
   await db.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata,created_at) VALUES($1,$2,'ai.model_call',$3,$4)",
     [event.actorId || null,event.userId,metadata,event.createdAt || new Date().toISOString()]);
 }
@@ -27,7 +30,7 @@ const union=[
   "SELECT 'agent'::text AS kind,id,user_id,created_at,COALESCE(report_json->>'title',replace(kind,'_',' ')) AS title,status,engine AS provider,report_json->'aiAudit'->>'model' AS model,NULL::integer AS score,NULL::text AS decision,id AS reference FROM agent_runs WHERE user_id=$1 AND created_at>=$3 AND created_at<=$4",
   "UNION ALL SELECT 'payment',f.id,f.user_id,f.created_at,'Payment risk assessment',CASE WHEN f.result_json IS NULL THEN 'incomplete' ELSE 'completed' END,COALESCE(f.result_json->>'provider','not_recorded'),f.result_json->>'modelName',CASE WHEN f.result_json->>'modelScore' ~ '^[0-9]{1,3}$' THEN (f.result_json->>'modelScore')::integer END,COALESCE(t.risk_json->>'decision',f.result_json->>'decision'),f.id FROM fraud_assessments f LEFT JOIN transactions t ON t.id=f.id WHERE ($2 OR f.user_id=$1) AND f.created_at>=$3 AND f.created_at<=$4",
   "UNION ALL SELECT 'monitoring',s.id,a.user_id,s.created_at,'Transaction monitoring','completed',COALESCE(s.evidence_json->'model'->>'provider','not_recorded'),s.evidence_json->'model'->>'modelName',CASE WHEN s.evidence_json->'model'->>'score' ~ '^[0-9]{1,3}$' THEN (s.evidence_json->'model'->>'score')::integer END,CASE WHEN s.evidence_json->>'flagged'='true' THEN 'flagged' ELSE 'unflagged' END,s.transaction_id FROM fraud_screenings s JOIN transactions t ON t.id=s.transaction_id JOIN accounts a ON a.id=t.account_id WHERE $2 AND s.created_at>=$3 AND s.created_at<=$4",
-  "UNION ALL SELECT 'failure',id::text,target_user_id,created_at,'Model request failed','failed','ollama',metadata->>'model',NULL::integer,NULL::text,metadata->>'subjectId' FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'status'='failed' AND "+failureScope+" AND created_at>=$3 AND created_at<=$4"
+  "UNION ALL SELECT 'failure',id::text,target_user_id,created_at,'Model request failed','failed',COALESCE(metadata->>'provider','not_recorded'),metadata->>'model',NULL::integer,NULL::text,metadata->>'subjectId' FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'status'='failed' AND "+failureScope+" AND created_at>=$3 AND created_at<=$4"
 ].join('\n');
 function parameters(params,now){
   for(const key of params.keys())if(!['type','page','pageSize','days','q'].includes(key)||params.getAll(key).length!==1)throw new HttpError(400,'Unsupported or duplicate AI audit filter.');
