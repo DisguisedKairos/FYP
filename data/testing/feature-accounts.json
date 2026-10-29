@@ -1,0 +1,27 @@
+{
+  "fixture": "greenlink-feature-tour-v1",
+  "database": "greenlink_dft",
+  "origin": "http://localhost:3000",
+  "password": "GLTest-GfBawLc_7sK-!a1",
+  "mfa": {
+    "secret": "4J3RUE3PLZHGMM2B35LW3L3DTR2NAEHH",
+    "otpauthUrl": "otpauth://totp/Green%20Link%20Digital%20Bank%3Amfa-tester%40greenlink.demo?secret=4J3RUE3PLZHGMM2B35LW3L3DTR2NAEHH&issuer=Green+Link+Digital+Bank&algorithm=SHA1&digits=6&period=30",
+    "recoveryCodes": [
+      "18A8-8321-5261-A0A7-8858",
+      "C46D-974B-5375-CEE1-BD77",
+      "6283-61ED-7434-6059-2F2D",
+      "FD13-118A-8E82-AB34-D5FC",
+      "58D8-2F16-2E10-029A-6DD5",
+      "F653-DCB8-6540-C2AC-B906",
+      "CF3C-5E15-C092-95EB-F981",
+      "3A69-9A79-D39A-A0DB-C2E9",
+      "33E9-6620-301C-035E-CFC6"
+    ]
+  },
+  "target": {
+    "database": "greenlink_dft",
+    "schema": "public",
+    "address": "127.0.0.1/32",
+    "port": 55432
+  }
+}

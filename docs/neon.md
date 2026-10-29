@@ -48,7 +48,7 @@ npm run test:accounts:neon
 npm run test:accounts:otp:neon
 ~~~
 
-The account command uses the real configured AI scoring gateway and verifies login, independent authorization, customer isolation, MFA and assistant evidence. It requires a loopback application origin and matching Neon migration/runtime endpoints. Credentials and recovery codes are saved separately under ignored data/testing/neon/. Open data/testing/neon/FEATURE-TESTING.md for passwords and the complete walkthrough. Reruns retain changed passwords, MFA, balances and review decisions.
+The account command uses the real configured AI scoring gateway and verifies login, independent authorization, customer isolation, MFA and assistant evidence. It requires a loopback application origin and matching Neon migration/runtime endpoints. Credentials and recovery codes are saved separately under data/testing/neon/. The selected synthetic test login files are shared in Git; remove or rotate demo accounts before public deployment. Database connection credentials and API keys remain private. Open data/testing/neon/FEATURE-TESTING.md for passwords and the complete walkthrough. Reruns retain changed passwords, MFA, balances and review decisions.
 
 These are newly generated test identities. Existing local users, passwords and transactions were not uploaded. The original native PostgreSQL database remains on 127.0.0.1:55432. A private pre-setup database dump and environment copies are retained under data/backups/neon-setup-2026-10-29T05-21-25-748Z/. Keep native and Neon credential guides separate.
 

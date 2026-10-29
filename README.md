@@ -31,7 +31,7 @@ There are two permission roles: customer (authorized business operator) and admi
 
 ## Test accounts and passwords
 
-Open **http://localhost:3000**. The current workspace uses **Neon PostgreSQL**, so use the verified email/password table in the private **`data/testing/neon/README.md`**. The detailed Neon walkthrough and MFA details are in `data/testing/neon/FEATURE-TESTING.md`; its JSON credential file is `data/testing/neon/feature-accounts.json` (the `password` field). These private files are excluded from Git and release packages.
+Open **http://localhost:3000**. The current workspace uses **Neon PostgreSQL**, so use the verified email/password table in [the Neon testing guide](data/testing/neon/README.md). The detailed Neon walkthrough and MFA details are in `data/testing/neon/FEATURE-TESTING.md`; its JSON credential file is `data/testing/neon/feature-accounts.json` (the `password` field). These synthetic demo login files are included in Git for project testing and excluded from release packages. Anyone with repository access can use these demo credentials; rotate or remove the demo accounts before public deployment.
 
 Use the full email as the username. There are two permission roles: `customer` and `admin`. The separate staff, reviewer and maker identities exercise different workflows under the administrator role.
 
@@ -48,7 +48,7 @@ Use the full email as the username. There are two permission roles: `customer` a
 | `maker-tester@greenlink.demo` | `admin` | Administrator payment maker; own held payment cannot be self-approved |
 | `mfa-tester@greenlink.demo` | `customer` | Authenticator login, recovery codes and profile security |
 
-All ten Neon test identities initially share the password in the private Neon guide. `mfa-tester@greenlink.demo` additionally requires an authenticator code or unused recovery code; run `npm run test:accounts:otp:neon` for a current code. Use separate browser profiles to test independent maker/reviewer decisions. Replace any older password saved by your browser.
+All ten Neon test identities initially share the password in the Neon testing guide. `mfa-tester@greenlink.demo` additionally requires an authenticator code or unused recovery code; run `npm run test:accounts:otp:neon` for a current code. Use separate browser profiles to test independent maker/reviewer decisions. Replace any older password saved by your browser.
 
 **Original native database only:** `data/testing/README.md`, `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md` contain the retained native database credentials. Their passwords do not work on Neon. The original `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` users are not present in the current Neon database; use the business tester for customer banking or the staff/reviewer tester for bank operations.
 
@@ -72,7 +72,7 @@ npm run build
 npm start
 ~~~
 
-Open **http://localhost:3000**. For fresh synthetic Neon logins, run `npm run test:accounts:neon` with the app running, then open the private `data/testing/neon/FEATURE-TESTING.md`. These credentials are separate from the original native database logins. Use `npm run test:accounts:otp:neon` for its MFA tester.
+Open **http://localhost:3000**. For fresh synthetic Neon logins, run `npm run test:accounts:neon` with the app running, then open `data/testing/neon/FEATURE-TESTING.md`. These credentials are separate from the original native database logins. Use `npm run test:accounts:otp:neon` for its MFA tester.
 
 After `neon deploy` or a CLI environment pull, run `npm run db:setup:neon` before starting the app to restore the restricted application connection. See [Neon setup and verification](docs/neon.md) for the complete commands, permissions and backup locations. Existing local accounts and transactions have not been uploaded.
 
@@ -101,7 +101,7 @@ OPENAI_API_KEY=your-private-api-key
 OPENAI_MODEL=gpt-6-luna
 ~~~
 
-For a fresh checkout, run npm ci, install requirements.txt in .venv, run npm run setup and provision PostgreSQL using [database setup](docs/database.md). Supply your own OpenAI API key privately. Never put operator credentials in source control.
+For a fresh checkout, run npm ci, install requirements.txt in .venv, run npm run setup and provision PostgreSQL using [database setup](docs/database.md). Supply your own OpenAI API key privately. Keep PostgreSQL operator credentials, OpenAI keys and application secrets out of source control.
 
 When the AI provider is unavailable, banking reads remain available, while new AI analysis and payment screening fail explicitly. No funds move on failed screening. Scheduled attempts use bounded retry/recovery rather than a substitute AI engine.
 
@@ -117,7 +117,7 @@ npm run demo:agents
 
 Functional/security tests use clearly isolated controlled model adapters. They do not measure language-model quality. demo:agents uses actual configured AI provider and the private scoring gateway in a disposable PostgreSQL schema, then removes that schema. The real-process integration command is node scripts/platform-smoke.js with the configured separate TEST_DATABASE_URL; without usable model credentials it verifies the explicit unavailable path, never simulated success.
 
-The original native login table is in `data/testing/README.md`; Neon logins are in `data/testing/neon/FEATURE-TESTING.md`; generated initial passwords and MFA material are in `data/testing/FEATURE-TESTING.md`. See [feature testing](docs/feature-testing.md). Private credentials and live database files are excluded from Git and the source package.
+The original native login table is in `data/testing/README.md`; Neon logins are in `data/testing/neon/FEATURE-TESTING.md`; generated initial passwords and MFA material are in `data/testing/FEATURE-TESTING.md`. See [feature testing](docs/feature-testing.md). The selected synthetic test login files under `data/testing/` are included in Git. Application secrets, PostgreSQL credentials and live database files remain excluded; source packages exclude the entire data directory.
 
 ## Delivery and package
 

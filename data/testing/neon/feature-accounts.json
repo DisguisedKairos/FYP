@@ -1,0 +1,27 @@
+{
+  "fixture": "greenlink-feature-tour-v1",
+  "database": "neondb",
+  "target": {
+    "database": "neondb",
+    "schema": "public",
+    "address": "ep-dry-lake-azpeyh6i.c-3.ap-southeast-1.aws.neon.tech",
+    "port": 5432
+  },
+  "origin": "http://localhost:3000",
+  "password": "GLTest-ljDD9JhfDfmi!a1",
+  "mfa": {
+    "secret": "3BVVK2W27HJFUVTQ7DCUP4464S6NLPQQ",
+    "otpauthUrl": "otpauth://totp/Green%20Link%20Digital%20Bank%3Amfa-tester%40greenlink.demo?secret=3BVVK2W27HJFUVTQ7DCUP4464S6NLPQQ&issuer=Green+Link+Digital+Bank&algorithm=SHA1&digits=6&period=30",
+    "recoveryCodes": [
+      "F9DD-864F-576C-7489-5707",
+      "183D-E3F8-CB1E-F895-2F4C",
+      "246D-A5F4-9E6A-4E35-2E6D",
+      "3E84-6103-548E-75FF-DC16",
+      "1926-0640-6E7B-8835-5681",
+      "F7C8-A2FE-C2BA-1CEB-869B",
+      "AFC5-AB85-2401-BC72-DE34",
+      "704F-0AC1-49AC-B3D6-A248",
+      "8092-ACDA-C592-C7B9-F582"
+    ]
+  }
+}

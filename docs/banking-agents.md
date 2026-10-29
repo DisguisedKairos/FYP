@@ -23,7 +23,7 @@ The model chooses approved read/draft tools and gives qualitative interpretation
 
 ## Demonstrate each feature
 
-Use the ten identities and private initial password in `data/testing/FEATURE-TESTING.md`.
+Use the ten synthetic identities and shared initial password in `data/testing/FEATURE-TESTING.md`.
 
 1. Sign in as `business-tester@greenlink.demo`. Open Banking insights, project 30 days and inspect scheduled occurrences, source-account shortfalls and any suggested funding drafts. An owned transfer credits the destination in the projection and does not count as money leaving the business. No future income is guessed. Held payments are disclosed separately because they are not reserved.
 2. In GLDB Assistant, send **Transfer**, then **SGD 25**, then **1088800201**. The assistant asks for missing fields across requests and opens an ordinary transfer form when complete. Send **Schedule transfer SGD 10 to 1088800201 tomorrow weekly** to prepare a schedule draft. Tomorrow defaults to 09:00 Singapore time; an explicit time such as **tomorrow at 15:30** is respected. Inspect the displayed timestamp before authorizing. Raw conversation messages remain in browser memory.

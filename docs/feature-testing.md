@@ -1,13 +1,13 @@
 # Test accounts and complete feature walkthrough
 
 
-For the current Neon-backed app, open the verified private login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The remaining walkthrough applies to both environments. See [Neon setup](neon.md).
+For the current Neon-backed app, open the verified demo login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The remaining walkthrough applies to both environments. See [Neon setup](neon.md).
 
 ## Original native setup
 
 Run `npm run test:accounts` explicitly with the native local PostgreSQL configuration and the Python scorer available (`npm start`). It adds ten dedicated test logins to the native app at `http://localhost:3000`. The Docker app on port 8080 and the isolated fraud demo on port 3001 have their own databases and logins.
 
-The command generates one random initial password, prints it once, and stores it in ignored `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md`. The private guide also contains the MFA account's authenticator secret and unused recovery codes. Credentials, secrets and generated account data are excluded from Git, source archives and container images.
+The command generates one random initial password, prints it once, and stores it in `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md`. The demo guide also contains the MFA account's authenticator secret and unused recovery codes. The selected synthetic demo login files are included in Git for project testing. Anyone with repository access can use their passwords and MFA material. Rotate or remove demo accounts before public deployment. Application secrets, PostgreSQL credentials and other runtime data remain excluded from Git; source archives and container images exclude the entire data directory.
 
 | Login email | Actual permission role | Starting use case |
 | --- | --- | --- |

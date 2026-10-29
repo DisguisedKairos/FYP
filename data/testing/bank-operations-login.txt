@@ -1,0 +1,7 @@
+Greenlink local wholesale banking staff login
+URL: http://localhost:3000
+Email: bankops@greenlink.demo
+Password: Staff-kySB6ypsHRI8O0tWJm__66iG1aA!
+Role: Bank operations administrator
+
+Shared local demo credentials for project testing. Do not reuse them for a public deployment.
