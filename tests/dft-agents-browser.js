@@ -11,7 +11,13 @@ async function open(t,width,email){
   await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
   return {f,page};
 }
-async function visit(page,base,route){await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');}
+async function visit(page,base,route){
+  if(route==='/assistant'){
+    if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');
+    await page.waitFor('!!document.querySelector("#assistant-popup:not([hidden])")');return;
+  }
+  await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');
+}
 test('Business users project liquidity, inspect reconciliation and build a multi-turn draft on mobile',async t=>{
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');
@@ -152,5 +158,66 @@ test('Customers cannot open the AI audit page or trigger audit reads and do not 
  assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id],[data-nav=aiAudit]")'),false);
  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
  assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id],[data-nav=aiAudit]")'),false);
+ assert.deepEqual(page.errors,[]);
+});
+
+async function pausePopupReply(page){
+ await page.evaluate(`const popupFetch=window.fetch;window.fetch=async(...args)=>{const response=await popupFetch(...args);if(String(args[0])==='/api/agents/assistant'){window.fetch=popupFetch;const body=await response.text();await new Promise(resolve=>window.releasePopupReply=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};`);
+}
+
+test('Assistant popup preserves drafts across banking navigation and receives replies while minimized',async t=>{
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo');
+ const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+ assert.equal(await page.evaluate('!!document.querySelector("[data-nav=assistant]")'),false);
+ assert.equal(await page.evaluate('document.querySelector("#assistant-popup").hidden'),true);
+ await page.click('[data-action="assistant-toggle"]');
+ assert.deepEqual(await page.evaluate('({path:location.pathname,focused:document.activeElement.id,expanded:document.querySelector(".assistant-launcher").getAttribute("aria-expanded"),modal:document.querySelector("#assistant-popup").getAttribute("aria-modal")})'),{path:'/dashboard',focused:'assistant-message',expanded:'true',modal:'false'});
+ await page.fill('#assistant-message','Unsent working note');
+ await page.evaluate('window.originalPopup=document.querySelector("#assistant-popup")');
+ await page.click('.nav-items [data-nav="accounts"]');await page.waitFor('location.pathname==="/accounts"');
+ assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),'Unsent working note');
+ assert.equal(await page.evaluate('window.originalPopup===document.querySelector("#assistant-popup")'),true);
+ await pausePopupReply(page);await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('typeof window.releasePopupReply==="function"');
+ await page.click('[data-action="assistant-close"]');
+ assert.equal(await page.evaluate('document.activeElement.classList.contains("assistant-launcher")'),true);
+ assert.equal(await page.evaluate('!!document.querySelector("#assistant-thread")'),false);
+ await page.click('.nav-items [data-nav="activity"]');await page.waitFor('location.pathname==="/activity"');
+ await page.evaluate('window.releasePopupReply()');await page.waitFor('!!document.querySelector(".assistant-unread:not([hidden])")');
+ await page.click('[data-action="assistant-toggle"]');await page.waitFor('!!document.querySelector(".from-assistant")');
+ assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant").length'),1);
+ assert.equal(await page.evaluate('document.querySelector(".assistant-unread").hidden'),true);
+ await page.press('Escape');assert.equal(await page.evaluate('document.querySelector("#assistant-popup").hidden'),true);
+ await page.click('[data-action="assistant-toggle"]');await page.click('[data-action="assistant-clear"]');
+ assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message").length'),0);
+ assert.equal(await page.evaluate('document.activeElement.id'),'assistant-message');
+ await page.screenshot(path.resolve('test-results','assistant-popup-desktop.png'));
+ assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
+ await page.navigate(f.baseUrl+'/assistant');await page.waitFor('!!document.querySelector("#assistant-popup:not([hidden])")');assert.equal(await page.evaluate('location.pathname+location.search'),'/dashboard');
+ assert.deepEqual(page.errors,[]);
+});
+
+test('Mobile popup clears session data and rejects a delayed reply after another operator signs in',async t=>{
+ const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ await page.click('[data-action="assistant-toggle"]');await pausePopupReply(page);
+ await page.evaluate('import("/js/assistant.js").then(m=>{window.pendingPopupSend=m.sendAssistant("What is my balance?");return true;})');
+ await page.waitFor('typeof window.releasePopupReply==="function"');await page.click('[data-action="assistant-close"]');
+ await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');
+ assert.equal(await page.evaluate('document.querySelector("#assistant-root").childElementCount'),0);
+ await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
+ await page.click('[data-action="assistant-toggle"]');await page.evaluate('window.releasePopupReply();window.pendingPopupSend');
+ assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message").length'),0);
+ assert.equal(await page.evaluate('document.querySelector("#assistant-form").getAttribute("aria-busy")'),'false');
+ for(const height of [640,420]){
+  await page.send('Emulation.setDeviceMetricsOverride',{width:360,height,deviceScaleFactor:1,mobile:true});
+  const bounds=await page.evaluate('({width:innerWidth,height:innerHeight,popup:document.querySelector("#assistant-popup").getBoundingClientRect().toJSON(),send:document.querySelector("#assistant-form button[type=submit]").getBoundingClientRect().toJSON(),page:document.documentElement.scrollWidth})');
+  assert.ok(bounds.popup.x>=0 && bounds.popup.right<=bounds.width && bounds.popup.top>=0 && bounds.popup.bottom<=bounds.height,JSON.stringify(bounds));
+  assert.ok(bounds.send.top>=bounds.popup.top && bounds.send.bottom<=bounds.popup.bottom,JSON.stringify(bounds));assert.ok(bounds.page<=bounds.width+1);
+ }
+ await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
+ await page.screenshot(path.resolve('test-results','assistant-popup-mobile.png'));
+ await page.click('[data-action="menu-open"]');assert.equal(await page.evaluate('document.querySelector("#assistant-root").inert && getComputedStyle(document.querySelector("#assistant-root")).visibility==="hidden"'),true);
+ await page.click('[data-action="menu-close"].sidebar-close');assert.equal(await page.evaluate('!document.querySelector("#assistant-popup").hidden && !document.querySelector("#assistant-root").inert'),true);
+ await page.press('Escape');assert.equal(await page.evaluate('document.activeElement.classList.contains("assistant-launcher")'),true);
  assert.deepEqual(page.errors,[]);
 });

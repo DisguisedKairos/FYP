@@ -1,6 +1,8 @@
 # GLDB Assistant
 
-Open **GLDB Assistant** after signing in as an authorized business operator. It reads only that operator's linked business account records and prepares business payment drafts. It supports these examples:
+Select **Ask GLDB** in the lower-right corner after signing in. GLDB Assistant opens as a floating chat popup on every banking screen, with no separate sidebar page. Minimize it with the close button or Escape and reopen it to continue. Unsent text and replies remain in the current session while navigating; replies arriving while minimized show a **New reply** badge. Signing out clears the popup and conversation. Existing `/assistant` links redirect to the dashboard and open the popup.
+
+The assistant reads only the signed-in operator's linked business account records and prepares business payment drafts. Draft actions minimize chat and open the ordinary banking forms for review and password authorization. It supports these examples:
 
 | Message | Result |
 | --- | --- |

@@ -63,7 +63,7 @@ pg('Monitoring audit and failed scan requests remain staff-only even when the pa
  assert.equal((await get(own,'monitoring',id)).status,403);assert.equal((await own.request('/api/ai-audit?type=monitoring')).status,403);assert.equal((await own.request('/api/ai-audit?type=failure')).status,403);
  const d=(await get(staff,'monitoring',id)).data.record;assert.equal(d.evidence.guardrails.flagged,true);assert.equal(d.modelCalls.length,1);assert.equal((await staff.request('/api/ai-audit?type=failure')).data.pagination.total,1);
 });
-pg('Historical evidence is readable without Ollama and metadata uses an explicit privacy allowlist',async t=>{
+pg('Historical evidence is readable without a running AI service and metadata uses an explicit privacy allowlist',async t=>{
  const f=await fixture(t,{agentModel:{...controlled,inspect:async()=>({available:false})}}),{staff}=await clients(f),user=(await f.db.query("SELECT id,auth_version FROM users WHERE email='reviewer@greenlink.demo'")).rows[0],id=randomUUID();
  await f.db.query("INSERT INTO agent_runs(id,user_id,auth_version,kind,engine,status,report_json,created_at,completed_at) VALUES($1,$2,$3,'assistant','ollama','completed',$4,now(),now())",[id,user.id,user.auth_version,{title:'Historical account enquiry',reply:'See the saved account evidence.'}]);
  const old=(await get(staff,'agent',id)).data.record;assert.equal(old.modelCalls.length,0);assert.match(old.provenanceNote,/not recorded/);assert.equal(old.evidence.guardrails.narrative,'historical_outcome');

@@ -1,11 +1,11 @@
 // Raw messages stay in browser memory. Reports, tool evidence and draft context
 // are retained privately; financial actions only open the ordinary banking forms.
-import { state, ui, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
-import { heading } from './views.js';
+import { state, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
+let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
 const starters=['What is my balance?','Show my recent transactions','What payments are scheduled?','Help me transfer money'];
-function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null}); }
+function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,open:false,unread:false}); }
 function itemContent(item) {
   if(typeof item==='string')return '<li>'+esc(item)+'</li>';
   if(!item || typeof item!=='object')return '';
@@ -23,23 +23,62 @@ function suggestionHtml() {
   const suggestions=last?.suggestions?.length?last.suggestions:messages.length?[]:starters;
   return suggestions.slice(0,4).map(text=>'<button type="button" class="assistant-suggestion" data-assistant-suggestion="'+esc(text)+'">'+esc(text)+'</button>').join('');
 }
-function baseAssistantPage() {
-  const t=thread();
-  return heading('Your business banking assistant.', 'Ask about your accounts, find a payment or prepare a draft.', '<button type="button" class="button secondary" data-action="assistant-clear">'+icon('close')+'<span>Clear conversation</span></button>')+'<section class="panel assistant-panel" aria-labelledby="assistant-title"><div class="assistant-panel-heading"><span class="quick-action-icon">'+icon('chat')+'</span><div><h2 id="assistant-title">GLDB Assistant</h2><p>Uses only your signed-in accounts. Payments always require your review and password.</p></div><span class="tag">Private</span></div><div id="assistant-thread" class="assistant-thread" role="log" aria-label="Conversation with GLDB Assistant" aria-live="polite" aria-relevant="additions text">'+(t.messages.length?t.messages.map(messageHtml).join(''):'<div class="assistant-welcome">'+icon('chat')+'<h3>What would you like to take care of?</h3><p>I can explain balances, find activity and help prepare payment drafts. You stay in control of every payment.</p></div>')+'</div><div id="assistant-response-status" class="assistant-response-status" role="status">'+(t.busy?'Looking at your account information…':'')+'</div><div id="assistant-error" class="error-message assistant-error" role="alert">'+(t.error?esc(t.error)+' <button type="button" class="text-button" data-action="assistant-retry">Try again</button>':'')+'</div><div id="assistant-suggestions" class="assistant-suggestions">'+suggestionHtml()+'</div><form id="assistant-form" class="assistant-form" aria-busy="'+t.busy+'"><label for="assistant-message">Your message</label><div class="assistant-composer"><textarea id="assistant-message" name="message" rows="2" maxlength="1000" required placeholder="Ask about your balance, recent activity or a payment…" aria-describedby="assistant-privacy">'+esc(t.input)+'</textarea><button type="submit" class="button" aria-label="Send message" '+(t.busy?'disabled':'')+'>Send '+icon('arrow')+'</button></div><small id="assistant-privacy">Never send passwords in chat. Drafts open a banking form; chat does not authorize or send money.</small></form></section>';
+function welcomeHtml() {
+  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, find activity or prepare a payment draft. You stay in control of every payment.</p></div>';
 }
-export function assistantPage() {
-  return baseAssistantPage().replace('<section class="panel assistant-panel"','<div class="notice">Uses OpenAI. Your message and permitted banking evidence are sent to OpenAI for analysis. Reports and tool evidence are saved privately; never share security credentials.</div><section class="panel assistant-panel"');
+function popupContent() {
+  const t=thread();
+  return '<header class="assistant-panel-heading"><span class="quick-action-icon">'+icon('chat')+'</span><div><h2 id="assistant-title">GLDB Assistant</h2><p>Your business banking assistant</p></div><div class="assistant-window-actions"><button type="button" class="text-button" data-action="assistant-clear" aria-label="Clear conversation">Clear</button><button type="button" class="icon-button" data-action="assistant-close" aria-label="Minimize GLDB Assistant">'+icon('close')+'</button></div></header><p class="assistant-disclosure">Uses OpenAI. Your message and permitted banking evidence are sent for analysis. Never share passwords or security codes.</p><div id="assistant-thread" class="assistant-thread" role="log" aria-label="Conversation with GLDB Assistant" aria-live="polite" aria-relevant="additions text">'+(t.messages.length?t.messages.map(messageHtml).join(''):welcomeHtml())+'</div><div id="assistant-response-status" class="assistant-response-status" role="status"></div><div id="assistant-error" class="error-message assistant-error" role="alert"></div><div id="assistant-suggestions" class="assistant-suggestions">'+suggestionHtml()+'</div><form id="assistant-form" class="assistant-form" aria-busy="'+t.busy+'"><label for="assistant-message">Your message</label><div class="assistant-composer"><textarea id="assistant-message" name="message" rows="2" maxlength="1000" required placeholder="How can I help?" aria-describedby="assistant-privacy">'+esc(t.input)+'</textarea><button type="submit" class="button" aria-label="Send message" '+(t.busy?'disabled':'')+'>Send '+icon('arrow')+'</button></div><small id="assistant-privacy">Drafts need your review and password in the banking form. Chat never sends money.</small></form>';
+}
+export function renderAssistant() {
+  const root=document.querySelector('#assistant-root');
+  if(!root)return;
+  if(!state.user || !state.data || state.signingOut){root.replaceChildren();return;}
+  const t=thread();
+  if(requestedOpen){
+    t.open=true;requestedOpen=false;
+    const url=new URL(location.href);url.searchParams.delete('chat');history.replaceState({},'',url.pathname+url.search+url.hash);
+  }
+  if(!root.querySelector('#assistant-popup'))root.innerHTML='<button type="button" class="assistant-launcher" data-action="assistant-toggle" aria-label="Open GLDB Assistant" aria-controls="assistant-popup" aria-expanded="false">'+icon('chat')+'<span>Ask GLDB</span><span class="assistant-unread" hidden>New reply</span></button><section id="assistant-popup" class="assistant-popup" role="dialog" aria-modal="false" aria-labelledby="assistant-title" hidden></section>';
+  root.classList.toggle('assistant-open',t.open);
+  const popup=root.querySelector('#assistant-popup');popup.hidden=!t.open;
+  if(t.open && !popup.querySelector('#assistant-form'))popup.innerHTML=popupContent();
+  else if(!t.open)popup.replaceChildren();
+  const launcher=root.querySelector('.assistant-launcher');
+  launcher.setAttribute('aria-expanded',String(t.open));
+  launcher.setAttribute('aria-label',t.open?'Minimize GLDB Assistant':'Open GLDB Assistant'+(t.unread?', new reply':''));
+  launcher.querySelector('.assistant-unread').hidden=!t.unread;
+  renderThread();
+}
+export function toggleAssistant() {
+  if(!state.user || !state.data || state.signingOut)return;
+  if(thread().open)return closeAssistant();
+  thread().open=true;thread().unread=false;
+  renderAssistant();
+  const target=document.querySelector('#assistant-thread');target.scrollTop=target.scrollHeight;
+  document.querySelector('#assistant-message')?.focus();
+}
+export function closeAssistant({focus=true}={}) {
+  if(!state.assistant?.open)return;
+  const hadFocus=Boolean(document.activeElement?.closest('#assistant-root'));
+  state.assistant.open=false;renderAssistant();
+  if(focus)document.querySelector('.assistant-launcher')?.focus();
+  else if(hadFocus)document.querySelector('#main-content')?.focus();
+}
+export function resetAssistant() {
+  requestedOpen=false;cancelAssistant();state.assistant=null;renderAssistant();
 }
 function renderThread() {
-  if(state.route.page!=='assistant')return;
+  if(!state.user || state.signingOut)return;
   const target=document.querySelector('#assistant-thread');
   if(!target)return;
-  const t=thread();
+  const t=thread(),atBottom=target.scrollHeight-target.scrollTop-target.clientHeight<48;let added=false;
+  if(!t.messages.length)target.innerHTML=welcomeHtml();
   if(t.messages.length){
     target.querySelector('.assistant-welcome')?.remove();
     for(const message of t.messages){
       const existing=target.querySelector('[data-message-id="'+message.id+'"]');
-      if(!existing)target.insertAdjacentHTML('beforeend',messageHtml(message));
+      if(!existing){target.insertAdjacentHTML('beforeend',messageHtml(message));added=true;}
       else if(existing.querySelector('.assistant-message-text').textContent!==message.text)existing.querySelector('.assistant-message-text').textContent=message.text;
     }
   }
@@ -48,12 +87,13 @@ function renderThread() {
   document.querySelector('#assistant-suggestions').innerHTML=suggestionHtml();
   const form=document.querySelector('#assistant-form');
   form.setAttribute('aria-busy',String(t.busy)); form.querySelector('button[type="submit"]').disabled=t.busy;
-  target.scrollTop=target.scrollHeight;
+  if(added && atBottom)target.scrollTop=target.scrollHeight;
 }
 export function cancelAssistant() { generation++; controller?.abort(); if(state.assistant)state.assistant.busy=false; }
 export function clearAssistant() {
-  cancelAssistant(); state.assistant=null;
-  if(state.route.page==='assistant'){ ui.render(); document.querySelector('#assistant-message')?.focus(); }
+  const open=Boolean(state.assistant?.open);cancelAssistant();state.assistant=null;thread().open=open;
+  const input=document.querySelector('#assistant-message');if(input)input.value='';
+  renderAssistant();if(open)input?.focus();
 }
 export async function sendAssistant(message,{retry=false}={}) {
   const t=thread();
@@ -79,6 +119,7 @@ export async function sendAssistant(message,{retry=false}={}) {
     t.previousRunId=result.runId || null;
     t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,text:result.reply || 'Please choose one of the suggested banking tasks.',evidence:Array.isArray(result.evidenceReferences)?result.evidenceReferences:[],items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
+    if(!t.open)t.unread=true;
   } catch(error) {
     if(request!==generation || error.status===-1 || state.assistant!==t || !state.user || state.signingOut || !sameId(state.user.id,userId))return;
     if(await recoverSession(error))return;
@@ -87,7 +128,7 @@ export async function sendAssistant(message,{retry=false}={}) {
       t.error='This conversation expired. Try again to start a fresh request; previous draft details will not be reused.';
     }else t.error=error.message;
   } finally {
-    if(request===generation && state.assistant===t){t.busy=false;renderThread();}
+    if(request===generation && state.assistant===t){t.busy=false;renderAssistant();}
   }
 }
 export function rememberAssistantInput(value) { thread().input=String(value); }
@@ -115,15 +156,15 @@ export function applyBankingAction(action) {
     const aliases={dashboard:'overview',transactions:'activity','scheduled-payments':'schedules','bill-payments':'payments','fraud-monitoring':'fraud','fraud-rules':'rules'};
     const page=aliases[action.page] || action.page;
     if(page==='activity' && typeof action.filters?.q==='string'){state.filters={...emptyFilters(),search:action.filters.q.slice(0,120)};state.historyPage=1;}
-    if(pages[page])navigate(page);
+    if(pages[page]){closeAssistant({focus:false});navigate(page);}
     return;
   }
   if(action.type==='draft_transfer') {
     const draft=safeDraft(action.draft,'transfer');
     const own=state.data.accounts.some(a=>a.number===draft.toAccountNumber);
-    state.moneyDraft.transfers={...draft,recipientType:own?'own':'other'};navigate('transfers');
-  } else if(action.type==='draft_payment') { state.moneyDraft.payments=safeDraft(action.draft,'payment');navigate('payments'); }
-  else if(action.type==='draft_schedule'){navigate('schedules');openScheduleDraft(safeDraft(action.draft,'schedule'));}
+    state.moneyDraft.transfers={...draft,recipientType:own?'own':'other'};closeAssistant({focus:false});navigate('transfers');
+  } else if(action.type==='draft_payment') { state.moneyDraft.payments=safeDraft(action.draft,'payment');closeAssistant({focus:false});navigate('payments'); }
+  else if(action.type==='draft_schedule'){closeAssistant({focus:false});navigate('schedules');openScheduleDraft(safeDraft(action.draft,'schedule'));}
   else return;
   toast('Draft ready. Review the details before authorizing in the banking form.');
 }

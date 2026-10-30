@@ -3,6 +3,7 @@
 const { HttpError } = require('../../models/errors');
 const { readPolicy, evaluateRules } = require('../risk');
 const { nextOccurrence } = require('../workflows');
+const { validProvenance } = require('../ai-provider');
 const DAY = 86400000;
 const iso = value => new Date(value).toISOString();
 const amount = value => {
@@ -118,8 +119,9 @@ async function simulation(db, user, { ruleId, patch, days=30, now=Date.now }={})
     const decide=(rules,input,result)=>{const matches=evaluateRules(rules,input); return matches.some(r=>r.action==='block')?'block':matches.length || result.modelScore>=65?'review':'allow';};
     let skipped=0;
     for(const row of sample){
-      // Retained provider names are used only to replay recorded historical evidence.
-      if(!row.result_json || !['ollama','openai'].includes(row.result_json.provider) || !Number.isInteger(row.result_json.modelScore)){skipped++;continue;}
+      // Archived providers remain readable, but only verified OpenAI scores enter current reports.
+      const result=row.result_json;
+      if(!validProvenance(result) || !Number.isInteger(result.modelScore) || result.modelScore<0 || result.modelScore>94){skipped++;continue;}
       const initial=decide(policy.rules,row.input_json,row.result_json), next=decide(proposed,row.input_json,row.result_json);
       before[initial]++;after[next]++;
       if(initial!==next)changes.push({assessmentId:row.id,before:initial,after:next,amountCents:row.input_json.amountCents});

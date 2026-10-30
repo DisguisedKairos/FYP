@@ -7,7 +7,6 @@ import unittest
 from fastapi.testclient import TestClient
 from fraud_service.application import BODY_LIMIT, create_app
 from fraud_service.model import OpenAIFraudModel
-from fraud_service.schemas import AssessmentRequest
 
 TOKEN = "python-fraud-contract-test-token-123456789"
 HEADERS = {"Authorization": "Bearer " + TOKEN}

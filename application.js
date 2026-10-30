@@ -39,6 +39,13 @@ function accountName(value) {
   return name;
 }
 
+function serveFrontend(app) {
+  app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
+  app.get('/assistant', (_req, res) => res.redirect(302, '/dashboard?chat=open'));
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
+  app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
+}
+
 async function createApplication(options = {}) {
   const originValue = options.publicOrigin ?? process.env.PUBLIC_ORIGIN;
   const publicOrigin = originValue ? security.normalizeOrigin(originValue) : null;
@@ -190,7 +197,7 @@ async function createApplication(options = {}) {
     const active = await auth.load(req);
     if (!active.user || String(active.user.id) !== String(req.banking.user.id)) throw new HttpError(401, 'Your session ended. Sign in again.');
   } });
-  // Compatibility endpoint uses the same local model and security boundaries.
+  // Compatibility endpoint uses the same OpenAI model and security boundaries.
   route('post', '/api/assistant/messages', req => runAgent(req, 'assistant'));
   route('get','/api/ai-audit',req=>{ledger.requireAdmin(req.banking.user);return require('./banking/ai-audit').list(db,req.banking.user,query(req),{now});});
   route('get','/api/ai-audit/:kind/:id',async req=>{ledger.requireAdmin(req.banking.user);return {record:await require('./banking/ai-audit').detail(db,req.banking.user,req.params.kind,req.params.id)};});
@@ -201,9 +208,7 @@ async function createApplication(options = {}) {
     route('post', `/api/agents/${kind}`, req => runAgent(req, kind));
   }
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
-  app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/assistant', '/banking-insights', '/ai-audit']);
-  app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
+  serveFrontend(app);
   app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((error, _req, res, _next) => {
     if (res.headersSent) return res.end();
@@ -234,4 +239,4 @@ async function createApplication(options = {}) {
   server.once('close', () => { stopped = true; clearInterval(timer); });
   return server;
 }
-module.exports = { createApplication, trustProxy };
+module.exports = { createApplication, trustProxy, serveFrontend, headers };

@@ -19,6 +19,8 @@ npm run ai:check
 npm start
 ~~~
 
+No Ollama installation, model download, local model endpoint or provider selector is used. Existing migrations and saved audit records retain historical provider names so existing databases remain compatible.
+
 The additive migration permits OpenAI agent runs and preserves existing audit/financial records. ai:check verifies OpenAI model access. npm start still runs Express and the private FastAPI gateway. Open http://localhost:3000. Change OPENAI_MODEL deliberately to a compatible Responses text model supporting function calling and structured output. No model is silently substituted.
 
 ## Data and financial safeguards

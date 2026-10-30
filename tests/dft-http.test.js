@@ -147,3 +147,9 @@ for(const action of ['open','rename','close','cancel schedule'])pgTest('DFT '+ac
   invalidate=true;const result=await client.request(endpoint,{method,body});assert.equal(result.status,409,JSON.stringify(result.data));
   assert.deepEqual({accounts:(await f.db.query('SELECT id,name,status FROM accounts ORDER BY id')).rows,schedules:(await f.db.query('SELECT id,status,next_run_at FROM scheduled_payments ORDER BY id')).rows},before);
 });
+
+pgTest('The old assistant page redirects to the dashboard popup rather than serving a standalone page',async t=>{
+ const f=await fixture(t),response=await fetch(f.baseUrl+'/assistant',{redirect:'manual'});
+ assert.equal(response.status,302);assert.equal(response.headers.get('location'),'/dashboard?chat=open');
+ const dashboard=await fetch(f.baseUrl+'/dashboard?chat=open');assert.equal(dashboard.status,200);assert.match(await dashboard.text(),/id="assistant-root"/);
+});

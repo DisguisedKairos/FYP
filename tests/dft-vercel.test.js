@@ -109,10 +109,10 @@ test('Root Express export remains callable with the native application factories
 
 test('Only hosted Vercel requests use the platform client address; local forwarded headers stay untrusted', async t => {
   for (const hosted of [false, true]) {
-    const inner = express(); inner.get('/address', (req, res) => res.json({ address: req.ip }));
+    const inner = express(); inner.get('/api/address', (req, res) => res.json({ address: req.ip }));
     const app = createHostedApplication({ environment: environment({ VERCEL: hosted ? '1' : undefined }), databaseFactory: () => ({ pool: {}, query() {}, transaction() {}, close: async () => {} }), attachPool() {}, applicationFactory: async () => ({ app: inner, closeResources: async () => {} }) });
     const base = await listen(t, app);
-    const r = await fetch(base + '/address', { headers: { 'X-Real-IP': '203.0.113.9', 'X-Forwarded-For': '198.51.100.7' } });
+    const r = await fetch(base + '/api/address', { headers: { 'X-Real-IP': '203.0.113.9', 'X-Forwarded-For': '198.51.100.7' } });
     assert.equal((await r.json()).address, hosted ? '203.0.113.9' : '127.0.0.1');
     await app.closeResources();
   }
@@ -159,7 +159,7 @@ test('Hosted startup logs identify invalid settings without revealing their valu
   for (const [setting, value] of cases) {
     let initialized = false;
     const app = createHostedApplication({ environment: environment({ [setting]: value }), databaseFactory() { initialized = true; throw Error('Must not initialize'); } });
-    const base = await listen(t, app), response = await fetch(base + '/');
+    const base = await listen(t, app), response = await fetch(base + '/health');
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: 'The banking service is temporarily unavailable. Please try again.' });
     assert.equal(initialized, false);
@@ -180,4 +180,24 @@ test('Hosted driver and migration failures log only allowlisted diagnostic codes
     assert.match(log.mock.calls.at(-1).arguments.join(' '), new RegExp(code === secret ? 'BANKING_STARTUP_FAILED:' : code + ':'));
   }
   assert.equal(JSON.stringify(log.mock.calls).includes(secret), false);
+});
+
+test('Concurrent frontend requests need no database and remain available after banking startup fails',async t=>{
+ const fs=require('node:fs'),path=require('node:path');let starts=0;
+ const log=t.mock.method(console,'error',()=>{});
+ const app=createHostedApplication({environment:environment(),databaseFactory(){starts++;throw Error('private-database-outage');}});
+ const base=await listen(t,app);
+ const assets=fs.readdirSync(path.resolve(__dirname,'../public/js')).filter(f=>f.endsWith('.js')).map(f=>'/js/'+f);
+ const routes=['/','/login','/dashboard','/bootstrap.js','/app.js','/styles.css',...assets];
+ const replies=await Promise.all(routes.map(async route=>{
+  const r=await fetch(base+route);assert.equal(r.status,200,route);assert.equal(r.headers.get('cache-control'),'no-store');assert.equal(r.headers.get('x-content-type-options'),'nosniff');assert.equal(r.headers.get('x-frame-options'),'DENY');assert.match(r.headers.get('content-security-policy'),/default-src 'self'/);
+  const bytes=Buffer.from(await r.arrayBuffer());if(route.endsWith('.js'))assert.deepEqual(bytes,fs.readFileSync(path.resolve(__dirname,'../public'+route)),route);
+  return r.status;
+ }));
+ assert.equal(replies.length,routes.length);assert.equal(starts,0);
+ for(const route of ['/application.js','/.env','/internal/health'])assert.equal((await fetch(base+route)).status,404);
+ assert.equal(starts,0);
+ assert.equal((await fetch(base+'/api/session')).status,503);assert.equal(starts,1);
+ assert.equal((await fetch(base+'/login')).status,200);assert.equal((await fetch(base+'/js/core.js')).status,200);assert.equal(starts,1);
+ assert.doesNotMatch(JSON.stringify(log.mock.calls),/private-database-outage/);
 });

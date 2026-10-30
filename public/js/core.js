@@ -6,7 +6,6 @@ export const ui = {};
 export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
   business: { path: '/business', label: 'Business profile', icon: 'wallet' },
-  assistant: { path: '/assistant', label: 'GLDB Assistant', icon: 'chat' },
   aiAudit: { path: '/ai-audit', label: 'AI audit log', icon: 'statement', admin: true },
   agents: { path: '/banking-insights', label: 'Banking insights', icon: 'activity' },
   accounts: { path: '/accounts', label: 'Business accounts', icon: 'wallet' },
@@ -139,6 +138,7 @@ export function clearBankingState() {
   modal.replaceChildren();
   Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
+  ui.resetAssistant?.();
 }
 export async function recoverSession(error) {
   if (!(error instanceof ApiError) || ![401, 403].includes(error.status)) return false;

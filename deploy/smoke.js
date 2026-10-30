@@ -55,7 +55,7 @@ async function run(base) {
   assert.equal((await request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, expected);
   const history = await request('/api/transactions?q=Container%20integration%20transfer');
   assert.ok(history.transactions.some(t => t.id === payment.id));
-  console.log('Container smoke passed: Nginx, authenticated banking, PostgreSQL, real local Ollama scoring, atomic transfer, idempotency, history and fraud rules.');
+  console.log('Container smoke passed: Nginx, authenticated banking, PostgreSQL, OpenAI scoring, atomic transfer, idempotency, history and fraud rules.');
 }
 module.exports = { run };
 if (require.main === module) run(process.env.GREENLINK_PUBLIC_ORIGIN || 'http://localhost:8080').catch(error => { console.error(error.message); process.exitCode = 1; });

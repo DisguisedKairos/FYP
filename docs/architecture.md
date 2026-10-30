@@ -16,7 +16,7 @@ flowchart LR
   PG --> Alerts[In-app notifications]
 ```
 
-`app.js` supplies HTTP routing, body limits, headers, authentication, ownership enforcement and application lifecycle. `banking/auth.js` owns credentials and sessions; `banking/ledger.js` owns financial mutations; `banking/history.js` owns snapshot reads/statements; `banking/risk.js` owns policy snapshots and scorer validation; `banking/workflows.js` owns schedules, occurrence recovery and notifications. The assistant is an independent read/draft module with no payment execution function.
+`app.js` is the native/hosted entrypoint. `application.js` supplies HTTP routing, body limits, headers, authentication, ownership enforcement and application lifecycle. `banking/auth.js` owns credentials and sessions; `banking/ledger.js` owns financial mutations; `banking/history.js` owns snapshot reads/statements; `banking/risk.js` owns policy snapshots and scorer validation; `banking/workflows.js` owns schedules, occurrence recovery and notifications. The assistant is an independent read/draft module with no payment execution function.
 
 ## Database boundary
 
@@ -38,4 +38,4 @@ An outbox event commits in the same transaction as its banking operation. The di
 
 Only Express interprets explicitly trusted proxy addresses; auth uses `req.ip`. Browser writes require the correct origin and session CSRF, with same-origin entry guards for login/register. Opaque cookies hold no customer records; PostgreSQL stores only token hashes. Authenticator secrets are encrypted and recovery codes hashed. Python rejects unauthorized requests, invalid schemas and response bindings. Model failure never silently switches to an unapproved JavaScript scorer.
 
-Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. This repository now includes a reference container/pipeline handoff; cloud provisioning and hosted deployment remain outside it. Retired implementations have been removed from the checkout.
+Infrastructure, certificates, cloud backups and release delivery are DIT responsibilities. The repository includes the reference container/pipeline handoff and the active Vercel multi-service configuration. Vercel hosts banking and private scoring, with PostgreSQL on Neon. See [Vercel deployment](vercel.md).

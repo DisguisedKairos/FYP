@@ -1,6 +1,6 @@
 'use strict';
 
-const { randomBytes, randomInt, createHash, timingSafeEqual, scrypt, scryptSync } = require('node:crypto');
+const { randomBytes, randomInt, createHash, timingSafeEqual, scrypt } = require('node:crypto');
 const { promisify } = require('node:util');
 const { HttpError } = require('../models/errors');
 
@@ -16,11 +16,6 @@ async function hashPassword(value) {
   const salt = randomBytes(16).toString('hex');
   const key = await deriveKey(value, salt, 64);
   return `${salt}:${key.toString('hex')}`;
-}
-
-function hashPasswordSync(value) {
-  const salt = randomBytes(16).toString('hex');
-  return `${salt}:${scryptSync(value, salt, 64).toString('hex')}`;
 }
 
 function password(value, label = 'Password') {
@@ -117,7 +112,7 @@ function writeCookie(res, value, { secure = false, expiresAt, now = Date.now(), 
 
 module.exports = {
   HttpError, SESSION_COOKIE, SESSION_MS, IDLE_MS, ANONYMOUS_MS,
-  hashPassword, hashPasswordSync, verifyPassword, password, emailAddress, fullName,
+  hashPassword, verifyPassword, password, emailAddress, fullName,
   token, tokenHash, bucketKey, accountNumber, equalToken, readCookie, normalizeOrigin,
   assertOrigin, assertCsrf, clientAddress, publicUser, writeCookie,
 };

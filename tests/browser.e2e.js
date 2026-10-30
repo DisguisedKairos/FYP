@@ -5,7 +5,7 @@ const { readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { createFixture, accountNamed, totalBalance } = require('./dft-helpers');
 const { launchChrome } = require('./chrome');
 
-const routes = { overview:'/dashboard',business:'/business',onboarding:'/business-onboarding', accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules', assistant:'/assistant' };
+const routes = { overview:'/dashboard',business:'/business',onboarding:'/business-onboarding', accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules' };
 const snapshot = page => page.evaluate("fetch('/api/dashboard').then(response => response.json())");
 const text = (page, selector) => page.evaluate(`document.querySelector(${JSON.stringify(selector)})?.textContent`);
 const exists = selector => `!!document.querySelector(${JSON.stringify(selector)})`;
@@ -39,10 +39,15 @@ async function openMenu(page) {
   }
 }
 async function nav(page, route) {
+  if(route==='assistant'){
+    if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');
+    await page.waitFor('!!document.querySelector("#assistant-popup:not([hidden])")','assistant popup');return;
+  }
+  if(await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-close"]');
   await openMenu(page); await page.click(`.nav-items [data-nav="${route}"]`);
   await page.waitFor(`location.pathname === ${JSON.stringify(routes[route])} && !!document.querySelector('#main-content')`, route);
 }
-async function logout(page) { await openMenu(page); await page.click('[data-action="logout"]'); await page.waitFor(exists('#auth-form'), 'signed out'); }
+async function logout(page) { if(await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-close"]'); await openMenu(page); await page.click('[data-action="logout"]'); await page.waitFor(exists('#auth-form'), 'signed out'); }
 async function layout(page, context) {
   const size = await page.evaluate('({width:innerWidth,document:document.documentElement.scrollWidth,body:document.body.scrollWidth,modal:document.querySelector("dialog[open]")?.getBoundingClientRect().toJSON()})');
   assert.ok(size.document <= size.width + 1 && size.body <= size.width + 1, `${context}: horizontal overflow ${JSON.stringify(size)}`);
@@ -254,4 +259,21 @@ test('administrators configure real risk rules and independently review held pay
     await page.click(`[data-transaction="${held.id}"]`); await page.waitFor('document.querySelector("#modal[open]")?.textContent.includes("Independently verified during browser QA")', 'approved transaction loaded from ledger API');
     await layout(page, 'review decision receipt'); await done(page);
   });
+});
+
+test('Frontend startup shows a recoverable error for missing modules and unavailable APIs',async t=>{
+ const express=require('express'),http=require('node:http');const {createHostedApplication}=require('../deploy/vercel');
+ let failModule=true,recovered=false,starts=0;const wrapper=express();
+ wrapper.get('/js/core.js',(req,res,next)=>failModule?res.status(503).json({error:'Controlled unavailable asset'}):next());
+ wrapper.get('/api/session',(req,res,next)=>recovered?res.json({ok:true,user:null,csrfToken:'controlled-startup-csrf'}):next());
+ const hosted=createHostedApplication({environment:{},databaseFactory(){starts++;throw Error('No database access expected.');}});wrapper.use(hosted);
+ const server=http.createServer(wrapper);await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
+ t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
+ const page=await launchChrome(t,{width:390,height:844,mobile:true}),base='http://127.0.0.1:'+server.address().port;
+ await page.navigate(base+'/');await page.waitFor('!!document.querySelector(".connection-error")','module error recovery');
+ assert.equal(await page.evaluate('!!document.querySelector(".initial-loading")'),false);assert.match(await text(page,'.connection-error'),/could not finish loading/);assert.equal(starts,0);
+ failModule=false;await page.click('.connection-error button');await page.waitFor('document.querySelector(".connection-error")?.textContent.includes("temporarily unavailable")','API error recovery');
+ recovered=true;await page.click('[data-action="reload"]');await page.waitFor('!!document.querySelector("#auth-form")','retry reaches sign-in');
+ assert.equal(await page.evaluate('!!document.querySelector(".initial-loading,.connection-error")'),false);assert.equal(starts,0);
+ assert.deepEqual(page.errors.filter(e=>e.source!=='network'),[]);
 });

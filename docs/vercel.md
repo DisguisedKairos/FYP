@@ -19,6 +19,12 @@ The top-level rewrite targets banking. Vercel CLI 65.7.0 evaluates its filesyste
 
 The Express builder uses root entrypoint discovery. app.js therefore exports a callable Express application and retains the named native factories. The unused devCommand override was removed because the CLI selects its framework builder first.
 
+## Frontend availability
+
+The hosted adapter serves the shared public pages and assets before initializing banking or opening PostgreSQL connections. Concurrent browser module requests therefore need no database. Only API and health requests initialize the banking service. Missing/private paths still return 404, with the same security headers. Runtime assets, views and migrations are explicitly included in the banking function bundle.
+
+The small bootstrap module loads the application and provides a retry screen if a module fails or startup exceeds thirty seconds. Database/API outages remain explicit failures; they do not leave the page indefinitely preparing the workspace.
+
 ## Binding and request paths
 
 Vercel injects FRAUD_SERVICE_BINDING_URL into the banking function at runtime. **Do not create or override this environment variable yourself.** Banking resolves relative internal/health, internal/model and internal/assess routes against that base, preserving any binding path prefix. The binding takes priority over local FRAUD_SERVICE_URL. Local npm start and Compose keep their existing loopback/private-host configuration.

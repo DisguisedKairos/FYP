@@ -2,7 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {randomUUID}=require('node:crypto');
-const {fixture,accountNamed}=require('./dft-helpers');
+const {fixture,accountNamed,MODEL_INFO}=require('./dft-helpers');
 const reports=require('../banking/agents/reports');
 const {createAgents,narrativeIssue}=require('../banking/agents');
 const available=Boolean(process.env.TEST_DATABASE_URL);
@@ -87,8 +87,19 @@ pg('Fraud investigation and rule simulation retain recorded evidence without cha
   const id=paid.data.transaction.id,before=await financialSnapshot(f.db),policy=await f.riskClient.getRules();
   const report=await post(client,'fraud_investigation',{transactionId:id});assert.equal(report.status,200,JSON.stringify(report.data));
   assert.equal(report.data.run.report.assessment.available,true);assert.equal(report.data.run.report.transaction.id,id);assert.ok(report.data.run.report.evidence.some(e=>e.type==='assessment'));
-  await f.db.query('INSERT INTO fraud_assessments(id,user_id,source_account_id,payload_hash,policy_version,policy_json,input_json,result_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[randomUUID(),1,source.id,'f'.repeat(64),policy.version,policy,{}, {provider:'retired',modelScore:90}]);
-  const simulation=await post(client,'rule_simulation',{ruleId:'high_value',threshold:50,days:30});assert.equal(simulation.status,200,JSON.stringify(simulation.data));assert.equal(simulation.data.run.report.skipped,1);assert.ok(simulation.data.run.report.changed>=1);assert.ok(simulation.data.run.report.after.review>=1);
+  const archived=[
+    {...MODEL_INFO,provider:'ollama',modelScore:90},
+    {provider:'openai',modelScore:90},
+    {...MODEL_INFO,modelIdentitySha256:'a'.repeat(64),modelScore:90},
+    {...MODEL_INFO,modelScore:-1},
+    {...MODEL_INFO,modelScore:95}
+  ];
+  for(const result of archived)await f.db.query('INSERT INTO fraud_assessments(id,user_id,source_account_id,payload_hash,policy_version,policy_json,input_json,result_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[randomUUID(),1,source.id,'f'.repeat(64),policy.version,policy,{},result]);
+  const evidenceBefore=(await f.db.query('SELECT id,result_json FROM fraud_assessments ORDER BY id')).rows;
+  const simulation=await post(client,'rule_simulation',{ruleId:'high_value',threshold:50,days:30});assert.equal(simulation.status,200,JSON.stringify(simulation.data));
+  assert.equal(simulation.data.run.report.skipped,archived.length);assert.equal(simulation.data.run.report.assessed,1);
+  assert.deepEqual(simulation.data.run.report.before,{allow:1,review:0,block:0});assert.deepEqual(simulation.data.run.report.after,{allow:0,review:1,block:0});
+  assert.equal(simulation.data.run.report.changed,1);assert.deepEqual((await f.db.query('SELECT id,result_json FROM fraud_assessments ORDER BY id')).rows,evidenceBefore);
   assert.match(simulation.data.run.report.limitations.join(' '),/No labeled fraud outcomes/);
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(await financialSnapshot(f.db),before);
   assert.equal((await post(client,'rule_simulation',{ruleId:'velocity',threshold:1.5})).status,400);

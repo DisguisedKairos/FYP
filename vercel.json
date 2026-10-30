@@ -10,7 +10,7 @@
       "functions": {
         "app.js": {
           "maxDuration": 300,
-          "includeFiles": "{views/**,database/migrations/**}"
+          "includeFiles": "{public/**,views/**,database/migrations/**}"
         }
       },
       "bindings": [

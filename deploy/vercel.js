@@ -4,7 +4,7 @@ const express = require('express');
 const { timingSafeEqual } = require('node:crypto');
 const { isIP } = require('node:net');
 const { attachDatabasePool, ipAddress } = require('@vercel/functions');
-const { createApplication } = require('../application');
+const { createApplication, serveFrontend, headers } = require('../application');
 const { createDatabase } = require('../database');
 const { createRiskClient, fraudServiceUrl } = require('../banking/risk');
 const { normalizeOrigin } = require('../banking/security');
@@ -97,8 +97,15 @@ function createHostedApplication({ environment = process.env, databaseFactory = 
       if (isIP(address || '')) Object.defineProperty(req, 'ip', { value: address, configurable: true });
     }
     res.set('Cache-Control', 'no-store');
-    res.set('X-Content-Type-Options', 'nosniff');
+    headers(res);
     next();
+  });
+  // Public pages and assets must not wait for database/configuration startup.
+  // Browser module imports arrive concurrently; none of them should open a pool.
+  serveFrontend(app);
+  app.use((req, res, next) => {
+    if(req.path==='/health' || req.path==='/api' || req.path.startsWith('/api/'))return next();
+    return res.status(404).json({error:'Endpoint not found.'});
   });
   app.all('/api/jobs/run', async (req, res) => {
     if (req.method !== 'GET') return res.status(405).set('Allow', 'GET').json({ error: 'Use GET for scheduled jobs.' });

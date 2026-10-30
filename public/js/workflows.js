@@ -142,4 +142,3 @@ export async function confirmMoney(form) {
     if (active() && !await recoverSession(error)) formError(form, error.status === 0 ? 'Confirmation was interrupted. Retry this confirmation to check the same transaction safely; it will not be charged twice.' : error.message);
   } finally { if(active()){state.modalBusy=false;formBusy(form,false);} }
 }
-export { updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './history.js';
