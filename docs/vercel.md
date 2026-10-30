@@ -97,6 +97,25 @@ The hosted client-IP regression also verifies the Node-to-Web Headers conversion
 
 The startup regression suite includes the default hosted factory against PostgreSQL, acyclic entrypoint imports, private source isolation and safe configuration/driver diagnostics. The first full test run had one concurrent TOTP login failure; its isolated 10-test suite and the subsequent full 211-test run passed. Concurrency assertions now include safe error types and codes to make any recurrence diagnosable. The intermittent first-run failure was not reproduced.
 
+## Verified production deployment
+
+On 30 October 2026, the production app at [fyp-greenlink-six.vercel.app](https://fyp-greenlink-six.vercel.app) was verified against Neon. The startup fix is in source commit eacdefa; deployment dpl_HuNqpZ91vj3XgeSneT3gLf8f8msi built both banking and fraud successfully.
+
+The initial production failure was CONFIGURATION_DATABASE_URL: the Vercel project did not have its database connection configured. After explicit owner approval, the existing restricted Neon URL, persistent MFA key, shared service token and OpenAI key were stored as Production secrets, along with a new private cron secret. The model and HTTPS public origin were configured separately. The binding remains injected by Vercel, and no migration-owner credentials were uploaded.
+
+Verified on the hosted application:
+
+- /health returns 200 with PostgreSQL ready; /login and the frontend script return 200.
+- Fourteen authenticated and authorization checks passed: synthetic customer and staff login, customer dashboard and transaction history, customer denial of staff-only model access, authenticated private FastAPI/OpenAI model metadata, fraud rules and review cases, protected job methods, source isolation and logout.
+- All 19 public assets match the local files byte-for-byte and return the expected CSP, frame and nosniff headers.
+- Backend application.js and public /internal/model return 404. No due payment or scheduled job was manually invoked during verification.
+
+### Agent setup on this computer
+
+Vercel CLI 65.8.0 is installed globally and authenticated as disguisedkairos. The official plugin installer could not find its Codex marketplace entry. Following the setup guide's fallback, nine standalone skills from vercel-labs/agent-skills were installed in the user-wide Codex skills directory and verified with skills list; the standalone pack is the active guidance source.
+
+The shared https://mcp.vercel.com endpoint is enabled in the user-wide ~/.codex/config.toml, and OAuth login succeeded. The existing running Codex session does not expose its tools yet. Reload Codex to load the connection, then verify search_vercel_documentation and the authenticated read-only list_teams call; those two MCP calls have not been verified in this session. Other MCP configuration and mutation-approval settings were preserved.
+
 ## Files and delivery
 
 .vercelignore excludes all data, including the shared demo login folder, private environment files, local PostgreSQL storage, backups, dependencies, logs, test artifacts and source release archives from uploads. Tests remain in Git and run in CI; they are not runtime services. The source ZIP includes vercel.json, .vercelignore and the adapter, and continues to exclude data and credentials.

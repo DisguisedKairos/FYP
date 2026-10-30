@@ -121,6 +121,8 @@ The original native login table is in `data/testing/README.md`; Neon logins are 
 
 ## Vercel multi-service hosting
 
+Hosted app: [Green Link Digital Bank](https://fyp-greenlink-six.vercel.app). Production customer/staff login, Neon connectivity and the private fraud-service binding were verified on 30 October 2026.
+
 The confirmed `vercel.json` configures the Express website/banking API as `banking` and FastAPI scoring as an internal `fraud` service. Banking calls fraud through the runtime-injected `FRAUD_SERVICE_BINDING_URL`. Tests are not deployed as services. The free Hobby configuration uses a daily authenticated job for scheduled payments, monitoring and notifications. See [Vercel setup, environment variables and verification](docs/vercel.md). An early routing rule protects repository source and preserves frontend assets. Run `npm run test:vercel:neon` against `vercel dev --local` for local asset, login and private-binding verification. Configure the required private Vercel environment variables before cloud deployment.
 
 ## Delivery and package
