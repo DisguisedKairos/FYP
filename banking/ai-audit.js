@@ -7,6 +7,7 @@ async function actor(db,user){
   const row=(await db.query('SELECT id,role,auth_version FROM users WHERE id=$1',[user?.id])).rows[0];
   if(!row)throw new HttpError(401,'Sign in to view AI audit records.');
   if(user.auth_version!==undefined && user.auth_version!==row.auth_version)throw new HttpError(409,'Account security changed. Sign in again.');
+  if(row.role!=='admin')throw new HttpError(403,'Administrator access is required for AI audit records.');
   return row;
 }
 // Append only metadata: no prompts, raw chat, generated prose or hidden reasoning.

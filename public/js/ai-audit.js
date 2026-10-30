@@ -8,15 +8,16 @@ export function cancelAiAudit(){generation++;controller?.abort();cancelAiAuditDe
 const list=items=>'<ul class="agent-findings">'+items.map(x=>'<li>'+esc(typeof x==='string'?x:x.message || JSON.stringify(x))+'</li>').join('')+'</ul>';
 const json=value=>'<pre class="metadata-json">'+esc(JSON.stringify(value,null,2))+'</pre>';
 export function aiAuditPage(){
-  const w=current(),p=w.data?.pagination,staff=state.user?.role==='admin';
-  const options=Object.entries(labels).filter(([key])=>staff || key!=='monitoring');
+  if(state.user?.role!=='admin')return '';
+  const w=current(),p=w.data?.pagination;
+  const options=Object.entries(labels);
   return heading('AI audit log.','Inspect the evidence, evaluation outcomes and safety checks behind AI-assisted decisions.','')+
     '<div class="notice">This log shows recorded decision evidence and model request activity. Hidden model thoughts and raw chat prompts are not recorded. '+esc(w.data?.scope || 'Records are limited by your account permissions.')+'</div>'+
     '<section class="panel ai-audit-panel"><form id="ai-audit-filters" class="ai-audit-filters"><div class="field"><label for="ai-audit-query">Search record ID or task</label><input id="ai-audit-query" name="q" type="search" maxlength="150" value="'+esc(w.filters.q)+'" placeholder="Transaction ID, run ID or task name"></div><div class="field"><label for="ai-audit-type">Record type</label><select id="ai-audit-type" name="type"><option value="all">All records</option>'+options.map(([key,label])=>'<option value="'+key+'" '+(w.filters.type===key?'selected':'')+'>'+label+'</option>').join('')+'</select></div><div class="field"><label for="ai-audit-days">Period</label><select id="ai-audit-days" name="days">'+[7,30,90].map(days=>'<option value="'+days+'" '+(String(w.filters.days)===String(days)?'selected':'')+'>Last '+days+' days</option>').join('')+'</select></div><button type="submit" class="button">Search audit log</button></form><div role="alert" class="error-message">'+esc(w.error)+'</div>'+
     (w.loading?'<p role="status">Loading saved AI records...</p>':w.error?'<p>Audit results could not be loaded. Retry the search.</p>':w.data?'<p data-ai-audit-count>'+p.total+' matching records. Times in SGT.</p>'+(w.data.entries.length?'<div class="table-scroll"><table class="ai-audit-table"><thead><tr><th>Time / record</th><th>Task</th><th>Outcome</th><th>Model</th><th>Evidence</th></tr></thead><tbody>'+w.data.entries.map(e=>'<tr><td>'+fullDate(e.createdAt)+'<small>'+esc(e.reference)+'</small></td><td>'+esc(labels[e.kind])+'<small>'+esc(e.title)+'</small></td><td>'+esc(e.decision || e.status)+(e.score!==null?'<small>AI score '+esc(e.score)+' / 100</small>':'')+'</td><td>'+esc(e.model || (e.provider && e.provider!=='not_recorded'?e.provider+'; model name not recorded':'Historical / not recorded'))+'</td><td><button type="button" class="text-button" data-ai-audit-kind="'+e.kind+'" data-ai-audit-id="'+esc(e.id)+'">Inspect audit</button></td></tr>').join('')+'</tbody></table></div>':'<div class="empty-state"><h2>No matching AI records.</h2><p>Use the assistant or submit an authorized payment to create recorded activity. Older entries may not contain request timing.</p></div>')+'<div class="pagination"><button type="button" class="button secondary" data-action="ai-audit-prev" '+(p.page<=1?'disabled':'')+'>Previous</button><span>Page '+p.page+' of '+Math.max(1,p.totalPages)+'</span><button type="button" class="button secondary" data-action="ai-audit-next" '+(p.page>=p.totalPages?'disabled':'')+'>Next</button></div>':'<p>Load the audit log to inspect saved evidence.</p>')+'</section>';
 }
 export async function loadAiAudit({form,page}={}){
-  if(!state.user || state.signingOut)return;
+  if(state.user?.role!=='admin' || state.signingOut)return;
   const w=current(),userId=state.user.id,request=++generation;
   if(form){w.filters=Object.fromEntries(new FormData(form));w.page=1;}
   if(page!==undefined)w.page=Math.max(1,page);
@@ -24,10 +25,10 @@ export async function loadAiAudit({form,page}={}){
   if(state.route.page==='aiAudit')ui.render();
   try{
     const result=await api('/ai-audit?'+new URLSearchParams({...w.filters,page:String(w.page),pageSize:'20'}),undefined,'GET',{signal:controller.signal});
-    if(request!==generation || state.aiAudit!==w || !sameId(state.user?.id,userId) || state.signingOut)return;
+    if(request!==generation || state.aiAudit!==w || state.user?.role!=='admin' || !sameId(state.user?.id,userId) || state.signingOut)return;
     w.data=result;
-  }catch(error){if(request!==generation || error.status===-1 || state.aiAudit!==w || !sameId(state.user?.id,userId))return;if(await recoverSession(error))return;w.error=error.message;}
-  finally{if(request===generation && state.aiAudit===w && sameId(state.user?.id,userId)){w.loading=false;if(state.route.page==='aiAudit')ui.render();}}
+  }catch(error){if(request!==generation || error.status===-1 || state.aiAudit!==w || state.user?.role!=='admin' || !sameId(state.user?.id,userId))return;if(await recoverSession(error))return;w.error=error.message;}
+  finally{if(request===generation && state.aiAudit===w && state.user?.role==='admin' && sameId(state.user?.id,userId)){w.loading=false;if(state.route.page==='aiAudit')ui.render();}}
 }
 function detailHtml(d){
   const e=d.evidence,r=e.decisionSummary,a=e.analysis,calls=d.modelCalls;
@@ -42,11 +43,11 @@ function detailHtml(d){
     '<details><summary>Complete saved audit evidence</summary>'+json(d)+'</details><div class="modal-actions"><button type="button" class="button secondary" data-action="close-dialog">Done</button><button type="button" class="button" data-action="ai-audit-download">Download audit JSON</button></div>';
 }
 export async function showAiAudit(kind,id){
-  if(!state.user || state.signingOut)return;
+  if(state.user?.role!=='admin' || state.signingOut)return;
   const w=current(),userId=state.user.id,request=++detailGeneration;detailController?.abort();detailController=new AbortController();w.detail=null;
   dialog('AI evaluation audit.','<div class="loading-state" role="status"><p>Loading saved AI evidence...</p></div>');
   const token='ai-audit:'+request;modal.dataset.detailRequest=token;
-  const active=()=>request===detailGeneration && state.aiAudit===w && sameId(state.user?.id,userId) && !state.signingOut && state.route.page==='aiAudit' && modal.open && modal.dataset.detailRequest===token;
+  const active=()=>request===detailGeneration && state.aiAudit===w && state.user?.role==='admin' && sameId(state.user?.id,userId) && !state.signingOut && state.route.page==='aiAudit' && modal.open && modal.dataset.detailRequest===token;
   try{
     const {record}=await api('/ai-audit/'+encodeURIComponent(kind)+'/'+encodeURIComponent(id),undefined,'GET',{signal:detailController.signal});
     if(!active())return;
@@ -54,7 +55,7 @@ export async function showAiAudit(kind,id){
   }catch(error){if(!active() || error.status===-1)return;if(!await recoverSession(error))dialog('AI audit unavailable.','<p class="modal-intro">'+esc(error.message)+'</p><div class="modal-actions"><button type="button" class="button secondary" data-action="close-dialog">Done</button></div>');}
 }
 export function downloadAiAudit(){
-  const d=state.aiAudit?.detail;if(!d || !state.user || state.signingOut)return;
+  const d=state.aiAudit?.detail;if(!d || state.user?.role!=='admin' || state.signingOut)return;
   const url=URL.createObjectURL(new Blob([JSON.stringify(d,null,2)],{type:'application/json'})),link=document.createElement('a');
   link.href=url;link.download='greenlink-ai-audit-'+d.kind+'-'+d.id.replace(/[^A-Za-z0-9_-]/g,'_').slice(0,60)+'.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }

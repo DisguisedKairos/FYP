@@ -12,7 +12,7 @@ Set `OPENAI_API_KEY` privately in `.env` or your hosting secrets, with `OPENAI_M
 
 Unavailable inference fails closed. AI scores are qualitative indicators, not validated fraud probabilities. Financial rules, integer-cent calculations, database locks, password authorization and independent human review remain application controls. The model has no payment execution or rule-changing tool. Historical evidence is preserved with its original provider.
 
-Version 2.11.4 rechecks session authorization inside account and schedule-cancellation transactions, prevents delayed notification responses from restoring old read state, and separates new scheduled instructions from retries. Service caches and draft state clear on session termination, and delayed banking responses cannot replace the next operator's workspace. Open **AI audit log** in the sidebar or **View AI audit** below an assistant response.
+Version 2.11.4 rechecks session authorization inside account and schedule-cancellation transactions, prevents delayed notification responses from restoring old read state, and separates new scheduled instructions from retries. Service caches and draft state clear on session termination, and delayed banking responses cannot replace the next operator's workspace. Administrators can open **AI audit log** in the sidebar or **View AI audit** below their assistant responses. Customers cannot access the audit log.
 
 ## Features
 
@@ -56,7 +56,7 @@ For a new Neon development database, `npm run test:accounts:neon` prepares synth
 
 ## AI evaluation audit
 
-The audit screen at `/ai-audit` shows assistant/insight runs, payment assessments, staff monitoring evidence and failed AI-provider requests. Inspect a record to compare selected reasons, AI and combined scores, matched financial rules, validated input/policy snapshots and permitted tool results. New model requests record their model name, prompt-template digest, duration, proposed tool names and completion/failure status. A completed request means a response was received; the separate guardrail result determines whether the application accepted its interpretation.
+The administrator-only audit screen at `/ai-audit` shows assistant/insight runs, payment assessments, staff monitoring evidence and failed AI-provider requests. Inspect a record to compare selected reasons, AI and combined scores, matched financial rules, validated input/policy snapshots and permitted tool results. New model requests record their model name, prompt-template digest, duration, proposed tool names and completion/failure status. A completed request means a response was received; the separate guardrail result determines whether the application accepted its interpretation.
 
 Business operators see their own runs and outgoing-payment evidence. Staff see bank-wide payment and monitoring evidence, plus only their own assistant/insight runs. Conversations remain private to their initiating user, including from other staff. Search is paginated and limited to the previous 90 days; older known records remain accessible by their permitted detail URL. JSON exports contain banking evidence and should be handled as private records.
 

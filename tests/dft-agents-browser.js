@@ -96,7 +96,7 @@ test('Model connection checks show help, while banking answers link saved owned 
 
 test('AI audit supports mobile search, model timeline, owned tool evidence and JSON download',async t=>{
  const fs=require('node:fs'),downloadPath=path.resolve('test-results','ai-audit-download');fs.mkdirSync(downloadPath,{recursive:true});
- const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ const {f,page}=await open(t,390,'reviewer@greenlink.demo');
  await page.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath});
  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant [data-ai-audit-id]")');
  const runId=await page.evaluate('document.querySelector(".from-assistant [data-ai-audit-id]").dataset.aiAuditId');
@@ -114,7 +114,7 @@ test('AI audit supports mobile search, model timeline, owned tool evidence and J
 });
 
 
-async function auditFixture(t){const opened=await open(t,1280,'jamie@greenlink.demo'),client=opened.f.client();await client.login('jamie@greenlink.demo');const run=await client.request('/api/agents/assistant',{method:'POST',body:{message:'What is my balance?'}});assert.equal(run.status,200);await visit(opened.page,opened.f.baseUrl,'/ai-audit');await opened.page.waitFor('!!document.querySelector("[data-ai-audit-id]")');return {...opened,runId:run.data.runId};}
+async function auditFixture(t){const opened=await open(t,1280,'reviewer@greenlink.demo'),client=opened.f.client();await client.login('reviewer@greenlink.demo');const run=await client.request('/api/agents/assistant',{method:'POST',body:{message:'What is my balance?'}});assert.equal(run.status,200);await visit(opened.page,opened.f.baseUrl,'/ai-audit');await opened.page.waitFor('!!document.querySelector("[data-ai-audit-id]")');return {...opened,runId:run.data.runId};}
 test('AI audit does not reopen dismissed details after leaving and returning to the page',async t=>{
  const {page,runId}=await auditFixture(t);
  await page.evaluate("window.auditOriginalFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.auditOriginalFetch(...args);if(String(args[0]).includes('/api/ai-audit/agent/')){const body=await response.text();await new Promise(resolve=>window.releaseAuditDetail=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
@@ -138,4 +138,19 @@ test('An insights refresh preserves focus and typing in a draft rule form',async
  await page.evaluate('document.querySelector("#agent-threshold").focus();document.querySelector("#agent-threshold").select();window.releaseInsightStatus();window.pendingInsightRefresh');
  const focused=await page.evaluate('document.activeElement.id');await page.send('Input.insertText',{text:'50'});
  assert.deepEqual({focused,threshold:await page.evaluate('document.querySelector("#agent-threshold").value')},{focused:'agent-threshold',threshold:'50'});assert.deepEqual(page.errors,[]);
+});
+
+test('Customers cannot open the AI audit page or trigger audit reads and do not see assistant or insight audit links',async t=>{
+ const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ assert.equal(await page.evaluate('!!document.querySelector("[data-nav=aiAudit]")'),false);
+ await visit(page,f.baseUrl,'/ai-audit');await page.waitFor('location.pathname==="/dashboard"');
+ assert.equal(await page.evaluate('!!document.querySelector(".ai-audit-panel,[data-nav=aiAudit]")'),false);
+ await page.evaluate("window.auditFetchCount=0;const original=window.fetch;window.fetch=(...args)=>{if(String(args[0]).includes('/api/ai-audit'))window.auditFetchCount++;return original(...args);};");
+ const denied=await page.evaluate("(async()=>{const m=await import('/js/ai-audit.js');await m.loadAiAudit();await m.showAiAudit('agent','customer-forged-link');m.downloadAiAudit();return {requests:window.auditFetchCount,page:m.aiAuditPage(),dialog:document.querySelector('#modal').open};})()");
+ assert.deepEqual(denied,{requests:0,page:'',dialog:false});
+ await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant")');
+ assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id],[data-nav=aiAudit]")'),false);
+ await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
+ assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id],[data-nav=aiAudit]")'),false);
+ assert.deepEqual(page.errors,[]);
 });

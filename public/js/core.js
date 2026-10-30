@@ -7,7 +7,7 @@ export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
   business: { path: '/business', label: 'Business profile', icon: 'wallet' },
   assistant: { path: '/assistant', label: 'GLDB Assistant', icon: 'chat' },
-  aiAudit: { path: '/ai-audit', label: 'AI audit log', icon: 'statement' },
+  aiAudit: { path: '/ai-audit', label: 'AI audit log', icon: 'statement', admin: true },
   agents: { path: '/banking-insights', label: 'Banking insights', icon: 'activity' },
   accounts: { path: '/accounts', label: 'Business accounts', icon: 'wallet' },
   transfers: { path: '/transfers', label: 'Transfers', icon: 'transfer' },
