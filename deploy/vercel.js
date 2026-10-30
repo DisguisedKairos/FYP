@@ -56,7 +56,7 @@ function createHostedApplication({ environment = process.env, databaseFactory = 
   app.use((req, res, next) => {
     // Vercel overwrites this platform header. Local servers keep Express socket IPs.
     if (environment.VERCEL === '1' && environment.VERCEL_ENV !== 'development') {
-      const address = ipAddress(req);
+      const address = ipAddress(new Headers({ 'x-real-ip': req.get('x-real-ip') || '' }));
       if (isIP(address || '')) Object.defineProperty(req, 'ip', { value: address, configurable: true });
     }
     res.set('Cache-Control', 'no-store');
@@ -91,14 +91,3 @@ function createHostedApplication({ environment = process.env, databaseFactory = 
 module.exports = createHostedApplication();
 module.exports.createHostedApplication = createHostedApplication;
 module.exports.configuration = configuration;
-
-// Explicit local service command avoids the CLI's source-file static fallback.
-if (require.main === module) {
-  const port = Number(process.env.PORT || 3000);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('PORT must be an integer from 1 to 65535.');
-  const server = require('node:http').createServer(module.exports);
-  server.listen(port, '127.0.0.1', () => console.log('Hosted banking adapter listening on 127.0.0.1:' + port));
-  server.on('error', error => { console.error(error.code || error.name); process.exitCode = 1; });
-  const stop = () => server.close(async () => { await module.exports.closeResources(); process.exit(0); });
-  process.once('SIGINT', stop); process.once('SIGTERM', stop);
-}

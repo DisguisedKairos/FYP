@@ -38,7 +38,9 @@
     "db:setup:neon": "node database/neon.js",
     "test:neon": "node --env-file-if-exists=.env scripts/verify-neon.js",
     "test:accounts:neon": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/feature-accounts.js --neon",
-    "test:accounts:otp:neon": "node --env-file-if-exists=.env scripts/feature-accounts.js --otp --neon"
+    "test:accounts:otp:neon": "node --env-file-if-exists=.env scripts/feature-accounts.js --otp --neon",
+    "test:vercel": "node scripts/verify-vercel.js",
+    "test:vercel:neon": "node scripts/verify-vercel.js --neon"
   },
   "engines": {
     "node": ">=22.13.0"

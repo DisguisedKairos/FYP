@@ -1,19 +1,10 @@
 # Vercel multi-service deployment
 
-## Work in progress
+## Configuration and verification
 
-Saved at the project owner's request on 29 October 2026. This configuration has not been deployed and is not yet verified for production.
+The project owner confirmed the service names, public paths, private binding and free-plan daily cron on 30 October 2026. The repository is configured for two services; no cloud deployment has been performed during this setup.
 
-Completed: two-service configuration, caller-side fraud binding, authenticated job endpoint, lazy hosted initialization, pooled PostgreSQL lifecycle handling, deployment exclusions and regression tests. An earlier verification run passed all 205 Node tests, all 21 Python tests and the JavaScript build. The subsequent app.js export adjustment and two additional regression cases still need a final verification run.
-
-Remaining before deployment:
-
-- Resolve Vercel CLI 65.7.0 local static routing: /app.js currently returns the backend entrypoint instead of the frontend asset, and paths such as /banking/risk.js are served as repository source. The CLI prefers its framework builder over the explicit devCommand, so that command has not resolved this issue. Do not expose the local test server publicly.
-- Verify the complete browser asset paths and ensure backend source paths return 404 through the actual Vercel router. Verify the private fraud binding with an authenticated model request.
-- Repeat the affected checks after the final routing fix and inspect deployment build output before claiming cloud deployment works.
-- Show the final vercel.json and obtain confirmation of service names, public routing, the banking-to-fraud binding and the daily cron time. The user selected the free plan; the proposed 08:00 Singapore daily job time is still to be confirmed.
-
-The proposed service names and public route table in vercel.json are pending project-owner confirmation.
+The local routing issue is resolved with an early service handoff before filesystem fallback. Website JavaScript and CSS match their public source assets, backend files return 404, and missing-host requests return 400. An authenticated synthetic staff login reached the dashboard and the private FastAPI service, which returned the available configured OpenAI model metadata.
 
 | Service | Entrypoint | Public routing | Calls |
 | --- | --- | --- | --- |
@@ -21,6 +12,12 @@ The proposed service names and public route table in vercel.json are pending pro
 | fraud | main:app, FastAPI | None; internal service only | OpenAI Responses API |
 
 Both service roots are the repository root because package.json, requirements.txt, main.py and the shared runtime modules already live there. Explicit framework and entrypoint settings prevent FastAPI detection from replacing the Express banking website. The callable app.js export also matches the Express adapter's root-file discovery, while its named factories remain available for native startup and tests. tests_python is a test suite and is not deployed.
+
+## Routing order and security headers
+
+The top-level rewrite targets banking. Vercel CLI 65.7.0 evaluates its filesystem phase before ordinary rewrites, which otherwise exposes repository source and creates a collision between backend app.js and public/app.js. The explicit top-level routes first apply the existing response security headers with continue: true, then hand every request to banking before filesystem fallback. Keep this early handoff and the public rewrite consistent when changing service names or public routing. Fraud has no public destination.
+
+The Express builder uses root entrypoint discovery. app.js therefore exports a callable Express application and retains the named native factories. The unused devCommand override was removed because the CLI selects its framework builder first.
 
 ## Binding and request paths
 
@@ -58,16 +55,28 @@ The endpoint awaits scheduled-payment processing, background fraud scanning and 
 
 Install Node.js dependencies with npm ci and Python dependencies with python -m pip install -r requirements.txt (normally inside .venv). Configure the existing ignored .env for Neon, persistent secrets and OpenAI.
 
-Run the services together with **vercel dev --local** (or **vercel dev** for a linked project). The local flag runs without a Vercel login. Vercel injects the same binding variable locally. The explicit banking devCommand is intended to start only the hosted Express adapter. The current CLI still prefers its framework builder; see the unresolved static-routing issue above. npm start remains the standalone launcher. Set PUBLIC_ORIGIN to match the local listening origin if choosing a different port.
+Run the services together with **vercel dev --local** (or **vercel dev** for a linked project). The local flag runs without a Vercel login. Vercel injects the same binding variable locally. npm start remains the standalone launcher. Set PUBLIC_ORIGIN to match the local listening origin if choosing a different port.
 
-Check /login, /health and /api/session; /api/dashboard must require a signed-in session. Sign in as a synthetic tester, check dashboard and transaction history, then use an authorized fraud-model request to verify the private binding and model metadata. Call /api/jobs/run with the configured CRON_SECRET to test jobs; vercel dev does not automatically run cron schedules.
+Run npm run test:vercel for asset and routing verification. Use npm run test:vercel:neon to verify the current synthetic Neon staff login, dashboard and private fraud-model binding, or node scripts/verify-vercel.js --native for native synthetic credentials. Set VERCEL_TEST_ORIGIN to an HTTP loopback origin if using a different port; the verifier refuses remote origins. It never prints credentials or authorizes a job invocation, so it does not execute due payments. The configured database and selected credential fixture must match.
+
+Check /login, /health and /api/session; /api/dashboard requires a signed-in session. The verifier compares every public asset byte-for-byte, checks backend-source URLs using GET and HEAD, verifies job authentication and refuses a missing Host header. Run /api/jobs/run with CRON_SECRET only when intending to execute due schedules; vercel dev does not automatically run cron schedules.
 
 Run npm run build, npm test, npm run test:python and npm run test:browser for application validation. Deployment requires a Vercel project and its private environment configuration; local tests alone do not prove a cloud deployment works.
+
+## Verified results on 30 October 2026
+
+- npm run build: passed; 94 JavaScript source files checked.
+- npm test: 207 passed, 0 failed, 0 skipped, using isolated schemas in the local PostgreSQL test database.
+- npm run test:python: 21 passed.
+- npm run test:vercel:neon: 58 HTTP checks passed, including all 19 public assets, source privacy, missing-host rejection, synthetic staff login and the authenticated private fraud-model binding.
+- Headless browser through vercel dev: customer login, dashboard rendering, frontend modules and logout passed without JavaScript, unexpected network or CSP errors.
+
+The hosted client-IP regression also verifies the Node-to-Web Headers conversion required by the pinned Vercel helper and confirms that local forwarded headers remain untrusted. The Vercel configuration was accepted by CLI 65.7.0 and both services ran together locally. No cloud build or deployment is claimed; that requires a linked Vercel project with the private environment variables above.
 
 ## Files and delivery
 
 .vercelignore excludes all data, including the shared demo login folder, private environment files, local PostgreSQL storage, backups, dependencies, logs, test artifacts and source release archives from uploads. Tests remain in Git and run in CI; they are not runtime services. The source ZIP includes vercel.json, .vercelignore and the adapter, and continues to exclude data and credentials.
 
-After confirming the service names, public routing and binding, import this repository as one Vercel project with its root at this directory. Keep service build/runtime settings inside their service objects rather than setting a top-level framework or build command.
+The service names, public routing and binding are confirmed. Import this repository as one Vercel project with its root at this directory. Keep service build/runtime settings inside their service objects rather than setting a top-level framework or build command.
 
 References: [Vercel services](https://vercel.com/docs/services), [bindings](https://vercel.com/docs/services/bindings), [service configuration](https://vercel.com/docs/services/config-reference), [Express](https://vercel.com/docs/frameworks/backend/express), [FastAPI](https://vercel.com/docs/frameworks/backend/fastapi), [Hobby cron limits](https://vercel.com/docs/cron-jobs/usage-and-pricing), [PostgreSQL pooling](https://vercel.com/guides/connection-pooling-with-functions).
