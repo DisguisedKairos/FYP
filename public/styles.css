@@ -464,8 +464,6 @@ dialog.wide-dialog { width:900px; }
 .agent-report table { width:100%;border-collapse:collapse;text-align:left; }
 .agent-report th,.agent-report td { padding:12px;border-bottom:1px solid #e0e7ee; }
 .agent-report .metadata-json { max-height:450px;overflow:auto;white-space:pre-wrap;word-break:break-word; }
-.assistant-evidence { margin-top:16px;font-size:12px;overflow-wrap:anywhere; }
-.assistant-evidence li { margin-top:10px; }
 .fraud-cases-panel { margin-bottom:24px;min-width:0;overflow-wrap:anywhere; }
 .fraud-cases-panel .section-heading { flex-wrap:wrap;gap:12px; }
 .fraud-cases-panel p { line-height:1.7; }

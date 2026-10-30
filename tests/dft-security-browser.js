@@ -2,7 +2,7 @@
 const test=require('node:test');
 const assert=require('node:assert/strict');
 const {randomBytes}=require('node:crypto');
-const {fixture}=require('./dft-helpers');
+const {fixture,businessProfile}=require('./dft-helpers');
 const {launchChrome}=require('./chrome');
 const {codeForCounter,PERIOD_MS}=require('../banking/totp');
 const exists=selector=>`!!document.querySelector(${JSON.stringify(selector)})`;
@@ -114,4 +114,34 @@ test('An ended session account response cannot update the next operator accounts
   await page.evaluate("import('/js/workflows.js').then(m=>{m.accountNameDialog();return true;})");await page.fill('#account-name','Current operator draft');await page.evaluate('window.releaseAccount();window.oldAccountWrite');
   assert.equal(await page.evaluate('document.querySelector("#modal").open && document.querySelector("#account-name")?.value'),'Current operator draft');
   assert.equal(await page.evaluate("import('/js/core.js').then(m=>m.state.data.accounts.some(a=>a.name==='Prior operator private account'))"),false);assert.deepEqual(page.errors,[]);
+});
+
+
+test('Onboarding refreshes cannot restore a reviewed application or an ended session',async t=>{
+  const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+  const operator=f.client();await operator.session();
+  const registered=await operator.request('/api/auth/register',{method:'POST',body:{name:'Queue Operator',email:'queue-operator@example.test',password:'Greenlink123!',business:businessProfile('QUEUEORDER001')}});
+  assert.equal(registered.status,201);
+  const staff=f.client();await staff.login('reviewer@greenlink.demo');
+  const login=async()=>{await page.fill('#email','reviewer@greenlink.demo');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));};
+  await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await login();
+  await page.click('[data-nav=onboarding]');await page.waitFor(exists('[data-review-business]'));
+  const hold=async()=>{
+    await page.evaluate("window.queueFetch=window.fetch;window.fetch=async(path,options)=>{const response=await window.queueFetch(path,options);if(String(path)==='/api/business/applications'){window.fetch=window.queueFetch;const body=await response.text();options.signal.addEventListener('abort',()=>window.queueReadAborted=true,{once:true});await new Promise(resolve=>window.releaseQueue=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};window.queueReadAborted=false;delete window.releaseQueue;import('/js/business.js').then(m=>{window.pendingQueue=m.loadBusinessApplications();return true;})");
+    await page.waitFor('typeof window.releaseQueue==="function"');
+  };
+  await hold();
+  const approved=await staff.request('/api/business/applications/'+registered.data.business.id+'/review',{method:'POST',body:{version:registered.data.business.version,decision:'approve',reason:'Verified registration and authorized business operator.',verificationConfirmed:true,authorizationPassword:'Greenlink123!'}});
+  assert.equal(approved.status,200);
+  await page.evaluate("import('/js/business.js').then(m=>m.loadBusinessApplications())");
+  await page.waitFor("document.querySelector('.empty-state')?.textContent.includes('No applications awaiting review')");
+  await page.evaluate('window.releaseQueue();window.pendingQueue');
+  assert.equal(await page.evaluate('!!document.querySelector("[data-review-business]")'),false,'An older refresh must not bring back an approved application.');
+  assert.equal(await page.evaluate('window.queueReadAborted'),true,'A superseded refresh should be cancelled.');
+  await hold();await page.click('[data-action=logout]');await page.waitFor(exists('#auth-form'));await login();
+  await page.click('[data-nav=onboarding]');await page.waitFor("document.querySelector('.empty-state')?.textContent.includes('No applications awaiting review')");
+  await page.evaluate('window.releaseQueue();window.pendingQueue');
+  assert.equal(await page.evaluate('window.queueReadAborted'),true,'Logout should cancel the previous queue request.');
+  assert.equal(await page.evaluate("document.querySelector('#main-content').textContent.includes('ended session')"),false,'A cancelled request from the same operator’s previous session must not replace the new queue.');
+  assert.deepEqual(page.errors,[]);
 });

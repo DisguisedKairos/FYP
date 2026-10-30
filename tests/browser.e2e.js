@@ -113,7 +113,8 @@ test('desktop registration, savings management, authorized money movement and ac
     await nav(page, 'assistant');
     const balanceReply=await ask(page, 'What is my balance?');
     for(const account of before.accounts)assert.ok(balanceReply.includes((account.balanceCents/100).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2})));
-    assert.ok(await page.evaluate('!!document.querySelector(".assistant-evidence")'));
+    assert.equal(await page.evaluate('!!document.querySelector(".assistant-evidence")'),false);
+    assert.doesNotMatch(balanceReply,/\[E\d+\]|Evidence for this response/);
     const privateReply = await ask(page, 'What is the balance of account 1020002001?');
     assert.doesNotMatch(privateReply, /1,200\.00/);assert.match(privateReply,/Operating savings/);
     await page.fill('#assistant-message', 'PrivateDemo123!'); await submit(page, '#assistant-form');

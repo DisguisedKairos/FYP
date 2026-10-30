@@ -63,7 +63,7 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(page.errors,[]);
 });
 
-test('Model connection checks show help, while banking answers link saved owned evidence',async t=>{
+test('Model connection checks and banking replies omit evidence while preserving saved records',async t=>{
   const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
   const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
@@ -76,10 +76,14 @@ test('Model connection checks show help, while banking answers link saved owned 
   assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/no banking records retrieved/);
   assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence").length'),0);
   assert.equal(await page.evaluate('document.querySelectorAll("[data-assistant-suggestion]").length'),4);
-  await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".assistant-evidence")');
-  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E1\]/);
-  assert.match(await page.evaluate('document.querySelector(".assistant-evidence").textContent'),/Owned account balances/);
+  await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length===2 && !document.querySelector("#assistant-form button[type=submit]").disabled');
+  assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response|View saved evidence/);
+  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence,#assistant-thread [data-agent-run]").length'),0);
+  await page.click('[data-action="assistant-close"]');await page.click('[data-action="assistant-toggle"]');
+  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence").length'),0);
   const previousRun=await page.evaluate("import('/js/core.js').then(({state})=>state.assistant.previousRunId)");
+  const saved=(await f.db.query('SELECT report_json FROM agent_runs WHERE id=$1',[previousRun])).rows[0].report_json;
+  assert.match(saved.reply,/\[E1\]/);assert.equal(saved.evidenceReferences[0].tool,'get_accounts');
   const financialBefore=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
   await f.db.query("UPDATE agent_runs SET created_at=now()-interval '16 minutes' WHERE id=$1",[previousRun]);
   await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');
@@ -91,7 +95,10 @@ test('Model connection checks show help, while banking answers link saved owned 
   assert.equal(await page.evaluate('document.querySelector("#assistant-error").textContent'),'');
   assert.notEqual(await page.evaluate("import('/js/core.js').then(({state})=>state.assistant.previousRunId)"),previousRun);
   assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),financialBefore);
-  await page.click('.from-assistant:last-child .assistant-evidence summary');await page.click('.from-assistant:last-child .assistant-evidence [data-agent-run]');
+  const currentRun=await page.evaluate("import('/js/core.js').then(({state})=>state.assistant.previousRunId)");
+  await visit(page,f.baseUrl,'/banking-insights');
+  const runSelector='[data-agent-run="'+currentRun+'"]';
+  await page.waitFor('!!document.querySelector('+JSON.stringify(runSelector)+')');await page.click(runSelector);
   await page.waitFor('location.pathname==="/banking-insights" && !!document.querySelector("[data-agent-report]")');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/\[E1\] Owned account balances/);
   assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));

@@ -32,13 +32,25 @@ export async function submitBusiness(form){
   }catch(error){if(active() && !await recoverSession(error))formError(form,error.message);}
   finally{if(form.elements.authorizationPassword)form.elements.authorizationPassword.value='';if(active()){state.modalBusy=false;formBusy(form,false);}}
 }
+let applicationGeneration=0,applicationController;
+export function cancelBusinessApplications(){applicationGeneration++;applicationController?.abort();applicationController=undefined;}
 export async function loadBusinessApplications(){
-  if(state.user?.role!=='admin')return;
-  const userId=state.user.id;state.remote.onboarding={loading:true};
+  const sessionActive=captureSession();
+  if(state.user?.role!=='admin' || !sessionActive())return;
+  cancelBusinessApplications();
+  const request=applicationGeneration,controller=new AbortController();applicationController=controller;
+  const active=()=>request===applicationGeneration && sessionActive() && state.user.role==='admin';
+  state.remote.onboarding={loading:true};
   if(state.route.page==='onboarding')ui.render();
-  try{const result=await api('/business/applications',undefined,'GET');if(state.user?.id!==userId||state.signingOut)return;state.remote.onboarding={data:result};}
-  catch(error){if(state.user?.id!==userId||state.signingOut)return;if(await recoverSession(error))return;state.remote.onboarding={error:error.message};}
-  if(state.route.page==='onboarding')ui.render();
+  try{
+    const result=await api('/business/applications',undefined,'GET',{signal:controller.signal});
+    if(!active())return;state.remote.onboarding={data:result};
+  }catch(error){
+    if(!active() || error.status===-1)return;
+    if(await recoverSession(error) || !active())return;
+    state.remote.onboarding={error:error.message};
+  }finally{if(applicationController===controller)applicationController=undefined;}
+  if(active() && state.route.page==='onboarding')ui.render();
 }
 export function onboardingPage(){
   const remote=state.remote.onboarding;

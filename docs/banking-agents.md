@@ -3,6 +3,8 @@
 
 Version 2.8.0 adds explicit tool citations, evidence links, qualitative consistency/relevance checks, user-bound draft values and an automated adversarial evaluation suite. See [AI evaluation and reliability](ai-evaluation.md) and run `npm run evaluate:assistant`.
 
+Chat replies show the answer and banking facts without an evidence section or citation markers. Saved tool evidence remains available in Banking insights and the administrator-only AI audit log. Model grounding and validation still use the recorded evidence.
+
 Version 2.7.0 adds five features to the existing DFT banking application. No onboarding agent is included.
 
 | Feature | Access | Where to use it |
