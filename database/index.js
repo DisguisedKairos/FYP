@@ -47,9 +47,9 @@ function createDatabase({ connectionString = process.env.DATABASE_URL, poolOptio
         const sql = (await readFile(path.join(directory, name), 'utf8')).replace(/\r\n/g, '\n');
         const checksum = createHash('sha256').update(sql).digest('hex');
         const previous = (await client.query('SELECT checksum FROM schema_migrations WHERE name=$1', [name])).rows[0];
-        if (previous) { if (previous.checksum !== checksum) throw new Error(`Applied migration changed: ${name}`); continue; }
+        if (previous) { if (previous.checksum !== checksum) throw Object.assign(new Error(`Applied migration changed: ${name}`), { code: 'MIGRATION_CHANGED' }); continue; }
         if (!(await client.query("SELECT has_schema_privilege(current_user,current_schema(),'CREATE') AS allowed")).rows[0].allowed) {
-          throw new Error(`Database migration required: ${name}. Run npm run db:migrate with the migration credentials first.`);
+          throw Object.assign(new Error(`Database migration required: ${name}. Run npm run db:migrate with the migration credentials first.`), { code: 'MIGRATION_REQUIRED' });
         }
         await client.query(sql);
         await client.query('INSERT INTO schema_migrations(name,checksum) VALUES($1,$2)', [name, checksum]);

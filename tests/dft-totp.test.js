@@ -145,7 +145,7 @@ pgTest('DFT concurrent TOTP login attempts consume a counter only once across Po
   const otp = currentCode(secret, f);
   const results = await Promise.all([browser(createAuth(f.options), '203.0.113.12'), browser(createAuth(f.options), '203.0.113.13')]
     .map(client => client.login({ otp }).then(value => ({ value }), error => ({ error }))));
-  assert.equal(results.filter(result => result.value).length, 1);
+  assert.equal(results.filter(result => result.value).length, 1, JSON.stringify(results.map(result => result.value ? { success: true } : { name: result.error?.name, code: result.error?.code, status: result.error?.status })));
   assert.equal(results.filter(result => result.error?.code === 'MFA_INVALID').length, 1);
 });
 
@@ -154,7 +154,7 @@ pgTest('DFT recovery codes have one atomic use, survive adapter recreation and c
   const { enabled } = await enrolled(f, owner), recoveryCode = enabled.recoveryCodes[0];
   const results = await Promise.all([browser(createAuth(f.options), '203.0.113.14'), browser(createAuth(f.options), '203.0.113.15')]
     .map(client => client.login({ recoveryCode }).then(value => ({ value }), error => ({ error }))));
-  assert.equal(results.filter(result => result.value).length, 1);
+  assert.equal(results.filter(result => result.value).length, 1, JSON.stringify(results.map(result => result.value ? { success: true } : { name: result.error?.name, code: result.error?.code, status: result.error?.status })));
   assert.equal(results.filter(result => result.error?.code === 'MFA_INVALID').length, 1);
   assert.equal((await f.db.query('SELECT COUNT(*)::integer AS count FROM mfa_recovery_codes WHERE used_at IS NOT NULL')).rows[0].count, 1);
   const client = browser(createAuth(f.options), '203.0.113.16');

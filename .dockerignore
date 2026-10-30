@@ -3,7 +3,7 @@
 !package.json
 !package-lock.json
 !app.js
-!db.js
+!application.js
 !main.py
 !requirements.txt
 !banking/

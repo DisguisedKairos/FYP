@@ -2,7 +2,7 @@
 
 ## Configuration and verification
 
-The project owner confirmed the service names, public paths, private binding and free-plan daily cron on 30 October 2026. The repository is configured for two services; no cloud deployment has been performed during this setup.
+The project owner confirmed the service names, public paths, private binding and free-plan daily cron on 30 October 2026. The repository is configured for two services. Local verification is documented below; a successful local run does not establish that a cloud deployment has its private environment configured.
 
 The local routing issue is resolved with an early service handoff before filesystem fallback. Website JavaScript and CSS match their public source assets, backend files return 404, and missing-host requests return 400. An authenticated synthetic staff login reached the dashboard and the private FastAPI service, which returned the available configured OpenAI model metadata.
 
@@ -11,7 +11,7 @@ The local routing issue is resolved with an early service handoff before filesys
 | banking | app.js via deploy/vercel.js, Express | All website pages, assets, /api/* and /health | fraud through FRAUD_SERVICE_BINDING_URL |
 | fraud | main:app, FastAPI | None; internal service only | OpenAI Responses API |
 
-Both service roots are the repository root because package.json, requirements.txt, main.py and the shared runtime modules already live there. Explicit framework and entrypoint settings prevent FastAPI detection from replacing the Express banking website. The callable app.js export also matches the Express adapter's root-file discovery, while its named factories remain available for native startup and tests. tests_python is a test suite and is not deployed.
+Both service roots are the repository root because package.json, requirements.txt, main.py and the shared runtime modules already live there. Explicit framework and entrypoint settings prevent FastAPI detection from replacing the Express banking website. The shared application.js module owns the banking factory, and both app.js and deploy/vercel.js import it directly. The hosted adapter must never import app.js: that creates a circular dependency when the production entry is loaded. app.js constructs a thin Express wrapper so the framework builder can discover it. The callable app.js export also matches the Express adapter's root-file discovery, while its named factories remain available for native startup and tests. tests_python is a test suite and is not deployed.
 
 ## Routing order and security headers
 
@@ -45,6 +45,28 @@ Without PUBLIC_ORIGIN, the adapter uses Vercel's environment-provided production
 
 The PostgreSQL pool is reused across concurrent requests, limited to five connections per instance and attached to Vercel's official lifecycle helper. The adapter uses Vercel's platform client IP header only in hosted Vercel requests; local execution keeps Express socket addresses. Existing password, role, CSRF, session and transaction controls apply.
 
+## When the hosted website returns 503
+
+If Runtime Logs report an unavailable createApplication export inside a circular dependency, deploy the current entrypoint layout: app.js and deploy/vercel.js share application.js rather than importing one another. Include application.js in source packages and the banking container.
+
+The hosted error response intentionally stays generic. Runtime Logs now include a fixed diagnostic code and guidance without printing environment values, driver messages, stack traces or connection URLs:
+
+| Log code | Action |
+| --- | --- |
+| CONFIGURATION_DATABASE_URL | Set the restricted Neon runtime DATABASE_URL in the correct Vercel environment. |
+| CONFIGURATION_AUTH_ENCRYPTION_KEY | Copy the existing persistent MFA encryption key from the private local configuration. |
+| CONFIGURATION_SERVICE_TOKEN | Configure the same service token for banking and fraud. |
+| CONFIGURATION_FRAUD_SERVICE_BINDING_URL | Check the banking-to-fraud binding in vercel.json; do not manually supply its injected URL. |
+| CONFIGURATION_PUBLIC_ORIGIN | Use the exact HTTPS website origin, without a path, or unset it to use Vercel's domain fallback. Do not copy the localhost origin into production. |
+| 28P01 / 28000 | Verify the restricted database login and password privately. |
+| 42501 | Apply the documented runtime-role grants using the separate migration credentials. |
+| MIGRATION_REQUIRED / 42P01 | Apply migrations before deploying, using the migration role outside the hosted function. |
+| MIGRATION_CHANGED | Restore migration files matching the checksums already installed in the database. |
+| ENOENT | Check function bundling of the SQL migrations and views. |
+| BANKING_STARTUP_FAILED | Investigate application initialization or the hosted job; unexpected private errors remain redacted. |
+
+Configure variables under the Vercel project's Settings ? Environment Variables, select the appropriate Production or Preview environment, and redeploy after changes. Private .env files are excluded from Git and deployments; cloning or importing the repository does not upload their values. Check /health and /login on the new deployment before testing login. Sharing the diagnostic code is sufficient; do not share private configuration values.
+
 ## Free-plan scheduled jobs
 
 The Hobby-compatible cron is GET /api/jobs/run at 00:00 UTC, or 08:00 Asia/Singapore, daily. Hobby timing can fall anywhere in that hour. Vercel cron runs on production deployments, and automatically supplies the bearer token from CRON_SECRET. The endpoint rejects a missing or incorrect token, duplicate authorization headers and methods other than GET.
@@ -65,13 +87,15 @@ Run npm run build, npm test, npm run test:python and npm run test:browser for ap
 
 ## Verified results on 30 October 2026
 
-- npm run build: passed; 94 JavaScript source files checked.
-- npm test: 207 passed, 0 failed, 0 skipped, using isolated schemas in the local PostgreSQL test database.
+- npm run build: passed; 95 JavaScript source files checked.
+- npm test: 211 passed, 0 failed, 0 skipped, using isolated schemas in the local PostgreSQL test database.
 - npm run test:python: 21 passed.
-- npm run test:vercel:neon: 58 HTTP checks passed, including all 19 public assets, source privacy, missing-host rejection, synthetic staff login and the authenticated private fraud-model binding.
+- npm run test:vercel:neon: 60 HTTP checks passed, including all 19 public assets, source privacy, missing-host rejection, synthetic staff login and the authenticated private fraud-model binding.
 - Headless browser through vercel dev: customer login, dashboard rendering, frontend modules and logout passed without JavaScript, unexpected network or CSP errors.
 
-The hosted client-IP regression also verifies the Node-to-Web Headers conversion required by the pinned Vercel helper and confirms that local forwarded headers remain untrusted. The Vercel configuration was accepted by CLI 65.7.0 and both services ran together locally. No cloud build or deployment is claimed; that requires a linked Vercel project with the private environment variables above.
+The hosted client-IP regression also verifies the Node-to-Web Headers conversion required by the pinned Vercel helper and confirms that local forwarded headers remain untrusted. The Vercel configuration was accepted by CLI 65.7.0 and both services ran together locally. These checks validate the local Vercel runtime. Verify the cloud deployment separately after setting its private environment variables.
+
+The startup regression suite includes the default hosted factory against PostgreSQL, acyclic entrypoint imports, private source isolation and safe configuration/driver diagnostics. The first full test run had one concurrent TOTP login failure; its isolated 10-test suite and the subsequent full 211-test run passed. Concurrency assertions now include safe error types and codes to make any recurrence diagnosable. The intermittent first-run failure was not reproduced.
 
 ## Files and delivery
 

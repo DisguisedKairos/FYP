@@ -117,3 +117,67 @@ test('Only hosted Vercel requests use the platform client address; local forward
     await app.closeResources();
   }
 });
+
+
+test('Hosted and native entries load a shared factory without a module dependency cycle', async t => {
+  const rootEntry = require('../app');
+  const base = await listen(t, rootEntry);
+  assert.equal((await fetch(base + '/api/jobs/run')).status, 401);
+  const entries = ['../app', '../application', '../deploy/vercel'].map(name => require.resolve(name));
+  const visited = new Set(), active = new Set();
+  function visit(filename) {
+    assert.equal(active.has(filename), false, 'A hosted entry must not import itself through another module.');
+    if (visited.has(filename)) return;
+    active.add(filename);
+    for (const child of require.cache[filename].children) if (entries.includes(child.filename)) visit(child.filename);
+    active.delete(filename); visited.add(filename);
+  }
+  for (const filename of entries) visit(filename);
+  assert.equal(rootEntry.createApplication, require('../application').createApplication);
+});
+
+test('Default hosted application factory reaches PostgreSQL and renders the website', async t => {
+  const f = await fixture(t, { http: false });
+  const app = createHostedApplication({ environment: environment(), databaseFactory: () => ({ ...f.db, close: async () => {} }), attachPool() {} });
+  t.after(() => app.closeResources());
+  const base = await listen(t, app);
+  const health = await fetch(base + '/health');
+  assert.equal(health.status, 200); assert.equal((await health.json()).database, 'postgresql');
+  const login = await fetch(base + '/login');
+  assert.equal(login.status, 200); assert.match(login.headers.get('content-type'), /text\/html/);
+  assert.equal((await fetch(base + '/application.js')).status, 404);
+});
+
+test('Hosted startup logs identify invalid settings without revealing their values or changing public errors', async t => {
+  const log = t.mock.method(console, 'error', () => {});
+  const secret = 'PRIVATE-startup-value-that-must-never-appear';
+  const cases = [
+    ['DATABASE_URL', secret], ['AUTH_ENCRYPTION_KEY', secret], ['SERVICE_TOKEN', secret + '!'],
+    ['FRAUD_SERVICE_BINDING_URL', 'https://user:' + secret + '@fraud.example'],
+    ['PUBLIC_ORIGIN', 'https://user:' + secret + '@bank.example']
+  ];
+  for (const [setting, value] of cases) {
+    let initialized = false;
+    const app = createHostedApplication({ environment: environment({ [setting]: value }), databaseFactory() { initialized = true; throw Error('Must not initialize'); } });
+    const base = await listen(t, app), response = await fetch(base + '/');
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'The banking service is temporarily unavailable. Please try again.' });
+    assert.equal(initialized, false);
+    assert.match(log.mock.calls.at(-1).arguments.join(' '), new RegExp('CONFIGURATION_' + setting + ':'));
+  }
+  assert.equal(JSON.stringify(log.mock.calls).includes(secret), false);
+});
+
+test('Hosted driver and migration failures log only allowlisted diagnostic codes and fixed guidance', async t => {
+  const log = t.mock.method(console, 'error', () => {});
+  const secret = 'PRIVATE-database-password-and-hostname';
+  for (const code of ['28P01', '42501', 'MIGRATION_REQUIRED', 'MIGRATION_CHANGED', 'ENOENT', secret]) {
+    let closed = false;
+    const app = createHostedApplication({ environment: environment(), attachPool() {}, databaseFactory: () => ({ pool: {}, query() {}, transaction() {}, close: async () => { closed = true; } }), applicationFactory: async () => { throw Object.assign(new Error(secret), { code }); } });
+    const base = await listen(t, app), response = await fetch(base + '/health');
+    assert.equal(response.status, 503); assert.equal(closed, true);
+    assert.equal((await response.text()).includes(secret), false);
+    assert.match(log.mock.calls.at(-1).arguments.join(' '), new RegExp(code === secret ? 'BANKING_STARTUP_FAILED:' : code + ':'));
+  }
+  assert.equal(JSON.stringify(log.mock.calls).includes(secret), false);
+});

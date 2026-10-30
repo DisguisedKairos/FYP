@@ -37,7 +37,7 @@ async function verify({ origin = process.env.VERCEL_TEST_ORIGIN || 'http://local
   }
   const publicFiles = assets(path.join(root, 'public'));
   for (const asset of publicFiles) await request(asset.route, 200, { asset: asset.filename });
-  for (const route of ['/banking/risk.js', '/database/index.js', '/deploy/vercel.js', '/scripts/feature-accounts.js', '/views/index.html', '/main.py', '/requirements.txt', '/package.json', '/vercel.json', '/.env', '/.env.database-admin', '/data/testing/neon/feature-accounts.json', '/public/app.js', '/internal/health', '/internal/model', '/internal/assess', '/fraud/internal/health']) {
+  for (const route of ['/application.js', '/banking/risk.js', '/database/index.js', '/deploy/vercel.js', '/scripts/feature-accounts.js', '/views/index.html', '/main.py', '/requirements.txt', '/package.json', '/vercel.json', '/.env', '/.env.database-admin', '/data/testing/neon/feature-accounts.json', '/public/app.js', '/internal/health', '/internal/model', '/internal/assess', '/fraud/internal/health']) {
     await request(route, 404);
     await request(route, 404, { method: 'HEAD' });
   }
