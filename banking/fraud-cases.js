@@ -50,6 +50,12 @@ async function saveFinding(db, row, evidence, detector, lease, { actor, now, val
     if (actor) await assertActor(client, actor, { admin: true });
     const state = (await client.query('SELECT lease_owner,lease_until FROM fraud_monitor_state WHERE id=1 FOR UPDATE')).rows[0];
     if (state.lease_owner !== lease || new Date(state.lease_until).getTime() <= now()) throw new HttpError(409, 'This scan lease expired. Start another scan.');
+    return recordFinding(client,row,evidence,detector,{actor,now});
+  });
+}
+// Serialize all detector writers for the same payment, including assistant flags.
+async function recordFinding(client,row,evidence,detector,{actor,now}){
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))",['fraud-case:'+row.id]);
     const inserted = await client.query('INSERT INTO fraud_screenings(id,transaction_id,detector_version,evidence_json,created_at) VALUES($1,$2,$3,$4,$5) ON CONFLICT(transaction_id,detector_version) DO NOTHING RETURNING id', [randomUUID(), row.id, detector, evidence, iso(now())]);
     if (!inserted.rowCount || !evidence.flagged) return { created: 0, reopened: 0 };
     const previous = (await client.query('SELECT c.*,s.evidence_json FROM fraud_cases c JOIN fraud_screenings s ON s.id=c.screening_id WHERE c.transaction_id=$1 FOR UPDATE OF c', [row.id])).rows[0];
@@ -61,7 +67,7 @@ async function saveFinding(db, row, evidence, detector, lease, { actor, now, val
       id = randomUUID(); created = 1;
       await client.query('INSERT INTO fraud_cases(id,transaction_id,screening_id,score,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$5)', [id, row.id, inserted.rows[0].id, evidence.score, iso(now())]);
     } else if (previous.status !== 'closed' || reopen) {
-      await client.query(`UPDATE fraud_cases SET screening_id=$2,score=$3,version=version+1,updated_at=$4,
+      await client.query(`UPDATE fraud_cases SET screening_id=$2,score=COALESCE($3,score),version=version+1,updated_at=$4,
         status=CASE WHEN $5 THEN 'open' ELSE status END,assigned_to=CASE WHEN $5 THEN NULL ELSE assigned_to END,
         outcome=CASE WHEN $5 THEN NULL ELSE outcome END,review_reason=CASE WHEN $5 THEN NULL ELSE review_reason END,resolved_at=CASE WHEN $5 THEN NULL ELSE resolved_at END WHERE id=$1`, [id, inserted.rows[0].id, evidence.score, iso(now()), Boolean(reopen)]);
     }
@@ -71,7 +77,6 @@ async function saveFinding(db, row, evidence, detector, lease, { actor, now, val
       for (const reviewer of staff) await enqueue(client, { userId: reviewer.id, type: 'fraud.flagged', title: reopen ? 'Suspicious activity case reopened' : 'Suspicious activity needs review', message: 'A payment was flagged for human investigation. Inspect the recorded AI and pattern evidence.', transactionId: row.id, metadata: { fraudCaseId: id }, createdAt: iso(now()) });
     }
     return { created, reopened: Number(Boolean(reopen)) };
-  });
 }
 async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, transactionId = null, force = false, validateSession = async () => {} } = {}) {
   limit = batchSize(limit);
@@ -167,4 +172,4 @@ async function decide(db, actor, id, body, { now = Date.now, authorization } = {
   });
   return detail(db, actor, id);
 }
-module.exports = { scan, list, detail, analysis, decide, finding, bindingMatches, VERSION };
+module.exports = { recordFinding, scan, list, detail, analysis, decide, finding, bindingMatches, VERSION };

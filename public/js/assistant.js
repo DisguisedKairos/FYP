@@ -4,7 +4,7 @@ import { state, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel,
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
-const starters=['What is my balance?','Show my recent transactions','What payments are scheduled?','Help me transfer money'];
+const starters=['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Help me transfer money'];
 function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,open:false,unread:false}); }
 function itemContent(item) {
   if(typeof item==='string')return '<li>'+esc(item)+'</li>';
@@ -156,7 +156,10 @@ export function applyBankingAction(action) {
     const aliases={dashboard:'overview',transactions:'activity','scheduled-payments':'schedules','bill-payments':'payments','fraud-monitoring':'fraud','fraud-rules':'rules'};
     const page=aliases[action.page] || action.page;
     if(page==='activity' && typeof action.filters?.q==='string'){state.filters={...emptyFilters(),search:action.filters.q.slice(0,120)};state.historyPage=1;}
-    if(pages[page]){closeAssistant({focus:false});navigate(page);}
+    if(pages[page]){
+      const filters=page==='companyActivity'?Object.fromEntries(['company','from','to'].map(key=>[key,typeof action.filters?.[key]==='string'?action.filters[key].slice(0,key==='company'?120:10):''])):{};
+      closeAssistant({focus:false});navigate(page,filters);
+    }
     return;
   }
   if(action.type==='draft_transfer') {

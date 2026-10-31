@@ -109,7 +109,7 @@ function activityPage() {
 export function render({ focus = false } = {}) {
   if (!state.data) return auth();
   const staffMode=state.user.role==='admin'&&!state.data.business;
-  const staffPages=new Set(['overview','onboarding','fraud','rules','notifications','agents','aiAudit']);
+  const staffPages=new Set(['overview','onboarding','fraud','rules','notifications','agents','aiAudit','companyActivity']);
   if(staffMode&&!staffPages.has(state.route.page)){state.route={page:'overview',account:''};history.replaceState({},'','/dashboard');}
   if (pages[state.route.page]?.admin && state.user.role !== 'admin') { state.route = { page: 'overview', account: '' }; history.replaceState({}, '', '/dashboard'); }
   const page = state.route.page;

@@ -14,6 +14,8 @@ Unavailable inference fails closed. AI scores are qualitative indicators, not va
 
 Version 2.11.4 rechecks session authorization inside account and schedule-cancellation transactions, prevents delayed notification responses from restoring old read state, and separates new scheduled instructions from retries. Service caches and draft state clear on session termination, and delayed banking responses cannot replace the next operator's workspace. Administrators can open **AI audit log** in the sidebar or **View AI audit** below their assistant responses. Customers cannot access the audit log.
 
+Ask the assistant **Check my transactions for fraud using daily market trends** to review the latest five permitted outgoing payments with official public context. Supported concerns can be sent to the human investigation queue; no new numeric score is assigned and no payment status or balance is changed. See [market context sources and safeguards](docs/market-context.md).
+
 ## Features
 
 | Area | Implemented features |
@@ -23,6 +25,7 @@ Version 2.11.4 rechecks session authorization inside account and schedule-cancel
 | Experience | History/search, CSV exports, printable/PDF statements, private banking assistant and payment drafts |
 | Operations | Durable notifications, independent payment review, versioned fraud rules, financial audit history and AI evaluation audit |
 | Fraud | OpenAI risk scores using authoritative historical aggregates, grounded explanation codes, automatic monitoring, human-review cases |
+| Market context | Dated ScamShield alerts, ECB reference FX changes and financial news; guarded AI requests for human investigation |
 | Banking insights | AI investigation, liquidity scenarios, historical rule comparisons and reconciliation findings |
 | Security | Scrypt hashes, role/ownership checks, CSRF/origin protection, durable limits, session revocation, TOTP/recovery codes |
 | Financial controls | Atomic settlement, integer cents, row locking, payload-bound request keys, replay protection and reconciled statements |
@@ -144,3 +147,7 @@ npm run package:verify
 The source archive is releases/greenlink-digital-bank-2.11.4.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
 
 See [banking agents](docs/banking-agents.md), [fraud scoring contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md) and [APIs](docs/api.md).
+
+### Company transaction dashboards
+
+Ask the popup assistant: "Generate a transaction activity dashboard with Harbour Supplies for the last 30 days." Open its dashboard action to view received, paid and net SGD totals, monthly activity, status counts and transaction receipts. You can also use **Company activity** in the navigation and change its company/date filters. The dashboard only includes your own accounts, even for administrators; ambiguous counterparty names require a selection. See [company activity documentation](docs/company-activity.md).

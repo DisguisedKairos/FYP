@@ -15,6 +15,8 @@ Version 2.7.0 adds five features to the existing DFT banking application. No onb
 | AI rule impact analysis | Bank administrators | Banking insights: choose a rule, proposed threshold/status/action and lookback |
 | Reconciliation investigation | Customers: owned records; administrators: bank operations | Banking insights |
 
+See [daily market and scam context](market-context.md) for official public feeds and the assistant's guarded human-review requests.
+
 ## Provider and startup
 
 Every assistant and insight report requires the configured AI provider. OpenAI is the default; there is no offline report engine, deterministic-only AI simulation or automatic fallback. Verified reads, arithmetic, draft validation and financial controls remain application tools.
@@ -63,3 +65,7 @@ The explicit agent demonstration creates a disposable PostgreSQL schema using `T
 Administrators can open **AI audit log** or **View AI audit** on their responses/reports to inspect model call attempts and saved tool evidence. Customer navigation, assistant responses and insight reports do not show audit links. A customer opening `/ai-audit` returns to the dashboard, and direct audit API requests receive 403. New runs include a prompt-template digest, request count and final narrative safety outcome (validated evidence, help without banking claims, or withheld interpretation). Optional narrative repair is identified separately in the request timeline. Raw rejected prose and hidden thoughts are never copied into the new log. A model request can complete while its suggested tool or narrative is refused by the application. Failed attempts and unavailable-model checks are visible without pretending analysis succeeded.
 
 The audit reuses agent_runs, agent_tool_calls, fraud_assessments, fraud_screenings and append-only audit_log. No new database migration or duplicate evidence table is needed. Staff payment/monitoring access does not grant access to another user's assistant records. Read-only evidence endpoints remain available when OpenAI is unavailable. See [API filters and permissions](api.md#ai-audit-log-2110).
+
+## Company activity dashboards
+
+The assistant can generate an owned transaction dashboard for a named company or biller using get_company_activity. Ask "Generate a dashboard for transaction activity with Harbour Supplies for the last 30 days", then choose **Open company dashboard**. Ambiguous names return choices. The dashboard shows completed incoming/outgoing/net amounts, payment statuses, monthly activity and paginated receipts, with editable Singapore date filters. See [Company activity](company-activity.md) for matching and access limits.

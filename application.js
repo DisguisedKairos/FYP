@@ -8,6 +8,7 @@ const { createAuth, assertCurrentUser } = require('./banking/auth');
 const security = require('./banking/security');
 const ledger = require('./banking/ledger');
 const history = require('./banking/history');
+const companyActivity = require('./banking/company-activity');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
 const { createAgents } = require('./banking/agents');
@@ -42,7 +43,7 @@ function accountName(value) {
 function serveFrontend(app) {
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
   app.get('/assistant', (_req, res) => res.redirect(302, '/dashboard?chat=open'));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/company-activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
 }
 
@@ -56,7 +57,7 @@ async function createApplication(options = {}) {
   if (options.seed ?? process.env.SEED_DEMO === 'true') await seedDemo(db, { now });
   const auth = createAuth({ db, now, publicOrigin, secureCookies: publicOrigin?.startsWith('https://'), authEncryptionKey: options.authEncryptionKey ?? process.env.AUTH_ENCRYPTION_KEY });
   const riskClient = options.riskClient || createRiskClient({ db });
-  const agents = createAgents({ db, now, ...(options.agentModel ? { model: options.agentModel } : {}) });
+  const agents = createAgents({ db, now, ...(options.agentModel ? { model: options.agentModel } : {}), ...(options.marketContext ? { marketContext: options.marketContext } : {}) });
   const app = express();
   app.disable('x-powered-by');
   app.set('trust proxy', configuredProxy);
@@ -116,6 +117,7 @@ async function createApplication(options = {}) {
     return { security: { mfaEnabled: Boolean(mfa?.enabled_at), events: events.map(row => ({ id: String(row.id), type: row.event_type, createdAt: new Date(row.created_at).toISOString() })) } };
   });
   route('get', '/api/dashboard', async req => ({ ...await history.dashboard(db, req.banking.user.id, { now }), user: security.publicUser(req.banking.user) }));
+  route('get', '/api/company-activity', async req => ({ dashboard: await companyActivity.dashboard(db, req.banking.user, query(req), { now }) }));
   route('get', '/api/transactions', req => history.list(db, req.banking.user, query(req)));
   route('get', '/api/transactions/export', async (req, res) => {
     const result = await history.exportCsv(db, req.banking.user, query(req), now);

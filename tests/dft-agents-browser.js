@@ -228,3 +228,57 @@ test('Mobile popup clears session data and rejects a delayed reply after another
  await page.press('Escape');assert.equal(await page.evaluate('document.activeElement.classList.contains("assistant-launcher")'),true);
  assert.deepEqual(page.errors,[]);
 });
+
+
+test('Daily market review in the popup queues suspicious owned payments for independent staff without showing evidence panels',async t=>{
+ const {contextFixture,marketModel}=require('./dft-market-fixtures');
+ const f=await fixture(t,{agentModel:marketModel(),marketContext:{get:async()=>contextFixture()}}),client=f.client();await client.login('jamie@greenlink.demo');
+ const source=(await client.dashboard()).accounts[0];
+ const paid=await client.request('/api/transfers',{method:'POST',body:{fromAccountId:source.id,toAccountNumber:'1020001001',amount:'100.00',description:'Investment trading top-up',requestId:require('node:crypto').randomUUID()}});assert.equal(paid.status,200);
+ const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+ const page=await launchChrome(t,{width:390,height:844,mobile:true});await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#auth-form")');
+ const login=async email=>{await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');};
+ await login('jamie@greenlink.demo');await page.click('[data-action="assistant-toggle"]');await page.click('[data-assistant-suggestion="Check my transactions for fraud using daily market trends"]');
+ await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("referred") && !document.querySelector("#assistant-form button[type=submit]").disabled');
+ const reply=await page.evaluate('document.querySelector(".from-assistant:last-child").textContent');assert.match(reply,/USD\/SGD/);assert.match(reply,/ScamShield/);assert.match(reply,/Human review requested/);assert.doesNotMatch(reply,/Evidence for this response|\[E\d+\]/);
+ assert.equal(await page.evaluate('!!document.querySelector(".assistant-evidence,[data-ai-audit-id]")'),false);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+ await page.click('[data-action="assistant-close"]');await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');await login('reviewer@greenlink.demo');
+ await page.click('[data-action="menu-open"]');await page.click('[data-nav="fraud"]');await page.waitFor('!!document.querySelector("[data-fraud-case]")');await page.click('[data-fraud-case]');
+ await page.waitFor('document.querySelector("#modal").textContent.includes("qualitative human review")');assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/No new numeric fraud score/);assert.ok(await page.evaluate('!!document.querySelector("[data-claim-fraud-case]")'));
+ assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);assert.deepEqual(page.errors,[]);
+});
+
+
+test('Assistant opens company activity dashboards on mobile with owned totals, ambiguity choices and safe refreshes',async t=>{
+  const agentModel={mode:'openai',model:'controlled-company-browser',inspect:async()=>({available:true,mode:'openai',model:'controlled-company-browser'}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'Open the company dashboard to inspect your recorded activity [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_company_activity',arguments:{company:'Harbour Supplies'}}}]}};
+  const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
+  await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
+  await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
+  const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+  await page.click('[data-action="assistant-toggle"]');await page.fill('#assistant-message','Generate a transaction activity dashboard with Harbour Supplies for the last 30 days');await page.click('#assistant-form button[type=submit]');
+  await page.waitFor('!!document.querySelector(".from-assistant:last-child [data-assistant-action]")');
+  assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response/);
+  await page.click('.from-assistant:last-child [data-assistant-action]');await page.waitFor('location.pathname==="/company-activity" && !!document.querySelector("[data-company-dashboard]")');
+  assert.equal(await page.evaluate('new URL(location.href).searchParams.get("company")'),'Harbour Supplies Pte. Ltd.');
+  assert.match(await page.evaluate('document.querySelector("[data-company-dashboard]").textContent'),/Harbour Supplies Pte. Ltd\.[\s\S]*85\.00/);
+  assert.equal(await page.evaluate('document.querySelectorAll(".company-transactions tbody tr").length'),1);
+  assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+  await page.click('.company-transactions [data-transaction]');await page.waitFor('document.querySelector("#modal").open && !!document.querySelector("#modal .review-list")');await page.click('#modal [data-action="close-dialog"]');
+  await page.fill('#company-name','Pte. Ltd.');await page.click('#company-activity-filters button[type=submit]');await page.waitFor('document.querySelector(".company-choices h2")?.textContent==="Choose a company."');
+  assert.ok(await page.evaluate('document.querySelectorAll("[data-company-choice]").length>=3'));
+  await page.click('[data-company-choice="Acme Trading Pte. Ltd."]');await page.waitFor('document.querySelector(".company-summary h2")?.textContent==="Acme Trading Pte. Ltd."');
+  assert.match(await page.evaluate('document.querySelector(".company-metrics").textContent'),/5,200\.00/);
+  await page.navigate(await page.evaluate('location.href'));await page.waitFor('document.querySelector(".company-summary h2")?.textContent==="Acme Trading Pte. Ltd."');
+  await page.evaluate('window.originalCompanyFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.originalCompanyFetch(...args);if(String(args[0]).includes("/company-activity?") && new URL(args[0],location.origin).searchParams.get("company")==="Studio North")await new Promise(resolve=>{window.releaseCompanyResponse=resolve;});return response;};');
+  await page.fill('#company-name','Studio North');await page.click('#company-activity-filters button[type=submit]');await page.waitFor('!!window.releaseCompanyResponse');
+  await page.fill('#company-name','Harbour Supplies');await page.click('#company-activity-filters button[type=submit]');await page.waitFor('document.querySelector(".company-summary h2")?.textContent==="Harbour Supplies Pte. Ltd."');
+  await page.evaluate('window.releaseCompanyResponse();window.fetch=window.originalCompanyFetch;');
+  await page.waitFor('document.querySelector("#company-activity-results").getAttribute("aria-busy")==="false"');
+  assert.equal(await page.evaluate('document.querySelector(".company-summary h2").textContent'),'Harbour Supplies Pte. Ltd.');
+  await page.fill('#company-name','Not A Customer Company');await page.click('#company-activity-filters button[type=submit]');await page.waitFor('document.querySelector(".company-choices h2")?.textContent==="No matching counterparty."');
+  assert.equal(await page.evaluate('document.querySelectorAll("[data-company-choice],[data-company-dashboard]").length'),0);
+  await page.fill('#company-name','Harbour Supplies');await page.click('#company-activity-filters button[type=submit]');await page.waitFor('!!document.querySelector("[data-company-dashboard]")');
+  await page.screenshot(path.resolve('test-results','company-activity-mobile.png'));
+  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
+  assert.deepEqual(page.errors,[]);
+});
