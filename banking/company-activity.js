@@ -35,8 +35,12 @@ function requestedPeriod(message,{now=Date.now}={}){
   // can be selected in its date form rather than guessed by the model.
   return {};
 }
-async function dashboard(db,user,params=new URLSearchParams(),{now=Date.now}={}){
-  for(const key of params.keys())if(!['company','from','to','page','pageSize'].includes(key))throw new HttpError(400,'Unsupported company activity filter.');
+async function dashboard(db,user,params=new URLSearchParams(),{now=Date.now,exactCompany=false}={}){
+  for(const key of params.keys())if(!['company','scope','from','to','page','pageSize'].includes(key))throw new HttpError(400,'Unsupported company activity filter.');
+  const scope=parameter(params,'scope');
+  if(scope && !['all','company'].includes(scope))throw new HttpError(400,'Choose all companies or a specific company.');
+  if(scope==='all' && parameter(params,'company'))throw new HttpError(400,'An all-company summary cannot also select a company.');
+  if(scope==='all')return summary(db,user,params,{now});
   const query=parameter(params,'company').trim().replace(/\s+/g,' ');
   if(query && (query.length<2 || query.length>120 || /[\x00-\x1f\x7f]/.test(query)))throw new HttpError(400,'Enter a company name of 2-120 characters.');
   const range=period(params,now),paging=pagination(params);
@@ -51,7 +55,7 @@ async function dashboard(db,user,params=new URLSearchParams(),{now=Date.now}={})
     let selected=exact;
     // An exact label can sort past the bounded suggestion page.
     if(query && !selected){selected=(await client.query('SELECT MIN('+LABEL+') AS name '+BASE+' AND lower('+LABEL+')=lower($2) GROUP BY lower('+LABEL+')',[user.id,query])).rows[0];}
-    if(!selected && query && candidates.length===1)selected=candidates[0];
+    if(!exactCompany && !selected && query && candidates.length===1)selected=candidates[0];
     const common={query,period:{from:range.from,to:range.to,timeZone:'Asia/Singapore',dateBasis:'Completed date for settled payments; request date for pending or rejected payments.'},currency:'SGD',generatedAt:new Date(now()).toISOString(),scope:'Only transactions on your accounts. Names are grouped by recorded counterparty label, not verified company identity. Own-account transfers and opening balances are excluded.'};
     if(!selected)return {...common,status:query?(candidates.length?'ambiguous':'not_found'):'choose_company',companies:candidates.slice(0,20).map(row=>row.name),moreCompanies:candidates.length>20};
     const paramsValues=[user.id,selected.name,range.start,range.end];
@@ -69,13 +73,38 @@ async function dashboard(db,user,params=new URLSearchParams(),{now=Date.now}={})
     return {...common,status:'ready',company:selected.name,totals:{incomeCents,outgoingCents,netCents:cents(BigInt(sums.incoming)-BigInt(sums.outgoing)),completedCount:cents(sums.completed),pendingCount:cents(sums.pending),rejectedCount:cents(sums.rejected)},months,transactions:rows.map(transactionView),pagination:{page,pageSize:paging.pageSize,total,totalPages}};
   });
 }
-async function assistantDashboard(db,user,{company},message,{now=Date.now}={}){
-  if(typeof company!=='string' || !normalize(company) || !normalize(message).includes(normalize(company)))throw new HttpError(400,'Use a company name from your message.');
-  const data=await dashboard(db,user,new URLSearchParams({company,...requestedPeriod(message,{now}),pageSize:'10'}),{now});
-  const filters={company:data.company||data.query,from:data.period.from,to:data.period.to};
-  const actions=data.status==='ambiguous'?data.companies.slice(0,8).map(name=>({type:'navigate',page:'companyActivity',filters:{...filters,company:name},label:'View '+name})):[{type:'navigate',page:'companyActivity',filters,label:'Open company dashboard'}];
-  const items=data.status==='ready'?[{title:'Money received from '+data.company,amountCents:data.totals.incomeCents},{title:'Money paid to '+data.company,amountCents:data.totals.outgoingCents},{title:'Net movement with '+data.company,amountCents:data.totals.netCents},{title:'Completed payments',subtitle:String(data.totals.completedCount)},{title:'Awaiting review',subtitle:String(data.totals.pendingCount)},{title:'Rejected payments',subtitle:String(data.totals.rejectedCount)}]:[{title:data.status==='ambiguous'?'Choose a recorded company name':data.status==='not_found'?'No matching company in your transaction history':'Choose a company',subtitle:data.scope}];
-  const receipts=data.transactions?.map(t=>({id:t.id,type:t.type,description:t.description,reference:t.reference,amountCents:t.amountCents,status:t.status,date:t.completedAt||t.requestedAt}));
-  return {...data,...(receipts?{transactions:receipts}:{}),actions,items:[...items,{title:'Dashboard period',subtitle:data.period.from+' to '+data.period.to+' (SGT)'}]};
+
+function monetary(row){
+  return {incomeCents:cents(row.incoming),outgoingCents:cents(row.outgoing),netCents:cents(BigInt(row.incoming)-BigInt(row.outgoing)),completedCount:cents(row.completed),pendingCount:cents(row.pending),rejectedCount:cents(row.rejected)};
 }
-module.exports={dashboard,assistantDashboard,requestedPeriod};
+const SUMS="count(*) AS total,count(*) FILTER(WHERE t.status='completed') AS completed,count(*) FILTER(WHERE t.status='pending_review') AS pending,count(*) FILTER(WHERE t.status='rejected') AS rejected,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.status='completed' AND t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.status='completed' AND t.amount_cents<0),0) AS outgoing";
+async function summary(db,user,params,{now=Date.now}={}){
+  const range=period(params,now),paging=pagination(params),values=[user.id,range.start,range.end];
+  return snapshot(db,async client=>{
+    await assertCurrentUser(client,user);
+    const where=BASE+' AND '+LABEL+"<>'' AND "+WHEN+'>=$2::timestamptz AND '+WHEN+'<$3::timestamptz';
+    const total=(await client.query('SELECT '+SUMS+',count(DISTINCT lower('+LABEL+')) AS companies '+where,values)).rows[0];
+    const count=cents(total.companies),totalPages=Math.ceil(count/paging.pageSize),page=totalPages?Math.min(paging.page,totalPages):1;
+    const companies=(await client.query('SELECT MIN('+LABEL+') AS company,'+SUMS+' '+where+' GROUP BY lower('+LABEL+') ORDER BY SUM(abs(t.amount_cents)) FILTER(WHERE t.status=\'completed\') DESC NULLS LAST,lower('+LABEL+') LIMIT $4 OFFSET $5',[...values,paging.pageSize,(page-1)*paging.pageSize])).rows.map(row=>({company:row.company,...monetary(row),transactionCount:cents(row.total)}));
+    const monthly=(await client.query("SELECT to_char("+WHEN+" AT TIME ZONE 'Asia/Singapore','YYYY-MM') AS month,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0) AS outgoing "+where+" AND t.status='completed' GROUP BY month",values)).rows;
+    const months=[];for(let month=range.from.slice(0,7);month<=range.to.slice(0,7);){const row=monthly.find(r=>r.month===month);months.push({month,incomeCents:cents(row?.incoming||0),outgoingCents:cents(row?.outgoing||0)});const date=new Date(month+'-01T00:00:00Z');date.setUTCMonth(date.getUTCMonth()+1);month=date.toISOString().slice(0,7);}
+    return {status:'ready',scopeType:'all',company:'All companies',currency:'SGD',period:{from:range.from,to:range.to,timeZone:'Asia/Singapore',dateBasis:'Completed date for settled payments; request date for pending or rejected payments.'},scope:'Only transactions on your accounts. Companies and billers are grouped by recorded counterparty name, not verified legal identity. Own-account transfers and opening balances are excluded.',generatedAt:new Date(now()).toISOString(),totals:{...monetary(total),companyCount:count,transactionCount:cents(total.total)},months,companies,pagination:{page,pageSize:paging.pageSize,total:count,totalPages}};
+  });
+}
+function definition(data,message=''){
+  const selected=requestedPeriod(message),relative=/\b(?:last|past)\s+(\d+)\s+days?\b/i.exec(message);
+  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period:relative?{kind:'rolling',days:Number(relative[1])}:!selected.from && !selected.to?{kind:'rolling',days:90}:{kind:'fixed',from:data.period.from,to:data.period.to}};
+}
+function assistantResult(data,viewDefinition){
+  const filters={company:data.scopeType==='all'?'':data.company||data.query,scope:data.scopeType==='all'?'all':'company',from:data.period.from,to:data.period.to};
+  const actions=data.status==='ambiguous'?data.companies.slice(0,8).map(name=>({type:'navigate',page:'companyActivity',filters:{...filters,company:name},label:'View '+name})):[{type:'navigate',page:'companyActivity',filters,label:'Open company dashboard'}];
+  const items=data.status==='ready'?[{title:'Money received - '+data.company,amountCents:data.totals.incomeCents},{title:'Money paid - '+data.company,amountCents:data.totals.outgoingCents},{title:'Net movement - '+data.company,amountCents:data.totals.netCents},{title:'Completed payments',subtitle:String(data.totals.completedCount)},{title:'Awaiting review',subtitle:String(data.totals.pendingCount)},{title:'Rejected payments',subtitle:String(data.totals.rejectedCount)},...(data.scopeType==='all'?data.companies.slice(0,8).map(row=>({title:row.company,amountCents:row.netCents,subtitle:'Received '+(row.incomeCents/100).toFixed(2)+' SGD; paid '+(row.outgoingCents/100).toFixed(2)+' SGD'})):[])]:[{title:data.status==='ambiguous'?'Choose a recorded company name':data.status==='not_found'?'No matching company in your transaction history':'Choose a company',subtitle:data.scope}];
+  const receipts=data.transactions?.map(t=>({id:t.id,type:t.type,description:t.description,reference:t.reference,amountCents:t.amountCents,status:t.status,date:t.completedAt||t.requestedAt}));
+  return {...data,...(receipts?{transactions:receipts}:{}),actions,items:[...items,{title:'Dashboard period',subtitle:data.period.from+' to '+data.period.to+' (SGT)'}],...(data.status==='ready'?{viewDefinition}: {})};
+}
+async function assistantDashboard(db,user,{company},message,{now=Date.now}={}){
+  if(company!==undefined && (typeof company!=='string' || !normalize(company) || !normalize(message).includes(normalize(company))))throw new HttpError(400,'Use a company name from your message.');
+  const data=await dashboard(db,user,new URLSearchParams({...company?{company}:{scope:'all'},...requestedPeriod(message,{now}),pageSize:'10'}),{now});
+  return assistantResult(data,data.status==='ready'?definition(data,message):null);
+}
+module.exports={dashboard,assistantDashboard,assistantResult,requestedPeriod,definition};

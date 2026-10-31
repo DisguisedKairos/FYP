@@ -14,6 +14,7 @@ export const pages = {
   schedules: { path: '/scheduled-payments', label: 'Scheduled payments', icon: 'calendar' },
   activity: { path: '/activity', label: 'Activity', icon: 'activity' },
   companyActivity: { path: '/company-activity', label: 'Company activity', icon: 'activity' },
+  dashboardViews: { path: '/saved-dashboards', label: 'Saved dashboards', icon: 'grid' },
   notifications: { path: '/notifications', label: 'Notifications', icon: 'bell' },
   onboarding: { path: '/business-onboarding', label: 'Business onboarding', icon: 'shield', admin: true },
   fraud: { path: '/fraud-monitoring', label: 'Fraud monitoring', icon: 'shield', admin: true },
@@ -23,7 +24,7 @@ export const emptyFilters = () => ({ search: '', type: '', account: '', status: 
 export function routeFromLocation() {
   const url = new URL(location.href);
   const entry = Object.entries(pages).find(([, value]) => value.path === url.pathname);
-  return { page: entry?.[0] ?? 'overview', account: url.searchParams.get('account') ?? '', ...(entry?.[0]==='companyActivity'?Object.fromEntries(['company','from','to'].map(key=>[key,url.searchParams.get(key)||''])):{}) };
+  return { page: entry?.[0] ?? 'overview', account: url.searchParams.get('account') ?? '', ...(entry?.[0]==='companyActivity'?Object.fromEntries(['company','scope','savedView','from','to'].map(key=>[key,url.searchParams.get(key)||''])):{}) };
 }
 export const state = {
   data: null, user: null, csrf: '', demoAvailable: false, route: routeFromLocation(), intendedRoute: null,
@@ -137,7 +138,7 @@ export function clearBankingState() {
   cancelDashboardReads();ui.cancelReads?.();
   closeDialog(true);
   modal.replaceChildren();
-  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, companyActivity:null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, companyActivity:null, dashboardViews:null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
   ui.resetAssistant?.();
 }
@@ -186,13 +187,13 @@ export async function loadDashboard({ render = true } = {}) {
 export function routeUrl(route) {
   const params=new URLSearchParams();
   if(route.account)params.set('account',route.account);
-  if(route.page==='companyActivity')for(const key of ['company','from','to'])if(route[key])params.set(key,route[key]);
+  if(route.page==='companyActivity')for(const key of ['company','scope','savedView','from','to'])if(route[key])params.set(key,route[key]);
   return (pages[route.page]?.path ?? '/dashboard')+(params.size?'?'+params:'');
 }
-export function navigate(page, { account = '', company = '', from = '', to = '', replace = false, focus = true } = {}) {
+export function navigate(page, { account = '', company = '', scope = '', savedView = '', from = '', to = '', replace = false, focus = true } = {}) {
   if (!pages[page] || state.modalBusy || state.signingOut) return;
   if (pages[page].admin && state.user?.role !== 'admin') page = 'overview';
-  state.route = { page, account: String(account), ...(page==='companyActivity'?{company:String(company),from:String(from),to:String(to)}:{}) };
+  state.route = { page, account: String(account), ...(page==='companyActivity'?{company:String(company),scope:String(scope),savedView:String(savedView),from:String(from),to:String(to)}:{}) };
   state.menuOpen = false;
   document.body.classList.remove('menu-open');
   closeDialog();

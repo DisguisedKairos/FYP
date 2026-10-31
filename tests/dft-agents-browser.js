@@ -55,6 +55,7 @@ test('Bank staff investigate payments and preview rules with persisted evidence 
   assert.match(await page.evaluate('document.querySelector("[data-model-activity]").textContent'),/AI model activity/);
   assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/current configured model/);
   await page.click('[data-investigate-transaction]');await page.waitFor('location.pathname==="/banking-insights" && document.querySelector("[data-agent-report]")?.textContent.includes("'+held.data.transaction.id+'")');
+  await page.waitFor('document.querySelectorAll("#agent-rule option").length===5 && !document.querySelector("#agent-simulation-form fieldset").disabled');
   await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
   assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/changed decisions/);
   assert.equal(await page.evaluate('document.querySelector("#agent-threshold").value'),'50');
@@ -281,4 +282,54 @@ test('Assistant opens company activity dashboards on mobile with owned totals, a
   await page.screenshot(path.resolve('test-results','company-activity-mobile.png'));
   assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
   assert.deepEqual(page.errors,[]);
+});
+
+
+test('Assistant saves an all-company dashboard that reopens across logins, refreshes and stays private on mobile',async t=>{
+ const agentModel={mode:'openai',model:'controlled-save-dashboard',inspect:async()=>({available:true}),chat:async messages=>{
+  const calls=messages.filter(m=>m.role==='tool');const name=!calls.length?'get_company_activity':calls.at(-1).tool_name==='get_company_activity'?'save_company_dashboard':null;
+  return name?{role:'assistant',content:'',tool_calls:[{function:{name,arguments:{}}}]}:{role:'assistant',content:'Your private dashboard is saved. Open it to review the company activity [E2].'};
+ }};
+ const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
+ async function login(email){await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
+ async function logout(){await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');}
+ await login('alex@greenlink.demo');await page.click('[data-action="assistant-toggle"]');await page.fill('#assistant-message','Summarize my transactions with other companies in a dashboard and save it for future use');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("Dashboard saved") && !document.querySelector("#assistant-form button[type=submit]").disabled');
+ assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response/);
+ const action=await page.evaluate('[...document.querySelectorAll(".from-assistant:last-child [data-assistant-action]")].find(b=>b.textContent.includes("Open saved dashboard")).dataset.assistantAction');await page.click('[data-assistant-action="'+action+'"]');
+ await page.waitFor('!!document.querySelector(".saved-view-notice") && document.querySelectorAll(".company-breakdown tbody tr").length===5');
+ const savedId=await page.evaluate('new URL(location.href).searchParams.get("savedView")');assert.ok(savedId);
+ assert.match(await page.evaluate('document.querySelector(".saved-view-notice").textContent'),/Latest 90 days/);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+ await page.navigate(await page.evaluate('location.href'));await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ await visit(page,f.baseUrl,'/saved-dashboards');await page.waitFor('document.querySelectorAll(".saved-dashboard-card").length===1');
+ await logout();await login('jamie@greenlink.demo');await visit(page,f.baseUrl,'/saved-dashboards');await page.waitFor('document.querySelector("#dashboard-view-list").textContent.includes("No saved dashboards")');assert.equal(await page.evaluate('document.querySelectorAll(".saved-dashboard-card").length'),0);
+ await logout();await login('alex@greenlink.demo');await visit(page,f.baseUrl,'/saved-dashboards');await page.waitFor('document.querySelectorAll(".saved-dashboard-card").length===1');
+ await page.click('[data-saved-dashboard="'+savedId+'"]');await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ const client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];assert.equal((await client.request('/api/payments',{method:'POST',body:{fromAccountId:account.id,billerId:'pub',reference:'SAVED-VIEW-UPDATE',amount:'1.25',requestId:randomUUID()}})).status,200);
+ await page.navigate(await page.evaluate('location.href'));await page.waitFor('document.querySelectorAll(".company-breakdown tbody tr").length===6');assert.match(await page.evaluate('document.querySelector(".company-breakdown").textContent'),/PUB/);
+ await page.screenshot(path.resolve('test-results','saved-dashboard-mobile.png'));
+ await visit(page,f.baseUrl,'/company-activity?scope=all');await page.waitFor('!!document.querySelector("#save-dashboard-form")');await page.fill('#dashboard-title','<img src=x onerror=alert(1)>');await page.click('#save-dashboard-form button[type=submit]');await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ // Saving identical filters reuses the existing view instead of creating bloat.
+ assert.equal(Number((await f.db.query('SELECT count(*) FROM saved_dashboard_views')).rows[0].count),1);
+ const today=await page.evaluate("import('/js/core.js').then(m=>m.singaporeDay())");
+ await visit(page,f.baseUrl,'/company-activity?scope=all&from='+today.slice(0,7)+'-01&to='+today);await page.waitFor('!!document.querySelector("#save-dashboard-form")');await page.fill('#dashboard-title','<img src=x onerror=alert(1)>');await page.click('#save-dashboard-form button[type=submit]');await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ await visit(page,f.baseUrl,'/saved-dashboards');await page.waitFor('document.querySelectorAll(".saved-dashboard-card").length===2');assert.equal(await page.evaluate('document.querySelectorAll(".saved-dashboard-card img").length'),0);assert.match(await page.evaluate('document.querySelector("#dashboard-view-list").textContent'),/<img src=x onerror=alert\(1\)>/);
+ const otherId=await page.evaluate('[...document.querySelectorAll("[data-remove-dashboard]")].map(b=>b.dataset.removeDashboard).find(id=>id!=='+JSON.stringify(savedId)+')');await page.click('[data-remove-dashboard="'+otherId+'"]');await page.waitFor('document.querySelectorAll(".saved-dashboard-card").length===1');
+ await visit(page,f.baseUrl,'/saved-dashboards');await page.waitFor('!!document.querySelector("[data-remove-dashboard]")');await page.click('[data-remove-dashboard="'+savedId+'"]');await page.waitFor('document.querySelector("#dashboard-view-list").textContent.includes("No saved dashboards")');
+ assert.deepEqual(page.errors,[]);
+});
+
+
+test('Rules arriving during another insights form edit initialize a valid preview without replacing focus',async t=>{
+ const {f,page}=await open(t,1280,'reviewer@greenlink.demo');
+ await page.evaluate('window.ruleFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith("/fraud/rules"))await new Promise(resolve=>window.releaseRules=resolve);return window.ruleFetch(...args);};');
+ await page.evaluate("import('/js/core.js').then(m=>m.navigate('agents'))");
+ await page.waitFor('!!window.releaseRules && !!document.querySelector("#agent-simulation-form fieldset[disabled]")');
+ assert.equal(await page.evaluate('document.querySelector("#agent-rule").value'),'');
+ await page.fill('#agent-days','14');await page.evaluate('window.releaseRules();window.fetch=window.ruleFetch;');
+ await page.waitFor('document.querySelectorAll("#agent-rule option").length===5 && !document.querySelector("#agent-simulation-form fieldset").disabled');
+ assert.equal(await page.evaluate('document.activeElement.id'),'agent-days');assert.equal(await page.evaluate('document.querySelector("#agent-days").value'),'14');
+ assert.equal(await page.evaluate('document.querySelector("#agent-rule").value'),'high_value');assert.equal(await page.evaluate('document.querySelector("#agent-simulation-form").elements.enabled.checked'),true);
+ await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
+ assert.deepEqual(page.errors,[]);
 });

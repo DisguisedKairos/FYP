@@ -48,6 +48,7 @@ export async function loadNotifications() {
 }
 export async function loadExtras(page, { force = false } = {}) {
   if(page==='aiAudit')return ui.loadAiAudit?.();
+  if(page==='dashboardViews')return ui.loadDashboardViews?.();
   if(page==='companyActivity')return ui.loadCompanyActivity?.();
   if(page==='agents')return ui.loadAgents?.();
   if(page==='onboarding')return ui.loadBusinessApplications?.();

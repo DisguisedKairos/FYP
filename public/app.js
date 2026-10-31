@@ -1,4 +1,4 @@
-import {companyActivityPage,loadCompanyActivity,cancelCompanyActivity,submitCompanyActivity,chooseCompanyActivity} from './js/company-activity.js';
+import {companyActivityPage,dashboardViewsPage,loadDashboardViews,saveCompanyView,openSavedDashboard,removeSavedDashboard,loadCompanyActivity,cancelCompanyActivity,submitCompanyActivity,chooseCompanyActivity} from './js/company-activity.js';
 import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
 import { renderAssistant, toggleAssistant, closeAssistant, resetAssistant, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
@@ -14,9 +14,10 @@ import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisable
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,cancelBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
 Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { stopBackgroundReads(); cancelBusinessApplications(); cancelCompanyActivity(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
-Object.assign(extraViews,{ companyActivity:companyActivityPage, aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
+Object.assign(extraViews,{ companyActivity:companyActivityPage, dashboardViews:dashboardViewsPage, aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadCompanyActivity=loadCompanyActivity;
+ui.loadDashboardViews=loadDashboardViews;
 ui.loadAgents=loadAgents;
 ui.loadFraudCases=loadFraudCases;
 ui.cancelFraudCases=cancelFraudCases;
@@ -61,6 +62,7 @@ document.addEventListener('submit',async event => {
   if (!form.reportValidity()) return;
   try {
     switch (form.id) {
+      case 'save-dashboard-form': await saveCompanyView(form); break;
       case 'company-activity-filters': submitCompanyActivity(form); break;
       case 'ai-audit-filters': await loadAiAudit({form}); break;
       case 'assistant-form': await sendAssistant(form.elements.message.value); break;
@@ -110,6 +112,8 @@ document.addEventListener('click',async event => {
   if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
+    if (control.dataset.savedDashboard) return openSavedDashboard(control.dataset.savedDashboard);
+    if (control.dataset.removeDashboard) return removeSavedDashboard(control.dataset.removeDashboard);
     if (control.dataset.companyChoice) return chooseCompanyActivity(control.dataset.companyChoice);
     if (control.dataset.aiAuditId) { if(control.closest('#assistant-root'))closeAssistant({focus:false}); if(state.route.page!=='aiAudit')navigate('aiAudit'); return showAiAudit(control.dataset.aiAuditKind,control.dataset.aiAuditId); }
     if (control.dataset.fraudCase) {
@@ -135,6 +139,8 @@ document.addEventListener('click',async event => {
     if (control.dataset.reviewTransaction) return reviewDialog(control.dataset.reviewTransaction);
     if (control.dataset.reviewBusiness) return reviewBusinessDialog(control.dataset.reviewBusiness);
     switch (control.dataset.action) {
+      case 'dashboard-views-retry': await loadDashboardViews(); break;
+      case 'company-all': navigate('companyActivity',{scope:'all'}); break;
       case 'company-activity-retry': await loadCompanyActivity(); break;
       case 'company-activity-prev': await loadCompanyActivity({page:(state.companyActivity?.data?.pagination.page||1)-1}); break;
       case 'company-activity-next': await loadCompanyActivity({page:(state.companyActivity?.data?.pagination.page||1)+1}); break;

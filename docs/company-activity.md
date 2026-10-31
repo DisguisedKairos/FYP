@@ -21,3 +21,18 @@ The same page is available under **Company activity** without using AI. Search f
 The real PostgreSQL functional tests cover two-way transfers, exact/ambiguous/unknown names, bounded suggestions, literal pattern matching, isolation for both customers and administrators, Singapore settlement boundaries, pending/rejected totals, pagination, invalid requests and revoked authorization. The mobile browser test asks the assistant for a dashboard, opens the action, checks the totals and transaction details, selects an ambiguous name, reloads its URL and checks that a slower old response cannot replace the latest company.
 
 Controlled models in tests exercise tool contracts. Production always uses the configured OpenAI model; there is no offline or simulated AI dashboard generator.
+
+
+## All-company summaries and saved views
+
+Ask: "Summarize my transactions with other companies in a dashboard and save it for future use." Omitting a company in get_company_activity produces a complete owned-ledger summary grouped by recorded company/biller name. Monetary totals and the monthly chart cover the full period; the company breakdown is paginated independently. Select a company row to inspect its individual receipts.
+
+The model can call save_company_dashboard only after an explicit save/bookmark request. That tool accepts no model-generated title, SQL, dates or filters: the server uses the unambiguous dashboard retrieved in the same run. A direct "Save this dashboard" follow-up can use the immediately preceding owned dashboard context, subject to the existing conversation expiry and authorization checks. Other intervening topics clear that dashboard context. A claim that a view was saved requires a successful stored receipt.
+
+**Saved dashboards** lists private reusable definitions stored in PostgreSQL, not browser storage. Reopening a view runs the permitted ledger query again, so new receipts and updated statuses appear. A rolling last-N-days view advances with Singapore's calendar day; explicit dates and named-month requests keep their displayed date range. This is a live view, not a financial snapshot or a schedule for generating reports. No AI call is needed merely to reopen one.
+
+Company activity also has a **Save view** form with an editable name. Identical normalized filters reuse the existing bookmark rather than create duplicates; its original name is retained. Each user can keep up to 20 views. Removing one deletes only its saved definition. Saved company definitions use exact historical labels, preventing a partial name from silently switching companies later.
+
+GET/POST /api/dashboard-views list and save the operator's definitions; GET/DELETE /api/dashboard-views/:id reopen and remove them. All are authenticated, writes require the ordinary CSRF/origin protection, and another user's ID returns 404 even for an administrator. Saved creation and removal produce ordinary audit events. Runtime SQL can insert/delete these definitions but cannot edit existing filters.
+
+Apply migration 010_saved_dashboard_views.sql with the migration role and refresh runtime grants using npm run db:migrate before deploying. Existing users, balances, transactions, saved agent evidence and authentication secrets are preserved.

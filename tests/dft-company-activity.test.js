@@ -76,7 +76,7 @@ pg('Assistant generates grounded company dashboard actions and retains private a
  await assert.rejects(agents.detail(users.jamie,response.runId),e=>e.status===404);
  assert.deepEqual(await snapshot(f.db),before);
  const forged=createAgents({db:f.db,model:modelFor('Acme Trading')});await assert.rejects(forged.execute(users.alex,'assistant',{message:'Show a dashboard for Harbour Supplies'}),e=>e.status===400);
- assert.deepEqual(toolSchema('get_company_activity').function.parameters.required,['company']);
+ assert.deepEqual(toolSchema('get_company_activity').function.parameters.required,[]);
 });
 test('Company period parser grounds supported user dates and cash flow evidence accepts the relationship tool',()=>{
  const now=()=>Date.parse('2026-10-31T01:00:00Z');

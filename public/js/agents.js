@@ -27,7 +27,7 @@ export function agentsPage(){
   return heading('Evidence for your next decision.','Investigate payments, plan business liquidity and inspect financial exceptions.','')+'<div class="notice" role="status" data-agent-status>'+esc(notice)+' Reports are saved privately to your signed-in account.</div>'+'<div class="agent-layout"><div class="agent-tools">'+
     (state.data.accounts.length?'<section class="panel service-form"><h2>Liquidity planning</h2><p>Project scheduled outflows and review suggested transfers between your accounts.</p><form id="agent-liquidity-form" data-agent-kind="liquidity"><div class="field"><label for="agent-days">Projection horizon (days)</label><input id="agent-days" name="days" type="number" min="1" max="90" value="30" required></div>'+submit('Project balances')+'</form></section>':'')+
     '<section class="panel service-form"><h2>Reconciliation investigator</h2><p>'+(staff?'Inspect bank-wide balance, schedule and notification exceptions.':'Inspect your business balances and payment exceptions.')+'</p><form id="agent-reconciliation-form" data-agent-kind="reconciliation">'+submit('Investigate exceptions')+'</form></section>'+
-    (staff?'<section class="panel service-form"><h2>Fraud investigation</h2><p>Gather a payment\'s recorded risk evidence and historical comparison.</p><form id="agent-fraud-form" data-agent-kind="fraud_investigation"><div class="field"><label for="agent-transaction">Outgoing transaction ID</label><input id="agent-transaction" name="transactionId" maxlength="150" list="agent-review-options" required><datalist id="agent-review-options">'+(data?.reviews || []).map(t=>'<option value="'+esc(t.id)+'">'+esc(t.description)+'</option>').join('')+'</datalist></div>'+submit('Investigate payment')+'</form></section><section class="panel service-form"><h2>AI rule impact analysis</h2><p>Compare historical decisions before proposing a live policy change.</p><form id="agent-simulation-form" data-agent-kind="rule_simulation"><div class="field"><label for="agent-rule">Rule</label><select id="agent-rule" name="ruleId">'+rules.map(r=>'<option value="'+esc(r.id)+'" '+(r.id===selected?.id?'selected':'')+'>'+esc(r.name)+' ('+esc(r.unit)+')</option>').join('')+'</select></div><div class="field"><label for="agent-threshold">Proposed threshold</label><input id="agent-threshold" name="threshold" type="number" min="0.01" step="0.01" value="'+esc(selected?.threshold || 10000)+'" required></div><div class="field"><label for="agent-rule-action">Proposed action</label><select id="agent-rule-action" name="action"><option value="review" '+(selected?.action==='review'?'selected':'')+'>Hold for review</option><option value="block" '+(selected?.action==='block'?'selected':'')+'>Block</option></select></div><label class="checkbox-field"><input type="checkbox" name="enabled" '+(selected?.enabled?'checked':'')+'>Proposed enabled status</label><div class="field"><label for="agent-lookback">Historical window (days)</label><input id="agent-lookback" name="days" type="number" min="1" max="90" value="30" required></div>'+submit('Preview rule impact')+'</form></section>':'')+
+    (staff?'<section class="panel service-form"><h2>Fraud investigation</h2><p>Gather a payment\'s recorded risk evidence and historical comparison.</p><form id="agent-fraud-form" data-agent-kind="fraud_investigation"><div class="field"><label for="agent-transaction">Outgoing transaction ID</label><input id="agent-transaction" name="transactionId" maxlength="150" list="agent-review-options" required><datalist id="agent-review-options">'+(data?.reviews || []).map(t=>'<option value="'+esc(t.id)+'">'+esc(t.description)+'</option>').join('')+'</datalist></div>'+submit('Investigate payment')+'</form></section><section class="panel service-form"><h2>AI rule impact analysis</h2><p>Compare historical decisions before proposing a live policy change.</p><form id="agent-simulation-form" data-agent-kind="rule_simulation"><fieldset class="agent-rule-fields" '+(!rules.length?'disabled':'')+'><div class="field"><label for="agent-rule">Rule</label><select id="agent-rule" name="ruleId" required>'+rules.map(r=>'<option value="'+esc(r.id)+'" '+(r.id===selected?.id?'selected':'')+'>'+esc(r.name)+' ('+esc(r.unit)+')</option>').join('')+'</select></div><div class="field"><label for="agent-threshold">Proposed threshold</label><input id="agent-threshold" name="threshold" type="number" min="0.01" step="0.01" value="'+esc(selected?.threshold || 10000)+'" required></div><div class="field"><label for="agent-rule-action">Proposed action</label><select id="agent-rule-action" name="action"><option value="review" '+(selected?.action==='review'?'selected':'')+'>Hold for review</option><option value="block" '+(selected?.action==='block'?'selected':'')+'>Block</option></select></div><label class="checkbox-field"><input type="checkbox" name="enabled" '+(selected?.enabled?'checked':'')+'>Proposed enabled status</label><div class="field"><label for="agent-lookback">Historical window (days)</label><input id="agent-lookback" name="days" type="number" min="1" max="90" value="30" required></div>'+submit('Preview rule impact')+'</fieldset></form></section>':'')+
     '</div><div class="agent-results"><div class="error-message" role="alert">'+esc(w.error)+'</div>'+(w.busy?'<section class="panel loading-state" role="status"><p>Gathering evidence. AI analysis can take up to one minute.</p></section>':reportHtml(w.run) || '<section class="panel empty-state"><h2>Start an investigation.</h2><p>Choose a tool to generate an evidence report. Financial changes use the normal banking forms.</p></section>')+'<section class="panel service-form"><div class="section-heading"><h2>Your recent investigations</h2><button type="button" class="text-button" data-action="agents-refresh">Refresh</button></div>'+(data?.runs?.length?'<ul class="agent-run-list">'+data.runs.map(r=>'<li><button type="button" class="text-button" data-agent-run="'+esc(r.id)+'">'+esc(r.title)+'</button><small>'+esc(r.status)+' / '+esc(r.engine)+' / '+fullDate(r.createdAt)+'</small></li>').join('')+'</ul>':'<p>No saved investigations yet.</p>')+'</section></div></div>';
 }
 export async function loadAgents(){
@@ -40,11 +40,12 @@ export async function loadAgents(){
     const [status,runs,rules,reviews]=await Promise.all(requests);
     if(!active())return;
     state.remote.agents={data:{agent:status.agent,runs:runs.runs,rules,reviews:reviews?.reviews || []}};
-    paint();
+    hydrateAgentRules();paint();
   }catch(error){if(!active())return;if(await recoverSession(error))return;w.error=error.message;paint();}
 }
 export async function submitAgent(form){
   const w=workspace();if(w.busy)return;
+  if(form.dataset.agentKind==='rule_simulation' && (!form.elements.ruleId.value || form.querySelector('fieldset')?.disabled))return;
   rememberAgentForm(form);detailGeneration++;
   const values=Object.fromEntries(new FormData(form)),kind=form.dataset.agentKind,userId=state.user.id;
   if(values.days)values.days=Number(values.days);
@@ -65,7 +66,7 @@ export async function showAgentRun(id){
 export function openAgentDraft(index){const action=workspace().run?.report?.actions?.[Number(index)];if(action)applyBankingAction(action);}
 export function selectAgentRule(form){const rule=state.remote.agents?.data?.rules?.rules.find(r=>r.id===form.elements.ruleId.value);if(!rule)return;form.elements.threshold.value=rule.threshold;form.elements.action.value=rule.action;form.elements.enabled.checked=rule.enabled;rememberAgentForm(form);}
 export function rememberAgentForm(form){
-  if(!form?.dataset.agentKind)return;
+  if(!form?.dataset.agentKind || (form.dataset.agentKind==='rule_simulation' && (!form.elements.ruleId.value || form.querySelector('fieldset')?.disabled)))return;
   const w=workspace();w.forms ||= {};
   w.forms[form.dataset.agentKind]={...Object.fromEntries(new FormData(form)),...(form.elements.enabled?{enabled:form.elements.enabled.checked}:{})};
 }
@@ -81,4 +82,16 @@ export async function investigateFromQueue(id){
   const form=document.querySelector('#agent-fraud-form');
   if(!form || state.route.page!=='agents')return;
   form.elements.transactionId.value=id;await submitAgent(form);
+}
+
+// Rule data can arrive while another investigation form has keyboard focus.
+// Populate just the disabled rule controls so that typing is not interrupted.
+function hydrateAgentRules(){
+ const form=document.querySelector('#agent-simulation-form'),fieldset=form?.querySelector('fieldset'),rules=state.remote.agents?.data?.rules?.rules||[];
+ if(!fieldset?.disabled || !rules.length)return;
+ const saved=workspace().forms?.rule_simulation||{},selected=rules.find(r=>r.id===saved.ruleId)||rules.find(r=>r.id==='high_value')||rules[0];
+ form.elements.ruleId.innerHTML=rules.map(r=>'<option value="'+esc(r.id)+'">'+esc(r.name)+' ('+esc(r.unit)+')</option>').join('');
+ form.elements.ruleId.value=selected.id;form.elements.threshold.value=saved.threshold??selected.threshold;
+ form.elements.action.value=saved.action??selected.action;form.elements.enabled.checked=saved.enabled??selected.enabled;
+ form.elements.days.value=saved.days??30;fieldset.disabled=false;
 }

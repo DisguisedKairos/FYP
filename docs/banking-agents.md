@@ -38,7 +38,7 @@ Use the ten synthetic identities and shared initial password in `data/testing/FE
 
 ## Evidence, privacy and boundaries
 
-Migration `007_banking_agents.sql` adds `agent_runs` and append-only `agent_tool_calls`. Version 2.9.0 also adds three [transaction-monitoring and human-review tables](fraud-monitoring.md), bringing the schema to **28 tables**. Migration `009_openai_provider.sql` preserves historical evidence while permitting OpenAI agent runs, bringing the total to **nine migrations**. Existing identity, balance and transaction records are preserved.
+Migration `007_banking_agents.sql` adds `agent_runs` and append-only `agent_tool_calls`. Version 2.9.0 also adds three [transaction-monitoring and human-review tables](fraud-monitoring.md), bringing the schema to 28 tables at that release. Migration `009_openai_provider.sql` preserves historical evidence while permitting OpenAI agent runs. Migration `010_saved_dashboard_views.sql` adds private reusable company dashboards, bringing the current schema to **29 tables and ten migrations**. Existing identity, balance and transaction records are preserved.
 
 Reports, permitted tool arguments/results and structured draft context are saved privately in PostgreSQL. Raw user messages, model prompts and hidden reasoning are not stored by the banking service. A report may contain a generated paraphrase. Clearing a conversation clears browser messages; it does not remove evidence records. Report lists/detail endpoints are restricted to the initiating user, including for staff. Sensitive input is refused before creating a run.
 

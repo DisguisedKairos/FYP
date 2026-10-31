@@ -58,9 +58,14 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   await f.owner.query('INSERT INTO schema_migrations(name,checksum,applied_at) VALUES($1,$2,$3)', [latest.name, latest.checksum, latest.applied_at]);
   let report = await inspectDatabase(f.app);
   assert.equal(report.ready, true);
-  assert.equal(report.tables, 28);
-  assert.equal(report.migrations.length, 9);
+  assert.equal(report.tables, 29);
+  assert.equal(report.migrations.length, 10);
   assert.deepEqual(report.discrepancies, []);
+  const savedViews=require('../banking/dashboard-views'),operator=(await f.app.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+  const saved=await savedViews.save(f.app,operator,{definition:{scope:'all',company:'',period:{kind:'rolling',days:90}}});
+  assert.equal((await savedViews.detail(f.app,operator,saved.view.id)).dashboard.scopeType,'all');
+  await savedViews.remove(f.app,operator,saved.view.id);
+
   const denied = [
     'CREATE TABLE injected(id int)',
     "UPDATE users SET role='admin' WHERE role='customer'",
@@ -74,6 +79,7 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
     "UPDATE fraud_screenings SET evidence_json='{}'",
     'DELETE FROM fraud_cases',
     "UPDATE fraud_cases SET transaction_id='forged'",
+    'UPDATE saved_dashboard_views SET config_json=config_json',
     'DELETE FROM transactions',
     'UPDATE transactions SET amount_cents=amount_cents',
     'UPDATE accounts SET opening_balance_cents=0',

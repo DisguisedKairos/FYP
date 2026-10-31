@@ -24,7 +24,7 @@ function suggestionHtml() {
   return suggestions.slice(0,4).map(text=>'<button type="button" class="assistant-suggestion" data-assistant-suggestion="'+esc(text)+'">'+esc(text)+'</button>').join('');
 }
 function welcomeHtml() {
-  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, find activity or prepare a payment draft. You stay in control of every payment.</p></div>';
+  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, summarize company activity, save dashboards or prepare a payment draft. You stay in control of every payment.</p></div>';
 }
 function popupContent() {
   const t=thread();
@@ -157,7 +157,7 @@ export function applyBankingAction(action) {
     const page=aliases[action.page] || action.page;
     if(page==='activity' && typeof action.filters?.q==='string'){state.filters={...emptyFilters(),search:action.filters.q.slice(0,120)};state.historyPage=1;}
     if(pages[page]){
-      const filters=page==='companyActivity'?Object.fromEntries(['company','from','to'].map(key=>[key,typeof action.filters?.[key]==='string'?action.filters[key].slice(0,key==='company'?120:10):''])):{};
+      const filters=page==='companyActivity'?Object.fromEntries(['company','scope','savedView','from','to'].map(key=>[key,typeof action.filters?.[key]==='string'?action.filters[key].slice(0,key==='company'?120:key==='savedView'?36:10):''])):{};
       closeAssistant({focus:false});navigate(page,filters);
     }
     return;

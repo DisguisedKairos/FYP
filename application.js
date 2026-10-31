@@ -9,6 +9,7 @@ const security = require('./banking/security');
 const ledger = require('./banking/ledger');
 const history = require('./banking/history');
 const companyActivity = require('./banking/company-activity');
+const dashboardViews = require('./banking/dashboard-views');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
 const { createAgents } = require('./banking/agents');
@@ -43,7 +44,7 @@ function accountName(value) {
 function serveFrontend(app) {
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
   app.get('/assistant', (_req, res) => res.redirect(302, '/dashboard?chat=open'));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/company-activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/company-activity', '/saved-dashboards', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
 }
 
@@ -117,6 +118,10 @@ async function createApplication(options = {}) {
     return { security: { mfaEnabled: Boolean(mfa?.enabled_at), events: events.map(row => ({ id: String(row.id), type: row.event_type, createdAt: new Date(row.created_at).toISOString() })) } };
   });
   route('get', '/api/dashboard', async req => ({ ...await history.dashboard(db, req.banking.user.id, { now }), user: security.publicUser(req.banking.user) }));
+  route('get', '/api/dashboard-views', async req => ({ views: await dashboardViews.list(db,req.banking.user) }));
+  route('get', '/api/dashboard-views/:id', req => { const params=query(req); for(const key of params.keys())if(key!=='page')throw new HttpError(400,'Unsupported saved dashboard filter.'); history.pagination(params); return dashboardViews.detail(db,req.banking.user,req.params.id,{now,page:params.get('page')||1}); });
+  route('post', '/api/dashboard-views', req => dashboardViews.save(db,req.banking.user,req.body,{now,validateSession:async()=>{const current=await auth.load(req);if(!current.user || String(current.user.id)!==String(req.banking.user.id))throw new HttpError(401,'Your session ended. Sign in again.');}}));
+  route('delete', '/api/dashboard-views/:id', req => dashboardViews.remove(db,req.banking.user,req.params.id));
   route('get', '/api/company-activity', async req => ({ dashboard: await companyActivity.dashboard(db, req.banking.user, query(req), { now }) }));
   route('get', '/api/transactions', req => history.list(db, req.banking.user, query(req)));
   route('get', '/api/transactions/export', async (req, res) => {
