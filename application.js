@@ -92,6 +92,7 @@ async function createApplication(options = {}) {
   });
   const authorizeFor = req => (_db, user, password, _clock) => auth.authorize(user, password, { ip: req.ip, purpose: 'payment' });
   const financialOptions = req => ({ riskClient, now, authorize: authorizeFor(req) });
+  const validateSessionFor = req => executor => auth.validateSession(req,req.banking.user,executor);
   route('get','/api/business',async req=>({business:await businesses.own(db,req.banking.user)}));
   route('post','/api/business/profile',async req=>({business:await businesses.submit(db,req.banking.user,req.body,financialOptions(req))}));
   route('get','/api/business/applications',async req=>({applications:await businesses.applications(db,req.banking.user,{status:req.query.status})}));
@@ -120,7 +121,7 @@ async function createApplication(options = {}) {
   route('get', '/api/dashboard', async req => ({ ...await history.dashboard(db, req.banking.user.id, { now }), user: security.publicUser(req.banking.user) }));
   route('get', '/api/dashboard-views', async req => ({ views: await dashboardViews.list(db,req.banking.user) }));
   route('get', '/api/dashboard-views/:id', req => { const params=query(req); for(const key of params.keys())if(key!=='page')throw new HttpError(400,'Unsupported saved dashboard filter.'); history.pagination(params); return dashboardViews.detail(db,req.banking.user,req.params.id,{now,page:params.get('page')||1}); });
-  route('post', '/api/dashboard-views', req => dashboardViews.save(db,req.banking.user,req.body,{now,validateSession:async()=>{const current=await auth.load(req);if(!current.user || String(current.user.id)!==String(req.banking.user.id))throw new HttpError(401,'Your session ended. Sign in again.');}}));
+  route('post', '/api/dashboard-views', req => dashboardViews.save(db,req.banking.user,req.body,{now,validateSession:validateSessionFor(req)}));
   route('delete', '/api/dashboard-views/:id', req => dashboardViews.remove(db,req.banking.user,req.params.id));
   route('get', '/api/company-activity', async req => ({ dashboard: await companyActivity.dashboard(db, req.banking.user, query(req), { now }) }));
   route('get', '/api/transactions', req => history.list(db, req.banking.user, query(req)));
@@ -188,10 +189,7 @@ async function createApplication(options = {}) {
   route('post', '/api/fraud/scan', async req => {
     ledger.requireAdmin(req.banking.user);
     if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body) || Object.keys(req.body).some(k => !['limit','transactionId'].includes(k))) throw new HttpError(400, 'Only a batch limit and optional outgoing transaction ID may be supplied.');
-    return { scan: await fraudCases.scan(db, riskClient, { actor: req.banking.user, now, force: true, limit: req.body.limit ?? 25, transactionId:req.body.transactionId ?? null, validateSession: async () => {
-      const current = await auth.load(req);
-      if (!current.user || String(current.user.id) !== String(req.banking.user.id)) throw new HttpError(401, 'Your session ended. Sign in again.');
-    } }) };
+    return { scan: await fraudCases.scan(db, riskClient, { actor: req.banking.user, now, force: true, limit: req.body.limit ?? 25, transactionId:req.body.transactionId ?? null, validateSession: validateSessionFor(req) }) };
   });
   route('post', '/api/fraud/cases/:id/review', async req => {
     ledger.requireAdmin(req.banking.user);
@@ -200,10 +198,7 @@ async function createApplication(options = {}) {
     return { case: await fraudCases.decide(db, req.banking.user, req.params.id, body, { now, authorization }) };
   });
   route('post', '/api/fraud/reviews/:id', async req => ({ transaction: await ledger.review(db, req.banking.user, req.params.id, req.body, financialOptions(req)) }));
-  const runAgent = (req, kind) => agents.execute(req.banking.user, kind, req.body, { ip: req.ip, validateSession: async () => {
-    const active = await auth.load(req);
-    if (!active.user || String(active.user.id) !== String(req.banking.user.id)) throw new HttpError(401, 'Your session ended. Sign in again.');
-  } });
+  const runAgent = (req, kind) => agents.execute(req.banking.user, kind, req.body, { ip: req.ip, validateSession: validateSessionFor(req) });
   // Compatibility endpoint uses the same OpenAI model and security boundaries.
   route('post', '/api/assistant/messages', req => runAgent(req, 'assistant'));
   route('get','/api/ai-audit',req=>{ledger.requireAdmin(req.banking.user);return require('./banking/ai-audit').list(db,req.banking.user,query(req),{now});});

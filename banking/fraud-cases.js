@@ -46,7 +46,7 @@ async function historyBefore(db, row, policy) {
 async function audit(client, actor, event, metadata, now) { await client.query('INSERT INTO audit_log(actor_id,event_type,metadata,created_at) VALUES($1,$2,$3,$4)', [actor?.id || null, event, metadata, iso(now())]); }
 async function saveFinding(db, row, evidence, detector, lease, { actor, now, validateSession }) {
   return db.transaction(async client => {
-    await validateSession();
+    await validateSession(client);
     if (actor) await assertActor(client, actor, { admin: true });
     const state = (await client.query('SELECT lease_owner,lease_until FROM fraud_monitor_state WHERE id=1 FOR UPDATE')).rows[0];
     if (state.lease_owner !== lease || new Date(state.lease_until).getTime() <= now()) throw new HttpError(409, 'This scan lease expired. Start another scan.');

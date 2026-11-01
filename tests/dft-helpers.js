@@ -7,12 +7,12 @@ const {seedDemo}=require('../scripts/seed-demo');
 const {createRiskClient}=require('../banking/risk');
 const MODEL_INFO={provider:'openai',localOnly:false,available:true,modelName:'controlled-openai',version:'test-model',modelIdentitySha256:require('../banking/ai-provider').identity('controlled-openai'),promptSha256:'b'.repeat(64),reviewThreshold:65,algorithm:'Controlled test adapter',limitations:[]};
 function modelStub(score=2){return async input=>({...input,modelScore:score,score,decision:score>=65?'review':'allow',provider:'openai',modelName:'controlled-openai',modelIdentitySha256:MODEL_INFO.modelIdentitySha256,promptSha256:MODEL_INFO.promptSha256,features:{amountLog:0,amountDeviation:0,velocity:0,newPayee:0,balanceUtilization:0,unusualHour:0,recentValue:0},context:{historicalTransactions:input.historySummary.historyCount,averageOutgoingCents:Math.round(input.historySummary.averageOutgoingCents),outgoingCount10m:input.historySummary.outgoingCount10m,dailyOutgoingCents:input.historySummary.dailyOutgoingCents,knownPayee:Boolean(input.isInternal || input.historySummary.knownPayee)},reasons:[{code:'test_model',message:'Controlled model fixture.',contribution:0}],modelVersion:'test-model',assessedAt:input.createdAt});}
-async function fixture(t,{http=true,seed=true,now=Date.now,riskClient,assessModel,...options}={}){
+async function fixture(t,{http=true,seed=true,now=Date.now,riskClient,assessModel,poolMax=16,...options}={}){
   const agentModel=options.agentModel || require('./dft-agent-model').createTestAgentModel();
   if(!process.env.TEST_DATABASE_URL)throw new Error('TEST_DATABASE_URL is required for real PostgreSQL tests.');
   const admin=new Pool({connectionString:process.env.TEST_DATABASE_URL}),schema=`dft_${randomUUID().replace(/-/g,'')}`;
   await admin.query(`CREATE SCHEMA ${schema}`);
-  const db=createDatabase({connectionString:process.env.TEST_DATABASE_URL,poolOptions:{options:`-c search_path=${schema}`,max:16}});
+  const db=createDatabase({connectionString:process.env.TEST_DATABASE_URL,poolOptions:{options:`-c search_path=${schema}`,max:poolMax}});
   let server,baseUrl;
   const stop=async()=>{if(server?.listening){await new Promise((resolve,reject)=>{server.close(error=>error?reject(error):resolve());server.closeAllConnections();});await server.closeResources();}};
   t.after(async()=>{await stop();await db.close();assert.match(schema,/^dft_[a-f0-9]{32}$/);await admin.query(`DROP SCHEMA ${schema} CASCADE`);await admin.end();});

@@ -262,7 +262,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(narrativeProblem)report={...report,narrativeWithheld:true,narrativeIssue:narrativeProblem};
       report={...report,aiAudit:{provider:engine,model:model.model || null,promptSha256,modelRequests:attempt,outcome:narrativeProblem?'withheld':clarification?'help_without_banking_claims':'validated_evidence',reason:narrativeProblem || null}};
       await db.transaction(async client=>{
-        await validateSession();
+        await validateSession(client);
         await reports.assertActor(client,acting);
         await client.query("UPDATE agent_runs SET status='completed',report_json=$2,context_json=$3,completed_at=$4 WHERE id=$1",[id,report,context,iso(now())]);
         await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata,created_at) VALUES($1,$1,'agent.completed',$2,$3)",[user.id,{runId:id,kind,engine,toolCount:step},iso(now())]);

@@ -50,7 +50,7 @@ async function flag(db,user,{transactionId,signalCode,analysis,runId,model,valid
   const selected=analysis?.transactions?.find(t=>t.id===transactionId),selectedSignal=selected?.eligibleSignals.find(s=>s.code===signalCode);
   if(!selectedSignal || !Number.isFinite(Date.parse(analysis.context.fetchedAt)) || analysis.context.asOf!==day(now()) || now()-Date.parse(analysis.context.fetchedAt)>3600000 || Date.parse(analysis.context.fetchedAt)>now()+60000)throw new HttpError(409,'Retrieve fresh permitted transaction and daily context before requesting a review.');
   return db.transaction(async client=>{
-    await validateSession();const actor=await assertActor(client,user);
+    await validateSession(client);const actor=await assertActor(client,user);
     const values=[transactionId],scope=actor.role==='admin'?'':' AND a.user_id=$2';if(scope)values.push(user.id);
     const row=(await client.query('SELECT t.*,a.user_id,f.input_json FROM transactions t JOIN accounts a ON a.id=t.account_id LEFT JOIN fraud_assessments f ON f.id=t.id WHERE t.id=$1'+scope,values)).rows[0];
     if(!row||Number(row.amount_cents)>=0)throw new HttpError(404,'Outgoing transaction not found.');
@@ -64,7 +64,7 @@ async function flag(db,user,{transactionId,signalCode,analysis,runId,model,valid
       limitations:['The AI requested qualitative human review; it did not assign a new numeric fraud score.','Public market moves are not proof of fraud and did not change the payment decision.','Case decisions do not approve, reject, reverse or refund a payment.']};
     const digest=createHash('sha256').update(JSON.stringify(analysis.context.sources)).digest('hex');
     const saved=await recordFinding(client,row,evidence,'assistant-market-v1:'+analysis.context.asOf+':'+signalCode+':'+digest,{actor:user,now});
-    await validateSession();await assertActor(client,user,{admin:actor.role==='admin'});
+    await validateSession(client);await assertActor(client,user,{admin:actor.role==='admin'});
     const current=(await client.query('SELECT id,status FROM fraud_cases WHERE transaction_id=$1',[transactionId])).rows[0];
     return receipt(current,actor,transactionId,saved);
   });

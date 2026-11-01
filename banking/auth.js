@@ -105,6 +105,16 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
     return { session: row, user };
   }
 
+  // Checks inside a transaction must use that transaction's connection. A
+  // read avoids retaining a session-row update lock while locking the user.
+  async function validateSession(req, user, executor = db) {
+    const raw = security.readCookie(req), date = timestamp(now);
+    const active = raw && user && (await executor.query(
+      'SELECT 1 FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=$1 AND s.user_id=$2 AND s.revoked_at IS NULL AND s.expires_at>$3 AND s.last_seen_at>$4 AND s.auth_version=u.auth_version AND u.auth_version=$5',
+      [security.tokenHash(raw), user.id, date, new Date(date.getTime()-security.IDLE_MS), user.auth_version])).rowCount;
+    if (!active) throw new HttpError(401, 'Your session ended. Sign in again.');
+  }
+
   async function insertSession(client, req, user, date, mfaVerifiedAt = null) {
     const previous = security.readCookie(req);
     if (previous) await client.query('UPDATE sessions SET revoked_at=COALESCE(revoked_at,$2) WHERE token_hash=$1', [security.tokenHash(previous), date]);
@@ -340,7 +350,7 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
   }
 
   return {
-    load, bootstrap, register, login, logout, changePassword, revokeAll, mfaSetup, mfaConfirm, mfaDisable, assertWrite,
+    load, validateSession, bootstrap, register, login, logout, changePassword, revokeAll, mfaSetup, mfaConfirm, mfaDisable, assertWrite,
     authorize: (user, value, options) => authorize(db, user, value, now, options),
   };
 }

@@ -25,13 +25,25 @@ export async function loadCompanyActivity({page=1}={}){
     const result=await api(path,undefined,'GET',{signal:controller.signal});
     if(!active())return;
     state.companyActivity={data:result.dashboard,saved:result.view,key,loading:false};
-    if(query.savedView){const form=document.querySelector('#company-activity-filters');if(form){form.elements.company.value=result.dashboard.scopeType==='all'?'':result.dashboard.company||'';form.elements.scope.value=result.dashboard.scopeType==='all'?'all':'company';form.elements.from.value=result.dashboard.period.from;form.elements.to.value=result.dashboard.period.to;}}
+    if(query.savedView){
+      const form=document.querySelector('#company-activity-filters'),data=result.dashboard;
+      if(form){
+        const values={company:data.scopeType==='all'?'':data.company||'',scope:data.scopeType==='all'?'all':'company',from:data.period.from,to:data.period.to};
+        for(const [name,value] of Object.entries(values))if(!form.elements[name].dataset.edited)form.elements[name].value=value;
+      }
+    }
     renderResults();
   }catch(error){
     if(!active() || error.status===-1)return;
     if(await recoverSession(error) || !active())return;
     state.companyActivity={error:error.message,key,loading:false};renderResults();
   }
+}
+export function rememberCompanyFilters(field){
+ const form=field.form;if(form?.id!=='company-activity-filters')return;
+ // Company and scope describe one selection; dates can be edited separately.
+ const names=['company','scope'].includes(field.name)?['company','scope']:[field.name];
+ for(const name of names)if(form.elements[name])form.elements[name].dataset.edited='true';
 }
 export function submitCompanyActivity(form){const values=Object.fromEntries(new FormData(form));if(values.scope==='all')values.company='';navigate('companyActivity',values);}
 export function chooseCompanyActivity(company){const data=state.companyActivity?.data;navigate('companyActivity',{company,scope:'company',from:data?.period.from||state.route.from||'',to:data?.period.to||state.route.to||''});}

@@ -1,4 +1,4 @@
-import {companyActivityPage,dashboardViewsPage,loadDashboardViews,saveCompanyView,openSavedDashboard,removeSavedDashboard,loadCompanyActivity,cancelCompanyActivity,submitCompanyActivity,chooseCompanyActivity} from './js/company-activity.js';
+import {companyActivityPage,dashboardViewsPage,loadDashboardViews,saveCompanyView,openSavedDashboard,removeSavedDashboard,loadCompanyActivity,cancelCompanyActivity,submitCompanyActivity,chooseCompanyActivity,rememberCompanyFilters} from './js/company-activity.js';
 import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
 import { renderAssistant, toggleAssistant, closeAssistant, resetAssistant, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
@@ -206,6 +206,7 @@ document.addEventListener('input',event => {
   if(event.target.id==='assistant-message')rememberAssistantInput(event.target.value);
   const form = event.target.closest('form');
   if(form?.dataset.agentKind)rememberAgentForm(form);
+  rememberCompanyFilters(event.target);
   if (form?.id === 'history-filters') updateHistoryFilters(form,{debounce:event.target.type === 'search'});
   if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
 });
@@ -215,6 +216,7 @@ document.addEventListener('change',event => {
   if (event.target.id === 'fraud-case-filter') return loadFraudCases({status:event.target.value});
   const form = event.target.closest('form');
   if(form?.dataset.agentKind)rememberAgentForm(form);
+  rememberCompanyFilters(event.target);
   if (form?.id === 'history-filters') return updateHistoryFilters(form);
   if (form?.id === 'schedule-form' && event.target.name === 'type') return changeScheduleType(form);
   if (form?.id !== 'money-form') return;

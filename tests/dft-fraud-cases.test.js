@@ -67,7 +67,7 @@ pg('Legacy payments without bound context are explicitly routed for manual revie
   assert.deepEqual(await money(f.db), before);
 });
 pg('A staff member can analyse any selected outgoing payment and inspect a low-risk result without a fabricated flag', async t => {
-  const f = await fixture(t), transaction = await payment(f), client = f.client(); await client.login('reviewer@greenlink.demo');
+  const f = await fixture(t, { poolMax: 1 }), transaction = await payment(f), client = f.client(); await client.login('reviewer@greenlink.demo');
   const r = await client.request('/api/fraud/scan', { method: 'POST', body: { transactionId: transaction.id } });
   assert.equal(r.status, 200, JSON.stringify(r.data)); assert.equal(r.data.scan.checked, 1); assert.equal(r.data.scan.modelAnalyzed, 1); assert.equal(r.data.scan.created, 0);
   const analysis = await client.request('/api/fraud/analysis/' + transaction.id);

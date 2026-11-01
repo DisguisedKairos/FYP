@@ -45,7 +45,7 @@ test('Malformed or oversized feeds degrade explicitly without fictional values',
  assert.match(marketRisk.publicItems(value).map(i=>i.title).join(' '),/Scam alerts unavailable/);
 });
 pg('Market-assisted AI flags an owned suspicious payment once, preserves financial state and respects closed human decisions',async t=>{
- const context=contextFixture(NOW),f=await fixture(t,{now:()=>NOW,agentModel:marketModel(),marketContext:{get:async()=>structuredClone(context)}}),{client,id}=await payment(f);
+ const context=contextFixture(NOW),f=await fixture(t,{poolMax:1,now:()=>NOW,agentModel:marketModel(),marketContext:{get:async()=>structuredClone(context)}}),{client,id}=await payment(f);
  const before=await financial(f.db),first=await request(client);assert.equal(first.status,200,JSON.stringify(first.data));assert.deepEqual(first.data.steps.map(s=>s.tool),['analyze_market_transactions','flag_transaction_for_review']);
  const saved=(await f.db.query('SELECT * FROM fraud_cases WHERE transaction_id=$1',[id])).rows[0];assert.equal(saved.status,'open');assert.equal(saved.score,null);
  const evidence=(await f.db.query('SELECT evidence_json FROM fraud_screenings WHERE id=$1',[saved.screening_id])).rows[0].evidence_json;

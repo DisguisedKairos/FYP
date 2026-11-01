@@ -333,3 +333,30 @@ test('Rules arriving during another insights form edit initialize a valid previe
  await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
  assert.deepEqual(page.errors,[]);
 });
+
+test('Saved dashboard responses preserve filters edited while loading',async t=>{
+ const {f,page}=await open(t,1280,'alex@greenlink.demo'),client=f.client();await client.login();
+ const saved=await client.request('/api/dashboard-views',{method:'POST',body:{definition:{scope:'all',company:'',period:{kind:'rolling',days:90}}}});assert.equal(saved.status,200);
+ await page.evaluate('window.savedFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.savedFetch(...args);if(String(args[0]).includes("/dashboard-views/"))await new Promise(resolve=>window.releaseSavedView=resolve);return response;};');
+ await page.evaluate("import('/js/core.js').then(m=>m.navigate('companyActivity',{savedView:"+JSON.stringify(saved.data.view.id)+"}))");
+ await page.waitFor('!!window.releaseSavedView && !!document.querySelector("#company-activity-filters")');
+ await page.click('.company-filter-details summary');await page.fill('#company-name','Harbour Supplies');await page.select('#company-from','2026-10-01');
+ await page.evaluate('window.releaseSavedView();window.fetch=window.savedFetch;');await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ assert.equal(await page.evaluate('document.querySelector("#company-name").value'),'Harbour Supplies');
+ assert.equal(await page.evaluate('document.querySelector("#company-from").value'),'2026-10-01');
+ assert.equal(await page.evaluate('document.querySelector("#company-scope").value'),'company');
+ // Untouched filters still initialize from the saved definition on a reload.
+ await page.navigate(await page.evaluate('location.href'));await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ assert.equal(await page.evaluate('document.querySelector("#company-scope").value'),'all');
+ assert.equal(await page.evaluate('document.querySelector("#company-name").value'),'');
+ assert.ok(await page.evaluate('!!document.querySelector("#company-from").value'));
+ const specific=await client.request('/api/dashboard-views',{method:'POST',body:{definition:{scope:'company',company:'Harbour Supplies Pte. Ltd.',period:{kind:'rolling',days:90}}}});assert.equal(specific.status,200);
+ await page.evaluate('window.savedFetch=window.fetch;window.releaseSavedView=null;window.fetch=async(...args)=>{const response=await window.savedFetch(...args);if(String(args[0]).includes("/dashboard-views/"))await new Promise(resolve=>window.releaseSavedView=resolve);return response;};');
+ await page.evaluate("import('/js/core.js').then(m=>m.navigate('companyActivity',{savedView:"+JSON.stringify(specific.data.view.id)+"}))");
+ await page.waitFor('!!window.releaseSavedView');await page.click('.company-filter-details summary');await page.select('#company-from','2026-10-01');
+ await page.evaluate('window.releaseSavedView();window.fetch=window.savedFetch;');await page.waitFor('!!document.querySelector(".saved-view-notice")');
+ assert.equal(await page.evaluate('document.querySelector("#company-name").value'),'Harbour Supplies Pte. Ltd.','an untouched company should still initialize when only a date is edited');
+ assert.equal(await page.evaluate('document.querySelector("#company-from").value'),'2026-10-01');
+ assert.ok(await page.evaluate('!!document.querySelector("#company-to").value'));
+ assert.deepEqual(page.errors,[]);
+});

@@ -91,3 +91,19 @@ pg('Saved views have a serialized per-user limit without preventing idempotent s
  assert.equal(results.filter(r=>r.status==='fulfilled').length,20);assert.equal(results.filter(r=>r.status==='rejected' && r.reason.status===409).length,2);
  const saved=(await views.list(f.db,user))[0];assert.equal((await views.save(f.db,user,{definition:saved.definition})).alreadySaved,true);assert.equal((await views.list(f.db,user)).length,20);
 });
+
+pg('A single-connection app can save dashboards and finish assistant tasks without nested pool timeouts',async t=>{
+ const f=await fixture(t,{poolMax:1}),client=f.client();await client.login();
+ const saved=await client.request('/api/dashboard-views',{method:'POST',body:{definition}});assert.equal(saved.status,200,JSON.stringify(saved.data));
+ const answer=await client.request('/api/agents/assistant',{method:'POST',body:{message:'What is my balance?'}});assert.equal(answer.status,200,JSON.stringify(answer.data));
+ assert.ok(answer.data.items.some(item=>typeof item.amountCents==='number'));
+});
+
+pg('Company label casing changes reuse the same private saved dashboard',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ const saved=await views.save(f.db,user,{definition:{scope:'company',company:'Harbour Supplies Pte. Ltd.',period:{kind:'rolling',days:90}}});
+ await f.db.query('UPDATE transactions SET counterparty=upper(counterparty) WHERE lower(counterparty)=lower($1)',['Harbour Supplies Pte. Ltd.']);
+ const again=await views.save(f.db,user,{definition:saved.view.definition});
+ assert.equal(again.view.id,saved.view.id);assert.equal(again.alreadySaved,true);assert.equal((await views.list(f.db,user)).length,1);
+ assert.equal((await views.detail(f.db,user,saved.view.id)).dashboard.status,'ready');
+});

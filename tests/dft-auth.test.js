@@ -235,3 +235,24 @@ pgTest('DFT registration quotas count duplicate attempts without creating extra 
   assert.equal((await f.db.query('SELECT COUNT(*)::integer AS count FROM users')).rows[0].count, 1);
   assert.equal((await f.db.query('SELECT COUNT(*)::integer AS count FROM accounts')).rows[0].count, 1);
 });
+
+pgTest('DFT transaction session checks are read-only and reject expired, revoked and stale authorization', async t => {
+ const f=await fixture(t),owner=browser(f.auth);await owner.register();const {user}=await owner.load();
+ const req=owner.req(),hash=security.tokenHash(security.readCookie(req));
+ const lastSeen=(await f.db.query('SELECT last_seen_at FROM sessions WHERE token_hash=$1',[hash])).rows[0].last_seen_at;
+ f.add(1000);await f.db.transaction(client=>f.auth.validateSession(req,user,client));
+ assert.equal((await f.db.query('SELECT last_seen_at FROM sessions WHERE token_hash=$1',[hash])).rows[0].last_seen_at.getTime(),lastSeen.getTime(),'revalidation must not update or retain a write lock on the session');
+ for(const [request,actor] of [[{headers:{}},user],[req,null],[req,{...user,id:'999999'}],[req,{...user,auth_version:user.auth_version+1}]])await assert.rejects(f.auth.validateSession(request,actor),failure(401));
+ f.add(security.IDLE_MS-1000);await assert.rejects(f.auth.validateSession(req,user),failure(401),'read-only checks cannot extend idle lifetime');
+ await owner.login();const current=owner.req(),token=security.tokenHash(security.readCookie(current));
+ await f.db.query('UPDATE sessions SET revoked_at=$2 WHERE token_hash=$1',[token,new Date(f.now())]);
+ await assert.rejects(f.auth.validateSession(current,user),failure(401));
+ await f.db.query('UPDATE sessions SET revoked_at=NULL WHERE token_hash=$1',[token]);
+ await f.db.query('UPDATE users SET auth_version=auth_version+1 WHERE id=$1',[user.id]);
+ await assert.rejects(f.auth.validateSession(current,user),failure(401));
+ await f.db.query('UPDATE users SET auth_version=$2 WHERE id=$1',[user.id,user.auth_version]);
+ await f.db.query('UPDATE sessions SET auth_version=auth_version+1 WHERE token_hash=$1',[token]);
+ await assert.rejects(f.auth.validateSession(current,user),failure(401));
+ await f.db.query('UPDATE sessions SET auth_version=$2,expires_at=$3 WHERE token_hash=$1',[token,user.auth_version,new Date(f.now())]);
+ await assert.rejects(f.auth.validateSession(current,user),failure(401));
+});

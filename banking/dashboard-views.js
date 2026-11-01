@@ -40,8 +40,12 @@ async function save(db,user,body,{now=Date.now,validateSession=async()=>{}}={}){
  const configHash=createHash('sha256').update(JSON.stringify(definition)).digest('hex');
  return db.transaction(async client=>{
   await client.query("SELECT pg_advisory_xact_lock(hashtextextended('greenlink:dashboards:'||$1::text,0))",[String(user.id)]);
-  await validateSession();await assertCurrentUser(client,user,{lock:true});
-  const existing=(await client.query('SELECT * FROM saved_dashboard_views WHERE user_id=$1 AND config_hash=$2',[user.id,configHash])).rows[0];
+  await validateSession(client);await assertCurrentUser(client,user,{lock:true});
+  // Counterparty labels are grouped without case in the ledger. Compare
+  // that identity too, preserving bookmarks written with earlier spellings.
+  const existing=(await client.query(`SELECT * FROM saved_dashboard_views WHERE user_id=$1 AND
+    (config_hash=$2 OR (config_json->>'scope'=$3 AND lower(config_json->>'company')=lower($4) AND config_json->'period'=$5::jsonb))
+    ORDER BY created_at,id LIMIT 1`,[user.id,configHash,definition.scope,definition.company,definition.period])).rows[0];
   if(existing)return {view:view(existing),alreadySaved:true};
   const count=Number((await client.query('SELECT count(*) FROM saved_dashboard_views WHERE user_id=$1',[user.id])).rows[0].count);
   if(count>=20)throw new HttpError(409,'You can keep up to 20 saved dashboards. Remove an old view first.');
