@@ -360,3 +360,38 @@ test('Saved dashboard responses preserve filters edited while loading',async t=>
  assert.ok(await page.evaluate('!!document.querySelector("#company-to").value'));
  assert.deepEqual(page.errors,[]);
 });
+
+test('Company dashboard charts show owned ledger amounts, drill down and handle empty periods on mobile',async t=>{
+ const {f,page}=await open(t,390,'alex@greenlink.demo'),client=f.client();await client.login();
+ const account=(await client.dashboard()).accounts[0];
+ for(const status of ['pending_review','rejected'])await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'transfer','Chart status fixture',-100000,'Harbour Supplies Pte. Ltd.',$3,$4,$4)",[randomUUID(),account.id,status,new Date().toISOString()]);
+ const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+ const expected=(await client.request('/api/company-activity?scope=all')).data.dashboard;
+ await visit(page,f.baseUrl,'/company-activity?scope=all');await page.waitFor('!!document.querySelector(".activity-company-bar")');
+ assert.equal(await page.evaluate('document.querySelectorAll(".activity-company-bar").length'),expected.companies.length);
+ assert.match(await page.evaluate('document.querySelector(".activity-company-card").textContent'),/Companies 1-5 of 5/);
+ assert.equal(await page.evaluate('document.querySelector(".activity-status-total").textContent'),String(expected.totals.completedCount+expected.totals.pendingCount+expected.totals.rejectedCount));
+ const monthly=await page.evaluate('[...document.querySelectorAll(".activity-month-bars")].map(el=>({label:el.getAttribute("aria-label"),received:el.querySelector(".received").getBoundingClientRect().height,paid:el.querySelector(".paid").getBoundingClientRect().height}))');
+ assert.match(await page.evaluate('document.querySelector(".activity-status-ring").getAttribute("aria-label")'),/Awaiting review: 1.*Rejected: 1/);
+ assert.equal(monthly.length,expected.months.length);assert.ok(monthly.some(row=>row.received>1));assert.ok(monthly.some(row=>row.paid>1));
+ assert.ok(monthly.every(row=>row.received>=0 && row.paid>=0 && row.received<=194.1 && row.paid<=194.1));
+ await page.click('.company-months summary');await page.waitFor('document.querySelector(".company-months").open');assert.match(await page.evaluate('document.querySelector(".company-months table").textContent'),/Received.*Paid/);
+ assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+ await page.screenshot(path.resolve('test-results','company-charts-mobile.png'));
+ await page.click('.activity-company-bar[data-company-choice="Harbour Supplies Pte. Ltd."]');await page.waitFor('document.querySelector(".company-summary h2")?.textContent==="Harbour Supplies Pte. Ltd."');
+ assert.equal(await page.evaluate('document.querySelectorAll(".activity-company-card").length'),0);
+ assert.equal(await page.evaluate('document.querySelector(".activity-status-total").textContent'),'3');
+ assert.ok(await page.evaluate('[...document.querySelectorAll(".activity-month-bar.paid")].some(el=>el.getBoundingClientRect().height>1)'));
+ await visit(page,f.baseUrl,'/company-activity?company=Harbour%20Supplies&from=2000-01-01&to=2000-01-01');await page.waitFor('!!document.querySelector(".activity-chart-empty")');
+ assert.match(await page.evaluate('document.querySelector(".activity-month-card").textContent'),/No completed payments/);
+ assert.equal(await page.evaluate('document.querySelector(".activity-status-total").textContent'),'0');
+ assert.doesNotMatch(await page.evaluate('document.querySelector(".company-visual-grid").innerHTML'),/NaN|Infinity/);
+ const range=await page.evaluate("import('/js/core.js').then(m=>({from:m.singaporeDay(Date.now()-365*86400000),to:m.singaporeDay()}))");
+ await visit(page,f.baseUrl,'/company-activity?scope=all&from='+range.from+'&to='+range.to);await page.waitFor('document.querySelectorAll(".activity-month-column").length>=12');
+ assert.ok(await page.evaluate('document.querySelector(".activity-month-scroll").scrollWidth>document.querySelector(".activity-month-scroll").clientWidth'));
+ assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+ await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:1000,deviceScaleFactor:1,mobile:false});await page.waitFor('innerWidth===1280');
+ await page.evaluate('document.querySelector(".activity-month-card").scrollIntoView({block:"start"})');await page.screenshot(path.resolve('test-results','company-charts-desktop.png'));
+ assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
+ assert.deepEqual(page.errors,[]);
+});
