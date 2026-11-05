@@ -49,7 +49,7 @@ pg('Saved views enforce ownership for customers and administrators, CSRF, deleti
  for(const client of [jamie,admin]){assert.deepEqual((await client.request('/api/dashboard-views')).data.views,[]);assert.equal((await client.request('/api/dashboard-views/'+id)).status,404);assert.equal((await client.request('/api/dashboard-views/'+id,{method:'DELETE',body:{}})).status,404);}
  assert.equal((await alex.request('/api/dashboard-views',{method:'POST',body:{definition},csrf:false})).status,403);
  assert.equal((await alex.request('/api/dashboard-views/'+id+'?page=0')).status,400);assert.equal((await alex.request('/api/dashboard-views/'+id+'?company=Acme')).status,400);
- assert.equal((await alex.request('/saved-dashboards',{responseType:'text'})).status,200);
+ for(const path of ['/saved-dashboards','/company-activity']){const moved=await alex.request(path,{responseType:'text'});assert.equal(moved.status,302);assert.equal(moved.headers.get('location'),'/dashboard?chat=open');}
  await assert.rejects(views.save(f.db,users.alex,{definition:{...definition,period:{kind:'rolling',days:30}}},{validateSession:async()=>{throw new (require('../models/errors').HttpError)(401,'Session ended.');}}),e=>e.status===401);
  assert.equal((await views.list(f.db,users.alex)).length,1);
  assert.equal((await alex.request('/api/dashboard-views/'+id,{method:'DELETE',body:{}})).status,200);assert.equal((await alex.request('/api/dashboard-views/'+id)).status,404);
@@ -67,7 +67,7 @@ pg('Assistant summarizes all companies, saves only requested evidence and suppor
  const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex,before=await financial(f.db);
  const agents=createAgents({db:f.db,model:model()});
  const result=await agents.execute(user,'assistant',{message:'Summarize my transactions with other companies in a dashboard and save it for future use.'});
- assert.equal(result.narrativeWithheld,undefined);assert.deepEqual(result.steps.map(s=>s.tool),['get_company_activity','save_company_dashboard']);assert.ok(result.actions.some(a=>a.filters?.savedView));assert.equal((await views.list(f.db,user)).length,1);
+ assert.equal(result.narrativeWithheld,undefined);assert.deepEqual(result.steps.map(s=>s.tool),['get_company_activity','save_company_dashboard']);assert.ok(result.companyDashboard.savedView.id);assert.deepEqual(result.actions,[]);assert.equal((await views.list(f.db,user)).length,1);
  const detail=await agents.detail(user,result.runId);assert.equal(detail.steps[0].result.scopeType,'all');assert.equal(detail.steps[1].result.saved,true);
  const read=await createAgents({db:f.db,model:model({save:false,companyName:'Harbour Supplies'})}).execute(user,'assistant',{message:'Show a dashboard with Harbour Supplies for the last 30 days'});
  assert.equal((await views.list(f.db,user)).length,1);
@@ -106,4 +106,52 @@ pg('Company label casing changes reuse the same private saved dashboard',async t
  const again=await views.save(f.db,user,{definition:saved.view.definition});
  assert.equal(again.view.id,saved.view.id);assert.equal(again.alreadySaved,true);assert.equal((await views.list(f.db,user)).length,1);
  assert.equal((await views.detail(f.db,user,saved.view.id)).dashboard.status,'ready');
+});
+
+pg('Assistant lists and reopens only owned saved dashboards as inline data',async t=>{
+ const f=await fixture(t,{http:false}),users=await actors(f.db),before=await financial(f.db);
+ const saved=await views.save(f.db,users.alex,{definition});
+ const reopen={mode:'openai',model:'controlled-inline-open',inspect:async()=>({available:true}),chat:async messages=>{
+  const calls=messages.filter(m=>m.role==='tool');
+  if(!calls.length)return {role:'assistant',content:'',tool_calls:[{function:{name:'list_saved_dashboards',arguments:{}}}]};
+  if(calls.length===1){const listed=JSON.parse(calls[0].content).data.views;if(listed.length)return {role:'assistant',content:'',tool_calls:[{function:{name:'open_saved_dashboard',arguments:{viewId:listed[0].id}}}]};}
+  return {role:'assistant',content:'Review your saved company activity here in chat [E'+calls.length+'].'};
+ }};
+ const result=await createAgents({db:f.db,model:reopen}).execute(users.alex,'assistant',{message:'Open my saved dashboard'});
+ assert.equal(result.narrativeWithheld,undefined);assert.equal(result.savedDashboards[0].id,saved.view.id);
+ assert.equal(result.companyDashboard.savedView.id,saved.view.id);assert.equal(result.companyDashboard.data.scopeType,'all');assert.ok(result.companyDashboard.data.months.length);
+ assert.deepEqual(result.actions,[]);
+ const other=await createAgents({db:f.db,model:reopen}).execute(users.jamie,'assistant',{message:'Show my saved dashboards'});
+ assert.deepEqual(other.savedDashboards,[]);assert.equal(other.companyDashboard,undefined);
+ await views.save(f.db,users.alex,{definition:{...definition,period:{kind:'rolling',days:30}}});
+ const ambiguous=await createAgents({db:f.db,model:reopen}).execute(users.alex,'assistant',{message:'Open my saved dashboard'});
+ assert.equal(ambiguous.savedDashboards.length,2);assert.equal(ambiguous.companyDashboard,undefined,'multiple saved views require a user choice');
+ assert.deepEqual(await financial(f.db),before);
+});
+pg('A model cannot open an invented saved view or skip the owned saved list',async t=>{
+ const f=await fixture(t,{http:false}),users=await actors(f.db),saved=await views.save(f.db,users.alex,{definition});
+ for(const listed of [false,true]){
+  const hostile={mode:'openai',model:'controlled-inline-invalid',inspect:async()=>({available:true}),chat:async messages=>{
+   const calls=messages.filter(m=>m.role==='tool');
+   return {role:'assistant',content:'',tool_calls:[{function:{name:listed&&!calls.length?'list_saved_dashboards':'open_saved_dashboard',arguments:listed&&!calls.length?{}:{viewId:saved.view.id}}}]};
+  }};
+  await assert.rejects(createAgents({db:f.db,model:hostile}).execute(users.jamie,'assistant',{message:'Open my saved dashboard'}),e=>e.status===409);
+ }
+});
+
+pg('Saving a displayed chat selection validates its owned definition instead of reusing an older chart',async t=>{
+ const f=await fixture(t,{http:false}),users=await actors(f.db),before=await financial(f.db);
+ const shown=await createAgents({db:f.db,model:model({save:false,companyName:'Pte. Ltd.'})}).execute(users.alex,'assistant',{message:'Show a company dashboard for Pte. Ltd.'});
+ assert.equal(shown.companyDashboard.data.status,'ambiguous');
+ const selection={scope:'company',company:'Acme Trading Pte. Ltd.',period:{kind:'rolling',days:90}};
+ const agents=createAgents({db:f.db,model:model({followup:true})});
+ const saved=await agents.execute(users.alex,'assistant',{message:'Save this dashboard',previousRunId:shown.runId,dashboardDefinition:selection});
+ assert.equal(saved.companyDashboard.savedView.definition.company,selection.company);
+ assert.equal(saved.companyDashboard.data.totals.incomeCents,520000);
+ for(const invalid of [{...selection,userId:users.jamie.id},{...selection,company:'Meridian Logistics Pte. Ltd.'}]){
+  await assert.rejects(agents.execute(users.alex,'assistant',{message:'Save this dashboard',previousRunId:shown.runId,dashboardDefinition:invalid}),error=>[400,409].includes(error.status));
+ }
+ await assert.rejects(agents.execute(users.alex,'assistant',{message:'What is my balance?',dashboardDefinition:selection}),error=>error.status===400);
+ assert.equal((await views.list(f.db,users.alex)).length,1);
+ assert.deepEqual(await financial(f.db),before);
 });

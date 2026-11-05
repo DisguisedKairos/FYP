@@ -1,7 +1,7 @@
 'use strict';
 
 const DRAFT_INTENT = /^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b|\b(?:create|prepare|draft|set up)\b.*\b(?:payment|transfer|schedule)\b/i;
-const LABELS = { save_company_dashboard: 'Private saved dashboard receipt', get_company_activity: 'Owned company transaction activity', get_daily_market_context: 'Dated official public market and scam context', analyze_market_transactions: 'Permitted payments with market and scam context', flag_transaction_for_review: 'Human investigation request', get_accounts: 'Owned account balances', get_schedules: 'Owned scheduled instructions', search_transactions: 'Owned transaction search', project_liquidity: 'Scheduled-payment liquidity scenario', investigate_transaction: 'Recorded payment risk assessment', get_related_payments: 'Earlier completed payments', simulate_rule: 'Historical rule comparison', reconcile_accounts: 'Ledger and operational checks', prepare_payment_draft: 'Payment form draft' };
+const LABELS = { list_saved_dashboards:'Owned saved dashboard definitions', open_saved_dashboard:'Refreshed owned company dashboard', save_company_dashboard: 'Private saved dashboard receipt', get_company_activity: 'Owned company transaction activity', get_daily_market_context: 'Dated official public market and scam context', analyze_market_transactions: 'Permitted payments with market and scam context', flag_transaction_for_review: 'Human investigation request', get_accounts: 'Owned account balances', get_schedules: 'Owned scheduled instructions', search_transactions: 'Owned transaction search', project_liquidity: 'Scheduled-payment liquidity scenario', investigate_transaction: 'Recorded payment risk assessment', get_related_payments: 'Earlier completed payments', simulate_rule: 'Historical rule comparison', reconcile_accounts: 'Ledger and operational checks', prepare_payment_draft: 'Payment form draft' };
 function references(runId, results) {
   return results.map((result, i) => ({ id: `E${i + 1}`, runId, step: i + 1, tool: result.tool, label: LABELS[result.tool] || 'Banking evidence' }));
 }
@@ -39,9 +39,9 @@ function relevanceIssue(message, results) {
   if(require('../dashboard-views').saveIntent(message) && (/\b(?:dashboard|view|summary)\b/i.test(message) || require('../dashboard-views').followup(message)) && !has(['save_company_dashboard']) && !results.some(r=>r.tool==='get_company_activity' && r.value?.status && r.value.status!=='ready'))return 'The requested dashboard was not saved.';
   if (/\b(?:market|trends?|daily news|scam alerts?|exchange rates?|forex)\b/i.test(message) && !has(['get_daily_market_context','analyze_market_transactions'])) return 'The requested dated market or scam context was not retrieved.';
   if (/\b(?:balance|balances)\b/i.test(message) && !has(['get_accounts', 'project_liquidity', 'reconcile_accounts'])) return 'The requested balance evidence was not retrieved.';
-  if (/\b(?:liquidity|cash.?flow|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity'])) return 'The requested liquidity scenario was not retrieved.';
+  if (/\b(?:liquidity|cash.?flow|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard'])) return 'The requested liquidity scenario was not retrieved.';
   if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity'])) return 'The requested scheduled-payment evidence was not retrieved.';
-  if (/\b(?:history|recent transactions|find.*transaction|search.*transaction)\b/i.test(message) && !has(['search_transactions','get_company_activity'])) return 'The requested transaction evidence was not retrieved.';
+  if (/\b(?:history|recent transactions|find.*transaction|search.*transaction)\b/i.test(message) && !has(['search_transactions','get_company_activity','open_saved_dashboard'])) return 'The requested transaction evidence was not retrieved.';
   return null;
 }
 module.exports = { DRAFT_INTENT, references, narrativeIssue, relevanceIssue };

@@ -62,17 +62,17 @@ pg('Company dashboard validates dates, pagination, unknown arguments, revoked se
  const f=await fixture(t),client=f.client();assert.equal((await client.request('/api/company-activity')).status,401);await client.login('jamie@greenlink.demo');
  const invalid=['company=A','company='+encodeURIComponent('\u0000bad'),'company='+('A'.repeat(121)),'company=Acme&company=Harbour','from=2026-02-30','from=2026-10-31&to=2026-10-01','from=2020-01-01&to=2026-10-01','to=2099-01-01','page=0','pageSize=101','userId=1'];
  for(const query of invalid){const result=await client.request('/api/company-activity?'+query);assert.equal(result.status,400,query+': '+JSON.stringify(result.data));}
- assert.equal((await client.request('/company-activity',{responseType:'text'})).status,200);
+ assert.equal((await client.request('/company-activity',{responseType:'text'})).status,302);
  const user=(await actors(f.db)).jamie;await f.db.query('UPDATE users SET auth_version=auth_version+1 WHERE id=$1',[user.id]);
  await assert.rejects(company.dashboard(f.db,user,new URLSearchParams({company:'Meridian'})),error=>error.status===409);
  assert.equal((await client.request('/api/company-activity')).status,401);
 });
-pg('Assistant generates grounded company dashboard actions and retains private audit records',async t=>{
+pg('Assistant returns grounded inline company dashboards and retains private audit records',async t=>{
  const f=await fixture(t,{http:false}),users=await actors(f.db),before=await snapshot(f.db),agents=createAgents({db:f.db,model:modelFor('Harbour Supplies')});
  const response=await agents.execute(users.alex,'assistant',{message:'Generate a dashboard for transaction activity with Harbour Supplies for the last 30 days'});
- assert.equal(response.narrativeWithheld,undefined);assert.deepEqual(response.steps.map(s=>s.tool),['get_company_activity']);assert.equal(response.items[1].amountCents,8500);
- const action=response.actions[0];assert.equal(action.page,'companyActivity');assert.equal(action.type,'navigate');assert.equal(action.filters.company,'Harbour Supplies Pte. Ltd.');assert.ok(action.filters.from);assert.ok(action.filters.to);
- const saved=await agents.detail(users.alex,response.runId);assert.equal(saved.steps[0].result.company,action.filters.company);
+ assert.equal(response.narrativeWithheld,undefined);assert.deepEqual(response.steps.map(s=>s.tool),['get_company_activity']);assert.equal(response.companyDashboard.data.totals.outgoingCents,8500);
+ assert.deepEqual(response.actions,[]);assert.equal(response.companyDashboard.data.company,'Harbour Supplies Pte. Ltd.');assert.ok(response.companyDashboard.data.months.length);
+ const saved=await agents.detail(users.alex,response.runId);assert.equal(saved.steps[0].result.company,response.companyDashboard.data.company);
  await assert.rejects(agents.detail(users.jamie,response.runId),e=>e.status===404);
  assert.deepEqual(await snapshot(f.db),before);
  const forged=createAgents({db:f.db,model:modelFor('Acme Trading')});await assert.rejects(forged.execute(users.alex,'assistant',{message:'Show a dashboard for Harbour Supplies'}),e=>e.status===400);

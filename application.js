@@ -43,8 +43,8 @@ function accountName(value) {
 
 function serveFrontend(app) {
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
-  app.get('/assistant', (_req, res) => res.redirect(302, '/dashboard?chat=open'));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/company-activity', '/saved-dashboards', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
+  app.get(['/assistant','/company-activity','/saved-dashboards'], (_req, res) => res.redirect(302, '/dashboard?chat=open'));
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
 }
 
