@@ -1,0 +1,40 @@
+name: Agentic CI failure triage
+
+on:
+  workflow_run:
+    workflows: [Greenlink CI and container delivery]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  triage:
+    name: Analyze failed CI logs
+    if: github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'cancelled'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install GitHub CLI
+        run: gh --version
+      - name: Analyze failed logs and post a pull-request report
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENTIC_TRIAGE_TOKEN: ${{ secrets.AGENTIC_TRIAGE_TOKEN || github.token }}
+          AGENTIC_TRIAGE_ENDPOINT: https://models.github.ai/inference/chat/completions
+          AGENTIC_TRIAGE_MODEL: openai/gpt-4o-mini
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
+        run: node deploy/failure-triage.js
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: failure-triage-${{ github.event.workflow_run.id }}
+          path: artifacts/failure-triage.md
+          if-no-files-found: warn
+          retention-days: 14
