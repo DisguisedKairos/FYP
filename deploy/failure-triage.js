@@ -98,12 +98,15 @@ async function runAgent(log, run, env = process.env) {
   for (let iteration = 0; iteration < 4; iteration++) {
     const response = await fetch(endpoint, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Content-Type': 'application/json', 'X-GitHub-Api-Version': '2022-11-28' },
       body: JSON.stringify({ model, messages, tools: AGENT_TOOLS, tool_choice: 'auto' }),
       signal: AbortSignal.timeout(90000)
     });
-    if (!response.ok) throw new Error(`Agent endpoint returned HTTP ${response.status}`);
-    const payload = await response.json();
+    const responseText = await response.text();
+    if (!response.ok) throw new Error(`Agent endpoint returned HTTP ${response.status}: ${responseText.slice(0, 500)}`);
+    let payload;
+    try { payload = JSON.parse(responseText); }
+    catch { throw new Error(`Agent endpoint returned non-JSON: ${responseText.slice(0, 500)}`); }
     const message = payload.choices?.[0]?.message;
     if (!message) throw new Error('Agent endpoint returned no assistant message.');
 

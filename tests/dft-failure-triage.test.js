@@ -40,7 +40,7 @@ test('evidence selects unique failure lines', () => {
 
 test('agent returns its final report when the model is configured', async () => {
   const originalFetch = global.fetch;
-  global.fetch = async () => ({ ok: true, status: 200, json: async () => ({ choices: [{ message: { role: 'assistant', content: '## Agent report\n\nLikely source failure.' } }] }) });
+  global.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { role: 'assistant', content: '## Agent report\n\nLikely source failure.' } }] }) });
   try {
     const report = await runAgent('npm run check failed', { conclusion: 'failure' }, {
       AGENTIC_TRIAGE_ENDPOINT: 'https://model.example.test', AGENTIC_TRIAGE_TOKEN: 'test-token', AGENTIC_TRIAGE_MODEL: 'test-model'
