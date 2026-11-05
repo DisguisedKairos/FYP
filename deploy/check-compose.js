@@ -24,7 +24,8 @@ function validateCompose(model) {
   assert.equal(model.networks.backend.internal, true);
   assert.equal(services.banking.environment.OPENAI_MODEL,services.fraud.environment.OPENAI_MODEL);
   assert.equal(services.banking.environment.OPENAI_API_KEY,services.fraud.environment.OPENAI_API_KEY);
-  assert.ok(services.banking.networks['ai-egress']);assert.ok(services.fraud.networks['ai-egress']);
+  assert.ok(Object.hasOwn(services.banking.networks, 'ai-egress'), 'banking must use the ai-egress network.');
+  assert.ok(Object.hasOwn(services.fraud.networks, 'ai-egress'), 'fraud must use the ai-egress network.');
   assert.equal(services.banking.environment.FRAUD_SERVICE_URL, 'http://fraud:4011');
   assert.equal(services.banking.environment.TRUST_PROXY, services.nginx.networks.frontend.ipv4_address + '/32');
   console.log('Compose boundaries verified: temporary mounts, private service ports, trusted proxy and service-specific credentials.');
