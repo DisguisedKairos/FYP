@@ -155,3 +155,27 @@ pg('Saving a displayed chat selection validates its owned definition instead of 
  assert.equal((await views.list(f.db,users.alex)).length,1);
  assert.deepEqual(await financial(f.db),before);
 });
+
+function sequenceModel(plan){return {mode:'openai',model:'controlled-dashboard-sequence',inspect:async()=>({available:true}),chat:async messages=>{
+ const step=messages.filter(row=>row.role==='tool').length;
+ return step<plan.length?{role:'assistant',content:'',tool_calls:[{function:plan[step]}]}:{role:'assistant',content:'Review the company activity and stored receipt [E'+step+'].'};
+}};}
+pg('Saving this dashboard refuses to invent an all-company view when the earlier choice was ambiguous',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ const earlier=await createAgents({db:f.db,model:model({save:false,companyName:'Pte. Ltd.'})}).execute(user,'assistant',{message:'Show a company dashboard for Pte. Ltd.'});
+ assert.equal(earlier.companyDashboard.data.status,'ambiguous');
+ await assert.rejects(createAgents({db:f.db,model:sequenceModel([{name:'get_company_activity',arguments:{}},{name:'save_company_dashboard',arguments:{}}])}).execute(user,'assistant',{message:'Save this dashboard',previousRunId:earlier.runId}),error=>error.status===409);
+ assert.equal((await views.list(f.db,user)).length,0);
+});
+pg('A reply never labels another company chart as the saved view',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ const switched=await createAgents({db:f.db,model:sequenceModel([{name:'get_company_activity',arguments:{company:'Harbour Supplies'}},{name:'save_company_dashboard',arguments:{}},{name:'get_company_activity',arguments:{company:'Acme Trading'}}])}).execute(user,'assistant',{message:'Save a dashboard with Harbour Supplies and show a dashboard with Acme Trading.'});
+ assert.equal(switched.companyDashboard.data.company,'Acme Trading Pte. Ltd.');
+ assert.equal(switched.companyDashboard.savedView,null,'a saved Harbour view cannot be attached to an Acme chart');
+});
+
+pg('A saved dashboard list includes bookmarks created later in the same reply',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ const combined=await createAgents({db:f.db,model:sequenceModel([{name:'list_saved_dashboards',arguments:{}},{name:'get_company_activity',arguments:{}},{name:'save_company_dashboard',arguments:{}}])}).execute(user,'assistant',{message:'List my saved dashboards and save an all-company dashboard.'});
+ assert.ok(combined.savedDashboards.some(view=>view.id===combined.companyDashboard.savedView.id),'the saved list must include the bookmark created in this reply');
+});

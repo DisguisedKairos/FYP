@@ -115,6 +115,7 @@ export async function sendAssistant(message,{retry=false}={}) {
     t.input='';const input=document.querySelector('#assistant-message');if(input)input.value='';
     t.error='Please keep passwords and security codes out of chat. Enter your password only in the payment review form.';renderThread();return;
   }
+  if(dashboardFollowup.test(text)&&t.dashboardSelectionPending){t.error='Wait for the selected dashboard to finish loading before saving it.';renderThread();return;}
   const request=++generation,userId=state.user.id,selectionVersion=t.dashboardSelectionVersion||0;
   controller?.abort(); controller=new AbortController();
   if(!retry)t.messages.push({id:++nextMessageId,role:'user',text});
@@ -126,7 +127,7 @@ export async function sendAssistant(message,{retry=false}={}) {
     if(request!==generation || state.assistant!==t || !state.user || state.signingOut || !sameId(state.user.id,userId))return;
     if(result.sensitiveInput){const submitted=[...t.messages].reverse().find(message=>message.role==='user');if(submitted)submitted.text='[Sensitive message removed]';}
     t.previousRunId=result.runId || null;
-    if((t.dashboardSelectionVersion||0)===selectionVersion){t.activeDashboardDefinition=result.companyDashboard?.definition||null;t.dashboardSelectionVersion=selectionVersion+1;}
+    if((t.dashboardSelectionVersion||0)===selectionVersion){t.activeDashboardDefinition=result.companyDashboard?.definition||null;t.dashboardSelectionVersion=selectionVersion+1;t.dashboardSelectionPending=false;}
     t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
     if(!t.open)t.unread=true;

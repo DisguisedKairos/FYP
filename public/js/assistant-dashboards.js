@@ -2,7 +2,12 @@ import {state,api,esc,icon,money,singaporeDay,captureSession,recoverSession,stat
 import {companyCharts} from './company-charts.js';
 
 const requests=new Map();
-export function cancelAssistantDashboards(){for(const request of requests.values())request.abort();requests.clear();}
+export function cancelAssistantDashboards(){
+ for(const request of requests.values())request.abort();requests.clear();
+ const thread=state.assistant;if(!thread)return;
+ thread.dashboardSelectionPending=false;thread.dashboardSelectionVersion=(thread.dashboardSelectionVersion||0)+1;
+ for(const message of thread.messages){message.dashboardBusy=false;if(message.dashboard)message.dashboard.busy=false;paint(message);}
+}
 export function hydrateDashboardCharts(root){root?.querySelectorAll('[data-chart-height]').forEach(bar=>{bar.style.height=Number(bar.dataset.chartHeight)+'%';});}
 function periodLabel(definition){const period=definition?.period;return period?.kind==='rolling'?'Latest '+period.days+' days':period?'Fixed dates: '+period.from+' to '+period.to:'';}
 function paging(data,busy){
@@ -55,9 +60,14 @@ async function operate(message,key,work){
  finally{if(active()){message.dashboardBusy=false;if(message.dashboard)message.dashboard.busy=false;paint(message);requests.delete(key);}}
 }
 async function load(message,{company,page=1,viewId}={}){
+ if(!state.user||state.signingOut)return;
+ // Selection order follows user interaction, even when earlier reads finish later.
+ const thread=state.assistant,selectionVersion=(thread.dashboardSelectionVersion||0)+1;
+ thread.dashboardSelectionVersion=selectionVersion;thread.dashboardSelectionPending=true;
+ const latest=()=>state.assistant===thread && thread.dashboardSelectionVersion===selectionVersion;
  const prior=message.dashboard;
  if(!prior)message.dashboard={data:null,definition:null,savedView:null};
- await operate(message,'dashboard:'+message.id,async({active,signal})=>{
+ try{await operate(message,'dashboard:'+message.id,async({active,signal})=>{
   const definition=company?{scope:'company',company,period:prior.definition?.period||{kind:'fixed',from:prior.data.period.from,to:prior.data.period.to}}:prior?.definition;
   const savedId=viewId||(!company?prior?.savedView?.id:null);
   const result=await api(savedId?'/dashboard-views/'+encodeURIComponent(savedId)+'?page='+page:'/company-activity?'+queryFor(definition,prior.data,page),undefined,'GET',{signal});
@@ -65,9 +75,9 @@ async function load(message,{company,page=1,viewId}={}){
   const data=result.dashboard;
   message.dashboard={data,definition:result.view?.definition||definition,savedView:result.view||null};
   if(data.status==='ready'&&data.scopeType!=='all')message.dashboard.definition={...message.dashboard.definition,company:data.company};
-  state.assistant.activeDashboardDefinition=message.dashboard.definition;
-  state.assistant.dashboardSelectionVersion=(state.assistant.dashboardSelectionVersion||0)+1;
- });
+  if(latest())thread.activeDashboardDefinition=data.status==='ready'?message.dashboard.definition:null;
+ });}finally{if(latest())thread.dashboardSelectionPending=false;}
+ if(!latest())return;
  const card=document.querySelector('#assistant-thread [data-message-id="'+message.id+'"] [data-company-dashboard]'),target=document.querySelector('#assistant-thread');
  if(card&&target)target.scrollTop+=card.getBoundingClientRect().top-target.getBoundingClientRect().top-12;
 }
@@ -82,10 +92,13 @@ export async function dashboardControl(control){
  if(message.dashboardBusy||message.dashboard?.busy)return true;
  if(command==='open')await load(message,{viewId:control.dataset.viewId});
  else if(command==='refresh'||command==='prev'||command==='next')await load(message,{page:command==='refresh'?1:Math.max(1,message.dashboard.data.pagination.page+(command==='next'?1:-1))});
- else if(command==='save')await operate(message,'dashboard:'+message.id,async({active,signal})=>{
-  const result=await api('/dashboard-views',{definition:message.dashboard.definition},'POST',{signal});
-  if(active())message.dashboard.savedView=result.view;
- });
+ else if(command==='save'){
+  state.assistant.activeDashboardDefinition=message.dashboard.definition;
+  state.assistant.dashboardSelectionVersion=(state.assistant.dashboardSelectionVersion||0)+1;state.assistant.dashboardSelectionPending=false;
+  await operate(message,'dashboard:'+message.id,async({active,signal})=>{
+   const result=await api('/dashboard-views',{definition:message.dashboard.definition},'POST',{signal});
+   if(active())message.dashboard.savedView=result.view;
+  });}
  else if(command==='list')await operate(message,'list:'+message.id,async({active,signal})=>{const result=await api('/dashboard-views',undefined,'GET',{signal});if(active())message.savedDashboards=result.views;});
  else if(command==='remove')await operate(message,'list:'+message.id,async({active,signal})=>{
   const id=control.dataset.viewId;await api('/dashboard-views/'+encodeURIComponent(id),{},'DELETE',{signal});

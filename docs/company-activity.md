@@ -6,7 +6,7 @@ You can ask about a named company, for example "Show a dashboard with Harbour Su
 
 ## Saved dashboards
 
-Ask "Save this dashboard" after a company summary, request saving in the original prompt, or use **Save this dashboard** on its chat card. The saved definition stays private in PostgreSQL across sign-ins.
+Ask "Save this dashboard" after a company summary, request saving in the original prompt, or use **Save this dashboard** on its chat card. The saved definition stays private in PostgreSQL across sign-ins. Follow-up saves target the most recently selected chart and wait for it to finish loading. An ambiguous company choice must be resolved before saving.
 
 Ask "Show my saved dashboards" to see your saved cards in chat. **Open in chat** retrieves fresh figures without opening a separate page. You can also ask the assistant to reopen a saved dashboard; it lists owned definitions before selecting an exact returned ID. Duplicate names require a choice. Removing a saved view removes its definition and leaves banking transactions unchanged. Each operator can keep up to 20 definitions.
 
@@ -32,4 +32,4 @@ The assistant uses get_company_activity, save_company_dashboard, list_saved_dash
 
 The authenticated /api/company-activity and /api/dashboard-views endpoints support chart refreshes, drill-downs, pagination and private saves in chat. They do not provide separate frontend views. Existing installations need migration 010_saved_dashboard_views.sql and its runtime grants; this UI change needs no new migration.
 
-PostgreSQL tests verify ownership, ambiguity, Singapore date boundaries, integer-cent totals, pagination, saved definitions, session revocation and model selection of an owned saved ID. Browser tests cover inline charts on desktop and mobile, unchanged page URLs, saved views across sign-ins, stale responses after logout, empty periods and removal of the former navigation links. Test model doubles are confined to tests; production uses the configured OpenAI model.
+PostgreSQL tests verify ownership, ambiguity, Singapore date boundaries, integer-cent totals, pagination, saved definitions, session revocation and model selection of an owned saved ID. Browser tests cover inline charts on desktop and mobile, unchanged page URLs, saved views across sign-ins, out-of-order chart responses, recovery after a failed logout, save requests during chart loading, empty periods and removal of the former navigation links. Test model doubles are confined to tests; production uses the configured OpenAI model.

@@ -17,6 +17,11 @@ const { createOpenAIModel } = require('./openai');
 const { DRAFT_INTENT, references, narrativeIssue, relevanceIssue } = require('./evidence');
 const iso = value => new Date(value).toISOString();
 const object = value => value && typeof value==='object' && !Array.isArray(value);
+function sameDashboardDefinition(left,right){
+  if(!left || !right)return false;
+  const name=value=>value.trim().replace(/\s+/g,' ').toLowerCase(),a=left.period,b=right.period;
+  return left.scope===right.scope && name(left.company)===name(right.company) && a?.kind===b?.kind && (a?.kind==='rolling'?a.days===b.days:a?.kind==='fixed' && a.from===b.from && a.to===b.to);
+}
 const KINDS = { liquidity:'project_liquidity',fraud_investigation:'investigate_transaction',rule_simulation:'simulate_rule',reconciliation:'reconcile_accounts' };
 const CONVERSATIONAL = /^(?:test(?:ing)?|ping|hi|hello|hey|help|what can you do|are you (?:there|working)|can you hear me)[.!?]*$/i;
 const SUGGESTIONS = ['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Help me transfer money'];
@@ -175,7 +180,8 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(++step>8)throw new HttpError(422,'The agent tool-call limit was reached. Narrow the request.');
       let output;
       if(name==='get_company_activity'){
-        if(dashboardViews.followup(message) && previous.lastCompanyDashboard){
+        if(dashboardViews.followup(message)){
+          if(!previous.lastCompanyDashboard)throw new HttpError(409,'Choose or retrieve an unambiguous dashboard before saving it.');
           const definition=previous.lastCompanyDashboard;
           if(args.company!==undefined && args.company!==definition.company)throw new HttpError(400,'The company differs from the previous dashboard.');
           output=companyActivity.assistantResult(await dashboardViews.readDefinition(db,acting,definition,{now}),definition);
@@ -283,13 +289,15 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         report={title:'AI banking enquiry',reply,items:items.slice(0,20),actions:actions.slice(0,8),requiresAuthorization:actions.some(a=>a.type.startsWith('draft_'))};
         if(clarification)report={...report,title:'Assistant help and clarification',clarification:true,suggestions:SUGGESTIONS};
         const shown=[...results].reverse().find(r=>['get_company_activity','open_saved_dashboard'].includes(r.tool) && r.value.period);
-        const savedView=[...results].reverse().find(r=>r.tool==='save_company_dashboard')?.value.view || shown?.value.view || null;
+        const saved=[...results].reverse().find(r=>r.tool==='save_company_dashboard')?.value.view || null;
+        // A save receipt belongs only to the chart with the same validated filters.
+        const savedView=shown?(shown.value.view || (sameDashboardDefinition(shown.value.viewDefinition,saved?.definition)?saved:null)):saved;
         if(shown || savedView){
           const data=shown?.value || await dashboardViews.readDefinition(db,acting,savedView.definition,{now});
           report.companyDashboard={data,definition:data.viewDefinition || savedView?.definition || null,savedView};
         }
         const listed=[...results].reverse().find(r=>r.tool==='list_saved_dashboards');
-        if(listed)report.savedDashboards=listed.value.views;
+        if(listed)report.savedDashboards=saved?await dashboardViews.list(db,acting):listed.value.views;
       }else if(reply && report)report={...report,interpretation:reply};
       if(!report)report={title:'Business banking enquiry',reply,actions:[],items:[]};
       if(results.length)report={...report,evidenceReferences:references(id,results)};

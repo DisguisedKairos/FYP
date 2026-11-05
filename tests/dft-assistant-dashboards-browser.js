@@ -120,3 +120,60 @@ test('Former company dashboard URLs open chat without an automatic dashboard',as
  }
  assert.deepEqual(page.errors,[]);
 });
+
+test('An older chart response cannot replace the most recently selected dashboard for a save follow-up',async t=>{
+ const {f,page}=await open(t,1280);
+ await ask(page,'Show a dashboard with Harbour Supplies');
+ const first=await page.evaluate('document.querySelector(".from-assistant:last-child").dataset.messageId');
+ await ask(page,'Show my company transaction dashboard');
+ const second=await page.evaluate('document.querySelector(".from-assistant:last-child").dataset.messageId');
+ await page.evaluate('window.chartFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.chartFetch(...args);if(String(args[0]).includes("/company-activity?") && new URL(args[0],location.origin).searchParams.get("company")==="Harbour Supplies Pte. Ltd.")await new Promise(resolve=>window.releaseEarlierChart=resolve);return response;};');
+ await page.click('[data-message-id="'+first+'"] [data-dashboard-command="refresh"]');await page.waitFor('!!window.releaseEarlierChart');
+ await page.click('[data-message-id="'+second+'"] [data-dashboard-command="refresh"]');
+ await page.waitFor('document.querySelector(\'[data-assistant-dashboard="'+second+'"]\').getAttribute("aria-busy")==="false"');
+ await page.evaluate('window.releaseEarlierChart();window.fetch=window.chartFetch;');
+ await page.waitFor('document.querySelector(\'[data-assistant-dashboard="'+first+'"]\').getAttribute("aria-busy")==="false"');
+ await ask(page,'Save this dashboard');
+ assert.equal((await f.db.query('SELECT config_json FROM saved_dashboard_views')).rows[0].config_json.scope,'all','the last selected chart must remain the save target even if an earlier read completes later');
+ assert.deepEqual(page.errors,[]);
+});
+test('A failed logout releases cancelled dashboard controls so the current session can continue',async t=>{
+ const {page}=await open(t,1280);await ask(page,'Show my company transaction dashboard');
+ await page.evaluate('window.cancelChartFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith("/auth/logout"))return new Response(JSON.stringify({error:"Logout unavailable."}),{status:503,headers:{"Content-Type":"application/json"}});const response=await window.cancelChartFetch(...args);if(String(args[0]).includes("/company-activity?"))await new Promise(resolve=>window.releaseCancelledChart=resolve);return response;};');
+ await page.click('[data-dashboard-command="refresh"]');await page.waitFor('!!window.releaseCancelledChart');
+ await page.click('[data-action="logout"]');await page.waitFor("import('/js/core.js').then(m=>!m.state.signingOut)");
+ assert.equal(await page.evaluate('document.querySelector("[data-dashboard-command=refresh]").disabled'),false,'cancelled chart requests must not permanently disable a session after logout fails');
+ await page.evaluate('window.releaseCancelledChart();window.fetch=window.cancelChartFetch;');
+ await page.click('[data-dashboard-command="refresh"]');await page.waitFor('document.querySelector("[data-assistant-dashboard]").getAttribute("aria-busy")==="false"');
+ assert.deepEqual(page.errors,[]);
+});
+
+test('Save follow-ups wait for the selected chart instead of saving an earlier dashboard',async t=>{
+ const {f,page}=await open(t,1280);
+ await ask(page,'Show a dashboard with Harbour Supplies');
+ const first=await page.evaluate('document.querySelector(".from-assistant:last-child").dataset.messageId');
+ await ask(page,'Show my company transaction dashboard');
+ await page.evaluate('window.pendingChartFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.pendingChartFetch(...args);if(String(args[0]).includes("/company-activity?"))await new Promise(resolve=>window.releaseSelectedChart=resolve);return response;};');
+ await page.click('[data-message-id="'+first+'"] [data-dashboard-command="refresh"]');await page.waitFor('!!window.releaseSelectedChart');
+ await page.fill('#assistant-message','Save this dashboard');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('document.querySelector("#assistant-root").textContent.includes("Wait for the selected dashboard")');
+ assert.equal(Number((await f.db.query('SELECT count(*) FROM saved_dashboard_views')).rows[0].count),0);
+ await page.evaluate('window.releaseSelectedChart();window.fetch=window.pendingChartFetch;');
+ await page.waitFor("import('/js/core.js').then(m=>!m.state.assistant.dashboardSelectionPending)");
+ await ask(page,'Save this dashboard');
+ assert.equal((await f.db.query('SELECT config_json FROM saved_dashboard_views')).rows[0].config_json.company,'Harbour Supplies Pte. Ltd.');
+ assert.deepEqual(page.errors,[]);
+});
+
+test('Saving an older chart with its button makes it the target for a later save follow-up',async t=>{
+ const {f,page}=await open(t,1280);
+ await ask(page,'Show a dashboard with Harbour Supplies');
+ const first=await page.evaluate('document.querySelector(".from-assistant:last-child").dataset.messageId');
+ await ask(page,'Show my company transaction dashboard');
+ await page.click('[data-message-id="'+first+'"] [data-dashboard-command="save"]');
+ await page.waitFor('!!document.querySelector(\'[data-message-id="'+first+'"] .assistant-saved-notice\')');
+ await ask(page,'Save this dashboard');
+ const stored=(await f.db.query('SELECT config_json FROM saved_dashboard_views')).rows;
+ assert.equal(stored.length,1);assert.equal(stored[0].config_json.company,'Harbour Supplies Pte. Ltd.');
+ assert.deepEqual(page.errors,[]);
+});
