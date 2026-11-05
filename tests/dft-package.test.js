@@ -6,8 +6,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { buildPackage, createZip } = require('../scripts/package');
+const { buildPackage, createZip, collectSource } = require('../scripts/package');
 const { verifyPackage, readZip, MAX_ENTRY_BYTES, REQUIRED_FILES } = require('../scripts/verify-package');
+
+test('The current checkout contains every required distributable component', () => {
+  const shipped = new Set(collectSource(path.resolve(__dirname, '..')).map(file => file.path));
+  assert.deepEqual([...REQUIRED_FILES].filter(file => !shipped.has(file)), [], 'The package requirements must follow the actual application layout.');
+  assert.equal(shipped.has('public/js/company-activity.js'), false, 'The retired dashboard page must not return to the release.');
+});
 
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 function write(root, name, content) {
