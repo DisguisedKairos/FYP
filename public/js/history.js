@@ -1,13 +1,13 @@
 // Account history, exports and statements are read from the ledger API. The
 // dashboard is only a recent-activity preview and is never a financial report.
-import { modal, state, ui, api, esc, icon, brand, money, fullDate, singaporeDay, sameId, allAccounts, formBusy, formError, dialog, toast, recoverSession, statusLabel } from './core.js';
+import { modal, state, ui, api, esc, icon, brand, money, fullDate, singaporeDay, sameId, allAccounts, formBusy, formError, dialog, toast, recoverSession, statusLabel, captureSession } from './core.js';
 import { historyResults, accountRecentResults } from './views.js';
 
-let historyController, accountController, detailController, exportController, historyTimer;
-let historyGeneration = 0, accountGeneration = 0, detailGeneration = 0;
+let historyController, accountController, detailController, exportController, statementController, historyTimer;
+let historyGeneration = 0, accountGeneration = 0, detailGeneration = 0, statementGeneration = 0;
 export function cancelHistoryReads() {
   clearTimeout(historyTimer); historyTimer = null;
-  historyGeneration++; accountGeneration++; detailGeneration++;
+  historyGeneration++; accountGeneration++; detailGeneration++; cancelStatementRead();
   for (const controller of [historyController, accountController, detailController, exportController]) controller?.abort();
 }
 function validUser(id) { return state.user && !state.signingOut && sameId(state.user.id,id); }
@@ -115,7 +115,8 @@ export async function openTransaction(id,{adminFallback = false} = {}) {
     dialog('Transaction unavailable.',`<p class="modal-intro">${esc(error.message)}</p><div class="modal-actions"><button type="button" class="button secondary" data-action="close-dialog">Done</button><button type="button" class="button" data-retry-transaction="${esc(id)}">Try again</button></div>`);
   }
 }
-export function cancelDetailRead() { detailController?.abort(); detailGeneration++; }
+function cancelStatementRead() { statementController?.abort(); statementGeneration++; }
+export function cancelDetailRead() { detailController?.abort(); detailGeneration++; cancelStatementRead(); }
 export async function exportActivity(control) {
   const filters = state.route.page === 'activity' ? state.filters : {};
   validateFilters(filters);
@@ -135,24 +136,32 @@ export async function exportActivity(control) {
   } finally { if (control?.isConnected) control.disabled = false; }
 }
 export function statementDialog() {
+  if (!state.user || state.signingOut) return;
+  cancelStatementRead();
   const today = singaporeDay(),first = `${today.slice(0,7)}-01`;
   dialog('Download an account statement.',`<p class="modal-intro">Choose an account and inclusive date range in Singapore time (SGT). Preview the saved ledger, then print or save as PDF.</p><form id="statement-form"><div class="field"><label for="statement-account">Account</label><select id="statement-account" name="account" required>${allAccounts().map(a => `<option value="${esc(a.id)}" ${sameId(a.id,state.filters.account) ? 'selected' : ''}>${esc(a.name)} · ${esc(a.number)}${a.status === 'closed' ? ' (closed)' : ''}</option>`).join('')}</select></div><div class="form-row"><div class="field"><label for="statement-from">From date (SGT)</label><input id="statement-from" name="from" type="date" value="${esc(state.filters.from || first)}" required></div><div class="field"><label for="statement-to">To date (SGT)</label><input id="statement-to" name="to" type="date" value="${esc(state.filters.to || today)}" max="${today}" required></div></div><div class="error-message" role="alert"></div><button type="submit" class="button full">Preview statement ${icon('statement')}</button></form>`);
 }
 export async function generateStatement(form) {
-  if (state.modalBusy) return;
+  if (state.modalBusy || !state.user || state.signingOut || form.getAttribute('aria-busy') === 'true') return;
   const values = Object.fromEntries(new FormData(form));
   if (!values.account) return formError(form,'Choose a savings account.');
   if (!values.from || !values.to || values.from > values.to) return formError(form,'Choose a valid date range.');
   if (values.to > singaporeDay()) return formError(form,'The end date cannot be in the future.');
-  state.modalBusy = true; formBusy(form,true);
-  const userId = state.user.id;
+  const generation = ++statementGeneration, validSession = captureSession(), route = state.route;
+  statementController?.abort(); statementController = new AbortController();
+  const token = 'statement:' + generation; modal.dataset.detailRequest = token;
+  const active = () => generation === statementGeneration && validSession() && state.route === route && modal.open && form.isConnected && modal.dataset.detailRequest === token;
+  // A ledger read can be cancelled without changing the locks used by payments.
+  formBusy(form,true,{lockDialog:false});
   try {
-    const result = await api(`/statements?${new URLSearchParams({accountId:values.account,from:values.from,to:values.to})}`);
-    if (!validUser(userId)) return;
+    const result = await api(`/statements?${new URLSearchParams({accountId:values.account,from:values.from,to:values.to})}`,undefined,'GET',{signal:statementController.signal});
+    if (!active()) return;
     const s = result.statement;
     const rows = s.transactions.map(t => `<tr><td>${new Date(t.createdAt).toLocaleDateString('en-SG',{timeZone:'Asia/Singapore'})}</td><td>${esc(t.description)}<small>${esc(t.reference)}</small></td><td>${esc(statusLabel(t.status))}</td><td>${money(t.amountCents)}</td><td>${money(t.runningBalanceCents)}</td></tr>`).join('');
-    state.modalBusy = false;
     dialog('Your account statement.',`<section class="print-statement"><div class="statement-heading">${brand()}<div><h2>Account statement</h2><p>${esc(s.period.from)} to ${esc(s.period.to)} · SGT</p></div></div><dl class="statement-identity"><div><dt>Account holder</dt><dd>${esc(s.business?.legalName || "Business profile not yet linked")}</dd></div><div><dt>Business registration</dt><dd>${esc(s.business?.registrationNumber || "Pending")}</dd></div><div><dt>Authorized operator</dt><dd>${esc(s.user.name)}</dd></div><div><dt>Account</dt><dd>${esc(s.account?.name || 'All accounts')} ${s.account ? `· ${esc(s.account.number)}` : ''}</dd></div><div><dt>Currency</dt><dd>${esc(s.currency)}</dd></div><div><dt>Generated (SGT)</dt><dd>${fullDate(s.generatedAt)}</dd></div></dl><div class="statement-balances"><div><span>Opening balance</span><strong>${money(s.openingBalanceCents)}</strong></div><div><span>Closing balance</span><strong>${money(s.closingBalanceCents)}</strong></div></div><div class="table-scroll"><table class="statement-table"><thead><tr><th>Date (SGT)</th><th>Description / reference</th><th>Status</th><th>Amount</th><th>Balance</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No transactions in this date range.</td></tr>'}</tbody></table></div><p class="statement-note">Dates use Asia/Singapore. Only completed transactions affect balances. Pending or rejected requests are shown for your records. Republic Polytechnic C300 FYP prototype. This statement uses sample funds.</p></section><div class="modal-actions no-print"><button type="button" class="button secondary" data-action="close-dialog">Done</button><button type="button" class="button" data-action="print-statement">Print / save PDF ${icon('statement')}</button></div>`,{wide:true});
-  } catch (error) { if (validUser(userId) && !await recoverSession(error)) formError(form,error.message); }
-  finally { state.modalBusy = false; formBusy(form,false); }
+  } catch (error) {
+    if (!active() || error.status === -1) return;
+    if (await recoverSession(error) || !active()) return;
+    formError(form,error.message);
+  } finally { if (active()) formBusy(form,false,{lockDialog:false}); }
 }

@@ -112,10 +112,10 @@ export function formError(form, message) {
   error.tabIndex = -1;
   error.focus();
 }
-export function formBusy(form, busy) {
+export function formBusy(form, busy, { lockDialog = true } = {}) {
   form?.setAttribute('aria-busy', String(busy));
   form?.querySelectorAll('button[type="submit"]').forEach(button => { button.disabled = busy; });
-  modal.querySelectorAll('[data-action="close-dialog"]').forEach(button => { button.disabled = busy; });
+  if (lockDialog) modal.querySelectorAll('[data-action="close-dialog"]').forEach(button => { button.disabled = busy; });
 }
 export function dialog(title, content, { wide = false } = {}) {
   delete modal.dataset.detailRequest;

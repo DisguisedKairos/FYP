@@ -145,3 +145,45 @@ test('Onboarding refreshes cannot restore a reviewed application or an ended ses
   assert.equal(await page.evaluate("document.querySelector('#main-content').textContent.includes('ended session')"),false,'A cancelled request from the same operator’s previous session must not replace the new queue.');
   assert.deepEqual(page.errors,[]);
 });
+
+test('Statement reads can be cancelled and cannot replace a later dialog',async t=>{
+ const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+ await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));
+ await page.click('[data-nav=activity]');await page.waitFor(exists('[data-action=statement]'));await page.click('[data-action=statement]');
+ await page.evaluate("window.statementFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.statementFetch(...args);if(String(args[0]).startsWith('/api/statements?')){const body=await response.text();await new Promise(resolve=>window.releaseStatement=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};import('/js/history.js').then(m=>{window.pendingStatement=m.generateStatement(document.querySelector('#statement-form'));return true;})");
+ await page.waitFor('typeof window.releaseStatement==="function"');
+ assert.equal(await page.evaluate('document.querySelector("#modal [data-action=close-dialog]").disabled'),false,'A read-only statement preview should remain cancellable.');
+ await page.click('#modal [data-action=close-dialog]');await page.waitFor('!document.querySelector("#modal").open');
+ await page.click('[data-action=help]');await heading(page,'A little guidance.');
+ await page.evaluate('window.releaseStatement();window.pendingStatement');
+ assert.equal(await page.evaluate('document.querySelector("#modal h2").textContent'),'A little guidance.','A cancelled preview must not replace the current dialog.');
+ assert.deepEqual(page.errors,[]);
+});
+
+test('A statement response from an ended session cannot unlock the next operator payment',async t=>{
+ const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+ const login=async email=>{await page.fill('#email',email);await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));};
+ await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await login('alex@greenlink.demo');await page.click('[data-nav=activity]');await page.waitFor(exists('[data-action=statement]'));await page.click('[data-action=statement]');
+ await page.evaluate("window.olderStatementFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.olderStatementFetch(...args);if(String(args[0]).startsWith('/api/statements?')){const body=await response.text();await new Promise(resolve=>window.releaseOlderStatement=resolve);return new Response(body,{status:response.status,headers:response.headers});}if(String(args[0])==='/api/payments' && args[1]?.method==='POST'){const body=await response.text();await new Promise(resolve=>window.releaseNewPayment=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};import('/js/history.js').then(m=>{window.olderStatement=m.generateStatement(document.querySelector('#statement-form'));return true;})");
+ await page.waitFor('typeof window.releaseOlderStatement==="function"');
+ await page.evaluate("import('/js/core.js').then(m=>{m.ui.endSession('Previous session ended.');return true;})");await page.waitFor(exists('#auth-form'));await login('jamie@greenlink.demo');
+ await page.click('[data-nav=payments]');await page.waitFor(exists('#money-form'));await page.select('#billerId','pub');await page.fill('#reference','STATEMENT-ISOLATION');await page.fill('#amount','1.00');await submit(page,'#money-form');await page.waitFor(exists('#confirm-money-form'));await page.fill('#authorizationPassword','Greenlink123!');
+ await page.evaluate("import('/js/workflows.js').then(m=>{window.newPayment=m.confirmMoney(document.querySelector('#confirm-money-form'));return true;})");await page.waitFor('typeof window.releaseNewPayment==="function"');
+ await page.evaluate('window.releaseOlderStatement();window.olderStatement');
+ assert.equal(await page.evaluate("import('/js/core.js').then(m=>m.state.modalBusy)"),true,'The ended-session statement must not clear the current payment lock.');
+ assert.equal(await page.evaluate('document.querySelector("#modal [data-action=close-dialog]").disabled'),true);
+ await page.evaluate('window.releaseNewPayment();window.newPayment');await heading(page,'Bill payment complete.');
+ assert.deepEqual(page.errors,[]);
+});
+
+test('A failed statement preview can be retried without locking the dialog',async t=>{
+ const f=await fixture(t),page=await launchChrome(t,{width:1280,height:900});
+ await page.navigate(f.baseUrl+'/login');await page.waitFor(exists('#auth-form'));await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');await page.waitFor(exists('.app-shell'));
+ await page.click('[data-nav=activity]');await page.waitFor(exists('[data-action=statement]'));await page.click('[data-action=statement]');
+ await page.evaluate("window.retryStatementFetch=window.fetch;window.statementFailure=true;window.fetch=(...args)=>{if(window.statementFailure && String(args[0]).startsWith('/api/statements?')){window.statementFailure=false;return Promise.resolve(new Response(JSON.stringify({error:'Statement temporarily unavailable.'}),{status:503,headers:{'Content-Type':'application/json'}}));}return window.retryStatementFetch(...args);};");
+ await submit(page,'#statement-form');await page.waitFor('document.querySelector("#statement-form .error-message")?.textContent==="Statement temporarily unavailable."');
+ assert.equal(await page.evaluate('document.querySelector("#statement-form button[type=submit]").disabled'),false);
+ assert.equal(await page.evaluate('document.querySelector("#modal [data-action=close-dialog]").disabled'),false);
+ await submit(page,'#statement-form');await heading(page,'Your account statement.');
+ assert.ok(await page.evaluate('!!document.querySelector(".print-statement")'));assert.deepEqual(page.errors,[]);
+});
