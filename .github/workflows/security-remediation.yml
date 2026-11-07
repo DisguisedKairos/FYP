@@ -1,0 +1,44 @@
+
+name: Security Remediation Agent
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  security-remediation:
+    name: Test Security Remediation Agent
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Security Remediation Agent tests
+        run: |
+          mkdir -p reports
+          node --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=reports/security-remediation-tests.xml tests/security-remediation.test.js
+
+      - name: Upload security agent test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-remediation-test-report
+          path: reports/security-remediation-tests.xml
+          if-no-files-found: warn
