@@ -1,3 +1,4 @@
+import {financeReportControl} from './js/finance-reports.js';
 import {dashboardControl} from './js/assistant-dashboards.js';
 import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
 import { renderAssistant, toggleAssistant, closeAssistant, resetAssistant, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
@@ -108,6 +109,7 @@ document.addEventListener('click',async event => {
   if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
+    if(await financeReportControl(control))return;
     if(await dashboardControl(control))return;
     if (control.dataset.aiAuditId) { if(control.closest('#assistant-root'))closeAssistant({focus:false}); if(state.route.page!=='aiAudit')navigate('aiAudit'); return showAiAudit(control.dataset.aiAuditKind,control.dataset.aiAuditId); }
     if (control.dataset.fraudCase) {

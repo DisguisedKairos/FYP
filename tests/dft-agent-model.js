@@ -14,7 +14,8 @@ function createTestAgentModel(){
     const text=messages.find(m=>m.role==='user').content;
     const pending=messages.find(m=>m.role==='system' && m.content.startsWith('Existing draft context,'));
     let name,args={};
-    if(/\bbalance\b/i.test(text))name='get_accounts';
+    if(/\b(?:finance|financial)\b/i.test(text) && /\breports?\b/i.test(text))name='get_finance_report';
+    else if(/\bbalance\b/i.test(text))name='get_accounts';
     else if(/\b(?:history|recent transactions|search|find)\b/i.test(text))name='search_transactions';
     else if(/\b(?:liquidity|cash.?flow|afford|shortfall|cover|projection)\b/i.test(text))name='project_liquidity';
     else if(/^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b/i.test(text) || pending){

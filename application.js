@@ -9,6 +9,7 @@ const security = require('./banking/security');
 const ledger = require('./banking/ledger');
 const history = require('./banking/history');
 const companyActivity = require('./banking/company-activity');
+const financeReports = require('./banking/finance-reports');
 const dashboardViews = require('./banking/dashboard-views');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
@@ -128,6 +129,13 @@ async function createApplication(options = {}) {
   route('get', '/api/transactions/export', async (req, res) => {
     const result = await history.exportCsv(db, req.banking.user, query(req), now);
     res.type('text/csv').set('Content-Disposition', `attachment; filename="${result.filename}"`).send(result.csv);
+  });
+  route('get', '/api/reports/finance', async (req,res) => {
+    const params=query(req),format=params.get('format')||'csv';
+    if(params.getAll('format').length>1 || !['csv','pdf'].includes(format))throw new HttpError(400,'Choose CSV or PDF for the finance report.');
+    const report=await financeReports.create(db,req.banking.user,params,{now});
+    const result=format==='pdf'?await require('./banking/finance-pdf').pdf(report):financeReports.csv(report);
+    res.type(format==='pdf'?'application/pdf':'text/csv').set('Content-Disposition',`attachment; filename="${result.filename}"`).send(result.content);
   });
   route('get', '/api/transactions/:id', async req => ({ transaction: await history.detail(db, req.banking.user, req.params.id) }));
   route('get', '/api/statements', async req => ({ statement: await history.statement(db, req.banking.user, query(req), now) }));

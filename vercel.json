@@ -10,7 +10,7 @@
       "functions": {
         "app.js": {
           "maxDuration": 300,
-          "includeFiles": "{public/**,views/**,database/migrations/**}"
+          "includeFiles": "{public/**,views/**,database/migrations/**,node_modules/pdfkit/js/standard-fonts/*.cjs}"
         }
       },
       "bindings": [

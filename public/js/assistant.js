@@ -1,3 +1,4 @@
+import {financeReportHtml,cancelFinanceReports} from './finance-reports.js';
 import {dashboardHtml,savedDashboardsHtml,hydrateDashboardCharts,cancelAssistantDashboards} from './assistant-dashboards.js';
 // Raw messages stay in browser memory. Reports, tool evidence and draft context
 // are retained privately; financial actions only open the ordinary banking forms.
@@ -6,7 +7,7 @@ import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
 const dashboardFollowup=/^\s*(?:(?:please|can you|could you|yes)[,\s]+)*(?:save|bookmark|keep)\s+(?:(?:it|this|that)(?:\s+(?:dashboard|view))?|(?:the|my)\s+(?:dashboard|view))(?:\s+as\s+(?:a\s+)?(?:dashboard\s*view|dashboard|view))?(?:\s+for\s+(?:later|future use))?[.!?]*\s*$/i;
-const starters=['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Help me transfer money'];
+const starters=['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Generate a downloadable finance report'];
 function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,open:false,unread:false}); }
 function itemContent(item) {
   if(typeof item==='string')return '<li>'+esc(item)+'</li>';
@@ -17,7 +18,7 @@ function itemContent(item) {
   return '<li><div><strong>'+esc(label)+'</strong>'+(detail?'<small>'+esc(detail)+'</small>':'')+(Array.isArray(item.reasons)?'<ul>'+item.reasons.map(reason=>'<li>'+esc(reason)+'</li>').join('')+'</ul>':'')+'</div>'+(value!==''?'<span>'+esc(value)+'</span>':'')+'</li>';
 }
 function messageHtml(message) {
-  const dashboard=message.role==='assistant'?savedDashboardsHtml(message)+dashboardHtml(message):'';
+  const dashboard=message.role==='assistant'?savedDashboardsHtml(message)+dashboardHtml(message)+financeReportHtml(message):'';
   return '<article data-message-id="'+message.id+'" class="assistant-message '+(message.role==='user'?'from-user':'from-assistant')+'" aria-label="'+(message.role==='user'?'You':'GLDB Assistant')+'"><div class="assistant-message-author">'+(message.role==='user'?'You':icon('chat')+' GLDB Assistant')+'</div><div class="assistant-message-text">'+esc(message.text)+'</div>'+(message.items?.length?'<ul class="assistant-items">'+message.items.map(itemContent).join('')+'</ul>':'')+dashboard+(message.actions?.length?'<div class="assistant-actions">'+message.actions.map((action,index)=>'<button type="button" class="button secondary" data-assistant-action="'+message.id+':'+index+'">'+esc(action.label || 'Open banking form')+' '+icon('arrow')+'</button>').join('')+'</div>':'')+(message.auditRunId && state.user?.role==='admin'?'<button type="button" class="text-button" data-ai-audit-kind="agent" data-ai-audit-id="'+esc(message.auditRunId)+'">View AI audit</button>':'')+'</article>';
 }
 function suggestionHtml() {
@@ -27,7 +28,7 @@ function suggestionHtml() {
   return suggestions.slice(0,4).map(text=>'<button type="button" class="assistant-suggestion" data-assistant-suggestion="'+esc(text)+'">'+esc(text)+'</button>').join('');
 }
 function welcomeHtml() {
-  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, summarize company activity, save dashboards or prepare a payment draft. You stay in control of every payment.</p></div>';
+  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, summarize company activity, save dashboards, download finance reports or prepare a payment draft. You stay in control of every payment.</p></div>';
 }
 function popupContent() {
   const t=thread();
@@ -98,7 +99,7 @@ function renderThread() {
     else target.scrollTop=target.scrollHeight;
   }
 }
-export function cancelAssistant() { cancelAssistantDashboards(); generation++; controller?.abort(); if(state.assistant)state.assistant.busy=false; }
+export function cancelAssistant() { cancelFinanceReports(); cancelAssistantDashboards(); generation++; controller?.abort(); if(state.assistant)state.assistant.busy=false; }
 export function clearAssistant() {
   const open=Boolean(state.assistant?.open);cancelAssistant();state.assistant=null;thread().open=open;
   const input=document.querySelector('#assistant-message');if(input)input.value='';
@@ -128,7 +129,7 @@ export async function sendAssistant(message,{retry=false}={}) {
     if(result.sensitiveInput){const submitted=[...t.messages].reverse().find(message=>message.role==='user');if(submitted)submitted.text='[Sensitive message removed]';}
     t.previousRunId=result.runId || null;
     if((t.dashboardSelectionVersion||0)===selectionVersion){t.activeDashboardDefinition=result.companyDashboard?.definition||null;t.dashboardSelectionVersion=selectionVersion+1;t.dashboardSelectionPending=false;}
-    t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
+    t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,financeReport:result.financeReport||null,dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
     if(!t.open)t.unread=true;
   } catch(error) {

@@ -555,3 +555,5 @@ dialog.wide-dialog { width:900px; }
 .assistant-saved-card>div{display:flex;flex-wrap:wrap;align-items:center;gap:14px}
 @media(max-width:900px){.assistant-dashboard .company-visual-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){.assistant-has-dashboard .assistant-popup{width:calc(100vw - 24px);height:min(780px,calc(100dvh - 24px - env(safe-area-inset-bottom)))}.assistant-dashboard .company-visual-grid>.panel{padding:12px}.assistant-dashboard .activity-month-layout{grid-template-columns:48px minmax(0,1fr)}.assistant-dashboard .activity-status-layout{flex-direction:column;align-items:stretch}.assistant-dashboard .activity-status-ring{align-self:center}.assistant-dashboard .activity-status-legend{width:100%}}
+
+.assistant-finance-report{border:1px solid var(--line);border-radius:8px;padding:14px;margin-top:16px;background:#fff}.assistant-finance-report h3{font-size:13px;margin-bottom:8px}.assistant-finance-report p{font-size:11px;line-height:1.7;overflow-wrap:anywhere}.assistant-finance-actions{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.assistant-finance-status{color:var(--muted)}
