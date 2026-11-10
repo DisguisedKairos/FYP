@@ -4,6 +4,7 @@ const { HttpError } = require('../../models/errors');
 const { readPolicy, evaluateRules } = require('../risk');
 const { nextOccurrence } = require('../workflows');
 const { validProvenance } = require('../ai-provider');
+const {projectionWarnings}=require('./funds');
 const DAY = 86400000;
 const iso = value => new Date(value).toISOString();
 const amount = value => {
@@ -23,11 +24,11 @@ async function assertActor(db, user, { admin = false } = {}) {
   return actor;
 }
 
-async function liquidity(db, user, { days = 30, now = Date.now } = {}) {
-  await assertActor(db, user);
+async function liquidity(db, user, { days = 30, now = Date.now, snapshotClient = null } = {}) {
+  await assertActor(snapshotClient || db, user);
   days = horizon(days);
   const generated = now(), end = generated + days * DAY;
-  return db.transaction(async client => {
+  const read=async client => {
     const owned = (await client.query("SELECT a.*,b.status AS business_status FROM accounts a LEFT JOIN businesses b ON b.id=a.business_id WHERE a.user_id=$1 AND a.status='active' ORDER BY a.id", [user.id])).rows;
     const accountMap = new Map(owned.map(a => [String(a.id), { id: String(a.id), name: a.name, number: a.number, balanceCents: amount(a.balance_cents), projectedCents: amount(a.balance_cents), minimumProjectedCents: amount(a.balance_cents), firstShortfallAt: null }]));
     const schedules = (await client.query("SELECT * FROM scheduled_payments WHERE user_id=$1 AND status='active' AND next_run_at<=$2 ORDER BY next_run_at,id LIMIT 501", [user.id, iso(end)])).rows;
@@ -69,13 +70,30 @@ async function liquidity(db, user, { days = 30, now = Date.now } = {}) {
         if (!gap) break;
       }
     }
+    const shortfalls=accounts.filter(a => a.minimumProjectedCents < 0).map(a => ({ accountId:a.id,name:a.name,shortageCents:-a.minimumProjectedCents,dueAt:a.firstShortfallAt }));
     const held = (await client.query("SELECT count(*)::int AS count,COALESCE(sum(-t.amount_cents),0)::text AS cents FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND t.status='pending_review' AND t.amount_cents<0", [user.id])).rows[0];
     return { title: `${days}-day business liquidity projection`, generatedAt: iso(generated), days,
       assumptions: ['Scenario based on current balances and active scheduled instructions, including overdue occurrences.', 'Assumes scheduled instructions settle in due order. Review, eligibility, cancellation and funds checks still apply.', 'No unscheduled income is predicted. Held payments are not reserved or deducted.'],
       accounts, occurrences: events, totalBalanceCents: amount(accounts.reduce((s,a) => s+a.balanceCents,0)), projectedTotalCents: amount(accounts.reduce((s,a) => s+a.projectedCents,0)),
-      shortfalls: accounts.filter(a => a.minimumProjectedCents < 0).map(a => ({ accountId: a.id, name: a.name, shortageCents: -a.minimumProjectedCents, dueAt: a.firstShortfallAt })),
+      shortfalls, fundingCheck:projectionWarnings({shortfalls,generatedAt:iso(generated),days,occurrenceCount:events.length}),
       heldPayments: { count: held.count, amountCents: amount(held.cents) }, actions: suggestions, evidence: accounts.map(a => ({ type: 'account', id: a.id, label: a.name })) };
-  }, { isolation: 'REPEATABLE READ', readOnly: true });
+  };
+  return snapshotClient?read(snapshotClient):db.transaction(read,{isolation:'REPEATABLE READ',readOnly:true});
+}
+async function fundingCoverage(db,user,{now=Date.now,snapshotClient=null}={}){
+  try{return (await liquidity(db,user,{now,snapshotClient})).fundingCheck;}
+  catch(error){
+    if(error.status!==413)throw error;
+    const checkedAt=iso(now());
+    return {available:false,checkedAt,days:30,warnings:[{code:'coverage_unavailable',title:'Scheduled funding could not be checked completely.',message:'The scheduled-payment scenario exceeds the supported planning limits. Ask for a shorter planning period before deciding whether funds are sufficient.',checkedAt}]};
+  }
+}
+async function balances(db,user,{now=Date.now}={}){
+  return db.transaction(async client=>{
+    await assertActor(client,user);
+    const accounts=(await client.query("SELECT id::text,name,number,balance_cents::text FROM accounts WHERE user_id=$1 AND status='active' ORDER BY id",[user.id])).rows.map(row=>({id:row.id,name:row.name,number:row.number,balanceCents:amount(row.balance_cents)}));
+    return {accounts,fundingCheck:await fundingCoverage(db,user,{now,snapshotClient:client})};
+  },{isolation:'REPEATABLE READ',readOnly:true});
 }
 
 async function investigation(db, user, { transactionId, now = Date.now } = {}) {
@@ -147,4 +165,4 @@ async function reconciliation(db,user,{now=Date.now}={}) {
       evidence:[...discrepancies.map(a=>({type:'account',id:a.accountId,label:'Balance discrepancy'})),...failedSchedules.map(s=>({type:'schedule',id:s.id,label:'Schedule exception'}))],actions:[]};
   },{isolation:'REPEATABLE READ',readOnly:true});
 }
-module.exports={liquidity,investigation,simulation,reconciliation,assertActor,candidateRule,horizon};
+module.exports={liquidity,balances,fundingCoverage,investigation,simulation,reconciliation,assertActor,candidateRule,horizon};

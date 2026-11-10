@@ -1,7 +1,7 @@
 'use strict';
 
 const DRAFT_INTENT = /^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b|\b(?:create|prepare|draft|set up)\b.*\b(?:payment|transfer|schedule)\b/i;
-const LABELS = { get_finance_report:'Current owned finance activity snapshot', list_saved_dashboards:'Owned saved dashboard definitions', open_saved_dashboard:'Refreshed owned company dashboard', save_company_dashboard: 'Private saved dashboard receipt', get_company_activity: 'Owned company transaction activity', get_daily_market_context: 'Dated official public market and scam context', analyze_market_transactions: 'Permitted payments with market and scam context', flag_transaction_for_review: 'Human investigation request', get_accounts: 'Owned account balances', get_schedules: 'Owned scheduled instructions', search_transactions: 'Owned transaction search', project_liquidity: 'Scheduled-payment liquidity scenario', investigate_transaction: 'Recorded payment risk assessment', get_related_payments: 'Earlier completed payments', simulate_rule: 'Historical rule comparison', reconcile_accounts: 'Ledger and operational checks', prepare_payment_draft: 'Payment form draft' };
+const LABELS = { check_payment_funds:'Owned source-account payment funding check', get_finance_report:'Current owned finance activity snapshot', list_saved_dashboards:'Owned saved dashboard definitions', open_saved_dashboard:'Refreshed owned company dashboard', save_company_dashboard: 'Private saved dashboard receipt', get_company_activity: 'Owned company transaction activity', get_daily_market_context: 'Dated official public market and scam context', analyze_market_transactions: 'Permitted payments with market and scam context', flag_transaction_for_review: 'Human investigation request', get_accounts: 'Owned account balances', get_schedules: 'Owned scheduled instructions', search_transactions: 'Owned transaction search', project_liquidity: 'Scheduled-payment liquidity scenario', investigate_transaction: 'Recorded payment risk assessment', get_related_payments: 'Earlier completed payments', simulate_rule: 'Historical rule comparison', reconcile_accounts: 'Ledger and operational checks', prepare_payment_draft: 'Payment form draft' };
 function references(runId, results) {
   return results.map((result, i) => ({ id: `E${i + 1}`, runId, step: i + 1, tool: result.tool, label: LABELS[result.tool] || 'Banking evidence' }));
 }
@@ -26,8 +26,11 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const assessments = [report, ...results.map(r => r.value)].filter(Boolean).map(r => r.assessment).filter(Boolean);
   if (assessments.some(a => a.decision === 'allow') && /\b(?:high[ -]risk|flagged|blocked|held|rejected)\b/i.test(plain)) return 'The narrative conflicts with the recorded allow decision.';
   if (assessments.some(a => ['review', 'block'].includes(a.decision)) && /\b(?:approved|allowed|cleared|safe to (?:pay|send))\b/i.test(plain)) return 'The narrative conflicts with the recorded review or block decision.';
+  const fundingWarnings=require('./funds').collect(results);
+  const fundingClaims=plain.replace(/\b(?:(?:do|does|did|will|would|should|may|might|could|can)\s+not|cannot|can't|don't|doesn't|won't|wouldn't|shouldn't|couldn't|not)\s+(?:(?:have|be)\s+)?(?:sufficient funds|enough (?:money|funds)|fully funded|cover all(?:\s+(?:payments|bills))?)/gi,'[funding limitation]');
+  if(fundingWarnings.length && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded|funds (?:are|will be) sufficient)\b/i.test(fundingClaims))return 'The narrative conflicts with a funding shortfall or an incomplete funding check.';
   const projections = [report, ...results.filter(r => r.tool === 'project_liquidity').map(r => r.value)].filter(r => Array.isArray(r?.shortfalls));
-  if (projections.some(r => r.shortfalls.length > 0) && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded)\b/i.test(plain)) return 'The narrative conflicts with a projected funding shortfall.';
+  if (projections.some(r => r.shortfalls.length > 0) && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded)\b/i.test(fundingClaims)) return 'The narrative conflicts with a projected funding shortfall.';
   const checks = [report, ...results.filter(r => r.tool === 'reconcile_accounts').map(r => r.value)].filter(r => Array.isArray(r?.discrepancies));
   if (checks.some(r => r.discrepancies.length || r.failedSchedules?.length) && /\b(?:no (?:issues|exceptions|discrepancies)|all (?:clear|balanced|reconciled)|everything (?:balances|reconciles))\b/i.test(plain)) return 'The narrative conflicts with recorded operational exceptions.';
   if (results.some(r => r.tool === 'prepare_payment_draft' && r.value.complete === false) && /\b(?:draft|payment form)\s+(?:is\s+)?ready\b/i.test(plain)) return 'Required draft details are still missing.';
@@ -36,13 +39,19 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
 function relevanceIssue(message, results) {
   const tools = new Set(results.map(r => r.tool));
   const has = names => names.some(name => tools.has(name));
+  const coverage=[...results].reverse().find(row=>row.value?.fundingCheck)?.value.fundingCheck;
+  const duration=message.match(/\b(\d+)\s+(days?|weeks?|months?)\b/i),unit=duration?.[2]?.toLowerCase();
+  const requestedDays=duration?Number(duration[1])*(unit.startsWith('week')?7:unit.startsWith('month')?30:1):/\b(?:years?|quarters?)\b|\b\d{4}-\d{2}-\d{2}\b/i.test(message)?0:/\bweeks?\b/i.test(message)?7:/\btomorrow\b/i.test(message)?1:undefined;
+  const covered=coverage && typeof coverage.available==='boolean' && (coverage.available===false || coverage.occurrenceCount>0) && (requestedDays===undefined || coverage.days===requestedDays);
+  const currentPayment=has(['check_payment_funds']) && !/\b(?:scheduled|upcoming|future|projection|liquidity|next|weekly|monthly)\b/i.test(message);
   if(require('../dashboard-views').saveIntent(message) && (/\b(?:dashboard|view|summary)\b/i.test(message) || require('../dashboard-views').followup(message)) && !has(['save_company_dashboard']) && !results.some(r=>r.tool==='get_company_activity' && r.value?.status && r.value.status!=='ready'))return 'The requested dashboard was not saved.';
   if (/\b(?:market|trends?|daily news|scam alerts?|exchange rates?|forex)\b/i.test(message) && !has(['get_daily_market_context','analyze_market_transactions'])) return 'The requested dated market or scam context was not retrieved.';
+  if (/\b(?:insufficient funds|low (?:on )?(?:funds|balance)|enough (?:money|funds)|sufficient funds)\b/i.test(message) && !has(['get_accounts','project_liquidity','prepare_payment_draft','check_payment_funds','get_finance_report'])) return 'The requested funding evidence was not retrieved.';
   if (/\b(?:finance|financial)\b/i.test(message) && /\breports?\b/i.test(message) && !has(['get_finance_report'])) return 'The requested finance report was not retrieved.';
-  if (/\b(?:balance|balances)\b/i.test(message) && !has(['get_accounts', 'project_liquidity', 'reconcile_accounts', 'get_finance_report'])) return 'The requested balance evidence was not retrieved.';
-  if (/\b(?:liquidity|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard'])) return 'The requested liquidity scenario was not retrieved.';
+  if (/\b(?:balance|balances)\b/i.test(message) && !has(['get_accounts', 'project_liquidity', 'reconcile_accounts', 'get_finance_report','check_payment_funds'])) return 'The requested balance evidence was not retrieved.';
+  if (/\b(?:liquidity|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard']) && !covered && !currentPayment) return 'The requested liquidity scenario was not retrieved.';
   if (/\bcash.?flow\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report'])) return 'The requested cash flow evidence was not retrieved.';
-  if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity'])) return 'The requested scheduled-payment evidence was not retrieved.';
+  if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity']) && !covered) return 'The requested scheduled-payment evidence was not retrieved.';
   if (/\b(?:history|recent transactions|find.*transaction|search.*transaction)\b/i.test(message) && !has(['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report'])) return 'The requested transaction evidence was not retrieved.';
   return null;
 }

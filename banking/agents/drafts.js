@@ -3,6 +3,7 @@
 const { HttpError } = require('../../models/errors');
 const ledger = require('../ledger');
 const { assertActor } = require('./reports');
+const {draftWarnings}=require('./funds');
 const fields = ['kind','type','fromAccountId','toAccountNumber','billerId','reference','amount','description','scheduledAt','frequency'];
 const object = v => v && typeof v === 'object' && !Array.isArray(v);
 
@@ -45,7 +46,7 @@ async function prepareDraft(db,user,input,{now=Date.now}={}) {
   if(draft.description && draft.description.length>100)draft.description=draft.description.slice(0,100);
   const warnings=cents>Number(source.balance_cents)?['The selected account currently has insufficient funds. Review the amount and funding before authorization.']:[];
   const {kind,...payload}=draft;
-  return {kind,draft,complete:!missing.length,missing,warnings,source:{id:String(source.id),name:source.name,balanceCents:Number(source.balance_cents)},
+  return {kind,draft,complete:!missing.length,missing,warnings,fundingWarnings:draftWarnings(source,cents,{scheduled:kind==='schedule',now}),source:{id:String(source.id),name:source.name,balanceCents:Number(source.balance_cents)},
     requiresAuthorization:true,actions:missing.length?[]:[{type:kind==='schedule'?'draft_schedule':kind==='bill'?'draft_payment':'draft_transfer',label:'Review '+(kind==='bill'?'bill payment':kind)+' draft',draft:payload}]};
 }
 

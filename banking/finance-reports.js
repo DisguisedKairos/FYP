@@ -7,6 +7,7 @@ const {snapshot,dateRange}=require('./history');
 const {cents}=require('./ledger');
 const {requestedPeriod}=require('./company-activity');
 const businesses=require('./business');
+const {fundingCoverage}=require('./agents/reports');
 const MAX_ROWS=10000,DAY=86400000;
 const iso=value=>value?new Date(value).toISOString():null;
 const day=value=>new Date(value+8*3600000).toISOString().slice(0,10);
@@ -24,7 +25,7 @@ function paramsForMessage(message,{now=Date.now}={}){
   if(!period.from && /\b(?:week|weeks|year|years|quarter|quarters|since|between|until|before|after|hours?)\b/i.test(message))throw new HttpError(400,'For this report, specify two YYYY-MM-DD dates, today, yesterday, this month, last month, or last N days.');
   return new URLSearchParams(period);
 }
-async function create(db,user,params=new URLSearchParams(),{now=Date.now}={}){
+async function create(db,user,params=new URLSearchParams(),{now=Date.now,includeFunding=false}={}){
   const range=rangeFor(params,now);
   return snapshot(db,async client=>{
     await assertCurrentUser(client,user);
@@ -56,7 +57,8 @@ async function create(db,user,params=new URLSearchParams(),{now=Date.now}={}){
     }
     Object.assign(totals,{incomeCents:cents(incoming),outgoingCents:cents(outgoing),netCents:cents(incoming-outgoing),pendingOutgoingCents:cents(pending),rejectedOutgoingCents:cents(rejected)});
     const companies=[...grouped.values()].sort((a,b)=>{const left=a.incoming+a.outgoing,right=b.incoming+b.outgoing;return left===right?a.company.localeCompare(b.company):left>right?-1:1;}).map(row=>({company:row.company,incomeCents:cents(row.incoming),outgoingCents:cents(row.outgoing),netCents:cents(row.incoming-row.outgoing),completedCount:row.completedCount,pendingCount:row.pendingCount,rejectedCount:row.rejectedCount}));
-    return {title:'Business finance activity report',generatedAt,currency:'SGD',business:business?{legalName:business.legalName,registrationNumber:business.registrationNumber}:null,period:{from:range.from,to:range.to,timeZone:'Asia/Singapore'},totals,accounts,companies,transactions,
+    const fundingCheck=includeFunding?await fundingCoverage(db,user,{now,snapshotClient:client}):null;
+    return {...(fundingCheck?{fundingCheck}:{}),title:'Business finance activity report',generatedAt,currency:'SGD',business:business?{legalName:business.legalName,registrationNumber:business.registrationNumber}:null,period:{from:range.from,to:range.to,timeZone:'Asia/Singapore'},totals,accounts,companies,transactions,
       notes:['Balances are current at the report snapshot, not historical period closing balances.','Received, paid and net movement use completed external entries only; own-account transfers and opening funds are excluded.','Pending and rejected requests never change these cash-flow totals. Pending requests do not reserve funds.','Completed activity uses settlement time; pending and rejected activity uses request time. Dates are inclusive in Singapore time.','This is a banking activity report using sample funds, not a full accounting statement or audited financial report.']};
   });
 }
