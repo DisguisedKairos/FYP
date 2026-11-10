@@ -89,7 +89,7 @@ export function reviewMoney(form) {
   if (bill) {
     if (!biller) throw new Error('Choose a biller to continue.');
     values.reference = String(values.reference ?? '').trim();
-    if (values.reference.length < 3 || values.reference.length > 64) throw new Error('Use a bill reference of 3–60 characters.');
+    if (values.reference.length < 3 || values.reference.length > 64) throw new Error('Use a bill reference of 3–64 characters.');
     recipient = biller.name;
   } else {
     values.toAccountNumber = String(values.toAccountNumber ?? '').replace(/[\s-]/g, '');
