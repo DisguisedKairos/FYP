@@ -105,3 +105,5 @@ Endpoints require the signed-in operator and existing origin/CSRF checks for wri
 | POST /api/dashboard-views/:id/refresh | Empty object; fresh owned snapshot and refreshedAt/nextRefreshAt; no financial action |
 
 Creation also accepts presentation/refreshCadence. Definitions support period kind months with integer months (1-12), alongside rolling/fixed. The existing job refreshes due weekly charts. Public research uses bounded assistant tools and is not an arbitrary URL proxy. See [workflow and boundaries](assistant-insights.md).
+
+The assistant also accepts ordinary counterparty-news/sanctions questions through POST /api/agents/assistant. scan_counterparty_news has only an optional exact company label from the message; the server validates it against owned recent completed receipts and otherwise selects at most five names. Its report returns counterpartyScan coverage/limits/status and publicResearch source cards. It is on-demand research, not a sanctions clearance or financial action. No new endpoint, migration or credential is required.

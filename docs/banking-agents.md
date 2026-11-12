@@ -79,3 +79,5 @@ The read-only `check_payment_funds` tool also supports dated company-payment que
 ## Market research and customization
 
 The new get_business_profile tool analyzes owned submitted details and activity; get_market_insights and research_public_company retrieve sourced public information in a separate request without private banking facts. Charts remain in chat and can be kept on the dedicated My dashboard page with private preferences and weekly refresh. See [workflow and boundaries](assistant-insights.md).
+
+The scan_counterparty_news tool selects up to five owned recent external counterparty labels, then runs separate official UN/MAS/OFAC sanctions/compliance-source research and company/industry news research. Coverage, identity uncertainty and unavailable checks remain visible. Only names and a generic industry category enter the public searches; the tool cannot clear or change payments or open cases. See [details and prompts](assistant-insights.md#counterparty-news-sanctions-and-compliance-sources).

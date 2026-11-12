@@ -20,6 +20,18 @@ Private analysis reads only the signed-in operator's submitted business name, in
 
 Public research requires a company name in the question. Similar names can refer to different companies; public records grant no access to private banking accounts. Web search runs in a separate OpenAI request containing only that validated public name or a fixed market-topic query. Private balances, identifiers, receipts and conversation are not copied into search. Ordinary banking inference still receives permitted private evidence. Public text is untrusted data, rendered as escaped text with validated links.
 
+## Counterparty news, sanctions and compliance sources
+
+Ask "Scan news for companies this account deals with, including sanctions and compliance issues" or name an exact recorded company: "Check sanctions and recent news for PUB" if PUB appears in your own recent external receipts.
+
+The scan selects at most five safe counterparty labels from the signed-in operator's completed external receipts in the last 90 days, most recent first. Own transfers, opening balances and old/unsettled receipts are excluded. Coverage shows selected/omitted counts, including names not searched. An exact company argument must be in the question and match an owned receipt; public data never grants another operator's banking access.
+
+Two separate live OpenAI searches use only those names and a server-mapped generic industry category. One restricts search and citations to official UN, Singapore MAS and US OFAC domains for sanctions listings and regulator enforcement notices. The other checks company and relevant industry news. Balances, account numbers, transaction amounts/descriptions, addresses, raw industry text and raw chat are not sent to these searches. Other companies mentioned in industry news are public examples, not inferred counterparties.
+
+Each report includes check time and cited public sources, with source dates and identity gaps when available. An inaccessible search remains unavailable; partial results stay labelled. Missing results, general source landing pages, name similarity and headlines do not establish legal-entity identity, sanctions clearance, complete list coverage or compliance. A human must check entity identifiers, dated official records and applicable jurisdictions. The tool never blocks/approves payments, changes scores or creates fraud cases. Request metadata uses the existing admin-only AI audit.
+
+Official entry points: [UN consolidated list](https://main.un.org/securitycouncil/en/content/un-sc-consolidated-list), [MAS designated persons/entities](https://www.mas.gov.sg/regulation/anti-money-laundering/targeted-financial-sanctions/lists-of-designated-individuals-and-entities), [OFAC Sanctions List Service](https://ofac.treasury.gov/sanctions-list-service). These links are always available for manual checks; their presence alone does not mean a lookup succeeded.
+
 ## Granular transaction trends
 
 Use past/last 1-12 calendar months, including the current partial month. Explicit dates and rolling-day filters remain available. Monthly facts include received/paid/net, completed and directional counts, average outgoing payment rounded to cents, and change from the preceding displayed month. Percentage change is unavailable without a prior nonzero baseline. Zero-activity months remain visible; partial months are labelled without extrapolating forecasts.
@@ -51,6 +63,6 @@ Apply migration 011 and runtime grants before deployment:
 
 Use the existing private runtime/migration configuration. Do not reseed. Migration 011 adds assistant_preferences and saved-chart settings/snapshots, preserving financial records and existing definitions.
 
-Tests: tests/dft-assistant-insights.test.js and tests/dft-assistant-insights-browser.js, alongside existing company, saved-view, OpenAI and SQL permission suites. Controlled providers are test doubles; real verification uses the configured provider in a disposable schema.
+Tests: tests/dft-counterparty-news.test.js, tests/dft-assistant-insights.test.js and tests/dft-assistant-insights-browser.js, alongside existing company, saved-view, OpenAI and SQL permission suites. Controlled providers are test doubles; real verification uses the configured provider in a disposable schema.
 
 References: [official OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search) and [function calling](https://developers.openai.com/api/docs/guides/function-calling).

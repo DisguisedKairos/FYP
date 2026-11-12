@@ -2,7 +2,7 @@
 
 Updated 12 November 2026 for the C300 wholesale banking prototype, including live public research and customized dashboards. Record the tested deployment commit with each result.
 
-This guide contains **116 manual cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
+This guide contains **122 manual cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
 
 Make a copy of [the Excel-compatible results sheet](assistant-test-cases.csv) per tester/session. Copy questions below after replacing every `{PLACEHOLDER}`. Instructions describing clicks are for the tester, not chat prompts.
 
@@ -299,6 +299,17 @@ Use a fresh chat for unrelated draft/date scenarios and the same chat for delibe
 | INSIGHT-08 | Business | Owner setup | Owner-prepared disposable weekly due chart in isolated test instance | Run existing job when due; inspect next due/last success. Then arrange a safe refresh failure and retry. | Successful snapshot advances one week. Failure retains old snapshot, visibly reports failure and retries next day. Hosted daily window/batch limits are respected, without AI or money movement. |
 | INSIGHT-09 | Business | Read | Owner/admin can inspect permitted request traces | Check my balance and research the public company profile of DBS Group. | Private bank facts remain owned; public-search request contains public company/topic only. No account numbers, balances, receipts or raw conversation enter public search. Public links do not expose private banking evidence. |
 
+### Counterparty news and compliance research
+
+| ID | Role | Effect | Setup | Question or steps | Expected result |
+| --- | --- | --- | --- | --- | --- |
+| NEWS-01 | Business | Read | Completed external receipts with recorded counterparty names | Scan news for companies this account deals with, including sanctions and compliance issues. | Shows up to five owned recent counterparty names, omissions, official-source checks and separately sourced company/industry news. Name-only identity remains unverified; no payment or fraud decision. |
+| NEWS-02 | Business | Read | An exact owned company label from NEWS-01 | Check sanctions, compliance notices and recent news for <exact recorded company name>. | Uses only the exact owned label named in the question. A different customer's counterparty cannot be selected or disclosed from private records. |
+| NEWS-03 | Business | Read | Business profile includes an industry | Scan my counterparties for regulatory issues and relevant company news in my industry. | Search gets selected company names and a fixed generic industry category only. No balance, account number, transaction details, registered address or raw chat enters public search. Other industry companies are public examples only. |
+| NEWS-04 | Business | Owner setup | Owner-arranged official-search outage on isolated test instance | Scan sanctions and company news for my counterparties. | Available news remains visible; official-source failure is explicit with manual UN/MAS/OFAC links. No sanctions clearance or invented findings. |
+| NEWS-05 | Business | Read | More than five recent counterparties, or unsafe receipt labels | Scan company news and compliance for my suppliers. | Clearly shows selected and omitted counts; only bounded safe names are searched. Does not claim to cover every company or all sanctions lists. |
+| NEWS-06 | Business | Owner setup | Isolated session-revocation and public-source tests | Start a counterparty scan, then have the owner revoke this test session while research runs. | Expired authorization prevents returning or persisting a completed report. Public text is escaped, citations are safe, and official-check citations are restricted to official domains. |
+
 ## Banking feature coverage
 
 | Functional area | Cases |
@@ -322,6 +333,7 @@ Maintainer reference only; testers do not type tool names. The model may use add
 
 | Current tool | Representative cases |
 | --- | --- |
+| `scan_counterparty_news` | NEWS-01 through NEWS-06 |
 | `get_business_profile` | INSIGHT-03 |
 | `get_market_insights` | INSIGHT-01 |
 | `research_public_company` | INSIGHT-02, INSIGHT-09 |

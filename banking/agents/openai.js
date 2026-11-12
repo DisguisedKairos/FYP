@@ -70,8 +70,8 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
 
   async function research(publicRequest,{signal}={}){
     const publicResearch=require('../public-research');
-    if(!publicRequest||!['company','market'].includes(publicRequest.kind)||typeof publicRequest.query!=='string'||publicRequest.query.length>900)throw new HttpError(400,'Choose a valid public research task.');
-    const data=await request('responses',{model,instructions:publicResearch.PROMPT+' Server check time: '+publicRequest.checkedAt,input:publicRequest.query,tools:[{type:'web_search',external_web_access:true,search_context_size:'low'}],tool_choice:'required',store:false,max_output_tokens:1800,...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{})},signal||AbortSignal.timeout(25000));
+    if(!publicRequest||!['company','market','counterparty_sanctions','counterparty_news'].includes(publicRequest.kind)||typeof publicRequest.query!=='string'||publicRequest.query.length>1800)throw new HttpError(400,'Choose a valid public research task.');
+    const data=await request('responses',{model,instructions:publicResearch.instructionsFor(publicRequest)+' Server check time: '+publicRequest.checkedAt,input:publicRequest.query,tools:[{type:'web_search',external_web_access:true,search_context_size:'low',...(publicRequest.kind==='counterparty_sanctions'?{filters:{allowed_domains:publicResearch.OFFICIAL_DOMAINS}}:{})}],tool_choice:'required',store:false,max_output_tokens:publicRequest.kind.startsWith('counterparty_')?2600:1800,...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{})},signal||AbortSignal.timeout(25000));
     return publicResearch.parseResponse(data,model,publicRequest);
   }
   return {mode:'openai',model,inspect,chat,research};
