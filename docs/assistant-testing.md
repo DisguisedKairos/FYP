@@ -2,7 +2,7 @@
 
 Updated 12 November 2026 for the C300 wholesale banking prototype, including live public research and customized dashboards. Record the tested deployment commit with each result.
 
-This guide contains **122 manual cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
+This guide contains **128 manual cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
 
 Make a copy of [the Excel-compatible results sheet](assistant-test-cases.csv) per tester/session. Copy questions below after replacing every `{PLACEHOLDER}`. Instructions describing clicks are for the tester, not chat prompts.
 
@@ -310,6 +310,17 @@ Use a fresh chat for unrelated draft/date scenarios and the same chat for delibe
 | NEWS-05 | Business | Read | More than five recent counterparties, or unsafe receipt labels | Scan company news and compliance for my suppliers. | Clearly shows selected and omitted counts; only bounded safe names are searched. Does not claim to cover every company or all sanctions lists. |
 | NEWS-06 | Business | Owner setup | Isolated session-revocation and public-source tests | Start a counterparty scan, then have the owner revoke this test session while research runs. | Expired authorization prevents returning or persisting a completed report. Public text is escaped, citations are safe, and official-check citations are restricted to official domains. |
 
+### Sector companies and reputation/financial interaction risk
+
+| ID | Role | Effect | Setup | Question or steps | Expected result |
+| --- | --- | --- | --- | --- | --- |
+| SECTOR-01 | Business | Read | Use the sector demonstration login from counterparty-risk.md | Evaluate reputation and money risk of interacting with my demo companies across sectors. | Eight fictional sector companies appear with separate configured-AI reputation/financial grades, case basis and independent checks; demo provenance remains visible. |
+| SECTOR-02 | Business | Read | Sector demo portfolio exists | Evaluate reputation and financial risk for GLDB Demo Aurora Energy Pte. Ltd. | Exact owned company only; hypothetical ownership/beneficiary concerns stay distinct from real sanctions/news or misconduct findings. |
+| SECTOR-03 | Business | Read | Demo opening funding and historical receipts exist | How much have I paid and received when interacting with my flagged companies? | Database totals match owned completed receipts. Historical paid is not labelled a loss, and pending requests are not reserved or booked losses. |
+| SECTOR-04 | Business | Read | Sector demo baseline exists | Evaluate reputation and financial risk for GLDB Demo Cedar Advisory Pte. Ltd. | Absence of supplied adverse flags produces insufficient evidence, without a safe/cleared or guaranteed-payment claim. |
+| SECTOR-05 | Business | Read | Sector demo portfolio exists | Scan my counterparties for sanctions and news. | Fictional names are excluded from live public searches with a clear explanation; no invented public news or real sanctions listing. |
+| SECTOR-06 | Business | Owner setup | Isolated provider-failure/current-session test | Evaluate reputation risk of my demo companies while the owner tests an unavailable model or session revocation. | No substitute grades or completed report after revoked authorization. Other customers cannot read the portfolio, and runtime cannot alter scenario flags. |
+
 ## Banking feature coverage
 
 | Functional area | Cases |
@@ -333,6 +344,7 @@ Maintainer reference only; testers do not type tool names. The model may use add
 
 | Current tool | Representative cases |
 | --- | --- |
+| `assess_counterparty_risk` | SECTOR-01 through SECTOR-06 |
 | `scan_counterparty_news` | NEWS-01 through NEWS-06 |
 | `get_business_profile` | INSIGHT-03 |
 | `get_market_insights` | INSIGHT-01 |

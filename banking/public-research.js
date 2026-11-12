@@ -16,6 +16,7 @@ function publicUrl(value){
 function requestFor(kind,args,message,{topic='general',now=Date.now}={}){
  if(kind==='company'){
   const name=typeof args.companyName==='string'?args.companyName.trim().replace(/\s+/g,' '):'';
+  if(/^gldb\s+demo\b/i.test(name.normalize('NFKC')))throw new HttpError(400,'GLDB Demo companies are fictional case inputs. Ask to evaluate their reputation and financial risks instead of searching public news.');
   const normalized=value=>value.normalize('NFKC').toLowerCase().replace(/\s+/g,' ');
   if(name.length<2||name.length>120||!/\p{L}/u.test(name)||!/^[\p{L}\p{N} .,&'()/-]+$/u.test(name)||/\d{7,}|\b(?:password|otp|secret|token|balance|account|ignore|instructions|prompt)\b/i.test(name)||!normalized(message).includes(normalized(name)))throw new HttpError(400,'Specify the public company name in your request; do not include account details.');
   if(/^(?:my|our|this|that|the)(?: company| business)?$/i.test(name))throw new HttpError(400,'Name a public company to research, or ask to analyze your own business profile.');

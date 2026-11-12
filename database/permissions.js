@@ -2,7 +2,7 @@
 
 // Only the banking application's known tables may be adopted by db:setup.
 const TABLES = Object.freeze([
-  'accounts', 'assistant_preferences', 'agent_runs', 'agent_tool_calls', 'audit_log', 'auth_attempts', 'billers', 'businesses',
+  'accounts', 'assistant_preferences', 'agent_runs', 'agent_tool_calls', 'audit_log', 'auth_attempts', 'billers', 'businesses', 'demo_counterparties',
   'fraud_assessments', 'fraud_cases', 'fraud_monitor_state', 'fraud_screenings', 'fraud_rule_audit', 'fraud_rules', 'fraud_settings',
   'legacy_imports', 'legacy_service_records', 'mfa_recovery_codes',
   'notification_outbox', 'notifications', 'payment_bindings', 'requests',

@@ -15,7 +15,7 @@ For the configured Neon environment, see [Neon PostgreSQL setup](neon.md). The o
 | Migration login | `greenlink_owner` |
 | Native server files | `.local/postgresql/` (ignored, not shipped) |
 | Persistent data / server log | `data/postgresql/` / `data/postgresql.log` (ignored) |
-| Schema | 30 tables, eleven checksum-verified migrations |
+| Schema | 31 tables, twelve checksum-verified migrations |
 
 At verification on 25 October 2026, the existing 13 users, seven businesses, 13 accounts and 28 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The retired non-PostgreSQL stores have been removed after verifying a PostgreSQL backup in `data/backups/`. The active cluster is `data/postgresql`. Existing business operators still need their own business profile and independent approval before financial writes.
 
@@ -141,3 +141,5 @@ The provisioning tests verify fresh setup, repeat setup with retained data, rest
 `npm run test:accounts` adds dedicated synthetic users without replacing the original records. After the 2.6.0 walkthrough, this native database has 13 users, 7 business profiles, 13 savings records and 28 ledger rows; the original three users, three accounts and eleven ledger rows are unchanged. Runtime privileges and reconciliation still pass. Synthetic test credentials and MFA material are shared under `data/testing/`; application secrets and live database files remain excluded from Git. Rotate or remove demo accounts before public deployment; see [feature walkthrough](feature-testing.md). The command verifies its owner/runtime connections target the same local database and schema before writing.
 
 Migration 007 adds private agent run reports and append-only tool evidence. It changes no existing financial rows. See [banking agents](banking-agents.md) for retention and permissions.
+
+Migration 012 adds operator-maintained fictional counterparty scenario inputs. Runtime has SELECT only on demo_counterparties. See [sector portfolio setup](counterparty-risk.md).

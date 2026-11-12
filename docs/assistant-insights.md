@@ -66,3 +66,5 @@ Use the existing private runtime/migration configuration. Do not reseed. Migrati
 Tests: tests/dft-counterparty-news.test.js, tests/dft-assistant-insights.test.js and tests/dft-assistant-insights-browser.js, alongside existing company, saved-view, OpenAI and SQL permission suites. Controlled providers are test doubles; real verification uses the configured provider in a disposable schema.
 
 References: [official OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search) and [function calling](https://developers.openai.com/api/docs/guides/function-calling).
+
+For private reputation and financial interaction assessments, use the [sector portfolio and company-risk workflow](counterparty-risk.md). Fictional GLDB Demo names are excluded from public news research.

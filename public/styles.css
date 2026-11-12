@@ -597,3 +597,5 @@ dialog.wide-dialog { width:900px; }
 
 .custom-preferences>p{margin:8px 0 18px;line-height:1.5}
 .assistant-window-actions .text-button{padding:6px;font-size:.75rem}
+
+.counterparty-risk-company{border-top:1px solid var(--line);margin-top:20px;padding-top:18px}.counterparty-risk-dimension{margin:14px 0}.counterparty-risk-dimension h4{margin-bottom:6px}.counterparty-risk-company .statement-table{width:100%}.counterparty-risk-company>h4{overflow-wrap:anywhere}

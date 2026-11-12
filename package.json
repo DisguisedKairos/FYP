@@ -16,6 +16,7 @@
     "admin:grant": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/manage-admin.js",
     "admin:create": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/create-staff.js",
     "db:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin database/migrate.js",
+    "demo:companies": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/seed-sector-companies.js",
     "db:seed": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/seed-demo.js",
     "start:fraud": "node --env-file-if-exists=.env scripts/start-fraud.js",
     "test:python": "node scripts/test-python.js",

@@ -97,6 +97,7 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
     const rows = (await db.query(`SELECT t.*,a.user_id,f.input_json,f.result_json FROM transactions t JOIN accounts a ON a.id=t.account_id
       LEFT JOIN fraud_assessments f ON f.id=t.id WHERE t.amount_cents<0 AND t.type IN ('transfer','bill') AND t.requested_at<=$2
       AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1) AND ($4::text IS NULL OR t.id=$4)
+      AND ($4::text IS NOT NULL OR NOT EXISTS(SELECT 1 FROM demo_counterparties d WHERE d.user_id=a.user_id AND d.receipt_ids_json ? t.id))
       ORDER BY t.insert_seq LIMIT $3`, [detector, iso(started), limit + 1, transactionId])).rows;
     for (const row of rows.slice(0, limit)) {
       if (Date.now() + 8000 > deadline) break;
@@ -109,7 +110,7 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
       summary.checked++; summary.flagged += Number(evidence.flagged); summary.created += saved.created; summary.reopened += saved.reopened;
       if (model) summary.modelAnalyzed++; else summary.manualContext++;
     }
-    summary.remaining = Number((await db.query(`SELECT count(*)::int AS count FROM transactions t WHERE amount_cents<0 AND type IN ('transfer','bill') AND requested_at<=$2 AND ($3::text IS NULL OR t.id=$3) AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1)`, [detector, iso(started), transactionId])).rows[0].count);
+    summary.remaining = Number((await db.query(`SELECT count(*)::int AS count FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.amount_cents<0 AND t.type IN ('transfer','bill') AND t.requested_at<=$2 AND ($3::text IS NULL OR t.id=$3) AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1) AND ($3::text IS NOT NULL OR NOT EXISTS(SELECT 1 FROM demo_counterparties d WHERE d.user_id=a.user_id AND d.receipt_ids_json ? t.id))`, [detector, iso(started), transactionId])).rows[0].count);
     await db.query('UPDATE fraud_monitor_state SET lease_owner=NULL,lease_until=NULL,last_completed_at=$2,last_error=NULL,last_summary=$3 WHERE id=1 AND lease_owner=$1', [lease, iso(now()), summary]);
     return summary;
   } catch (error) {
