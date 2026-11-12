@@ -23,6 +23,9 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   if (/\bno evidence of (?:fraud|anomalies)|\bany potential (?:obligations|payments|bills)\b/i.test(plain)) return 'The interpretation exceeds the scope of the retrieved banking checks.';
   if (/\b(?:allowed|approved|cleared)\b.{0,80}\bbecause\b.{0,100}\b(?:no prior|no completed|lack of|limited|new recipient|new payee)\b/i.test(plain)) return 'Missing payment history is a limitation, not a reason for authorizing a payment.';
   if (/\b(?:I|we)\s+(?:have\s+)?(?:flagged|referred)|\b(?:flag|review request)\s+(?:has been|was)\s+(?:created|submitted)/i.test(plain) && !results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested)) return 'A human review request was claimed without a successful permitted flag receipt.';
+  const staffClaims = plain.replace(/\bno\s+(?:(?:staff|review|fraud|compliance|bank)\s+){0,2}(?:case|ticket|investigation|review request|staff|reviewers?|compliance team)\s+(?:(?:has|have|been|was|were|is|are|now)\s+){0,5}(?:created|opened|queued|submitted|notified|alerted|contacted)\b/gi, '[no staff action]');
+  const staffActionClaim = /\b(?:I|we)\s+(?:(?:have|successfully|just|now|already)\s+)*(?:notified|alerted|contacted|emailed|messaged)\b|\b(?:case|ticket|investigation|review request)\s+(?:(?:has|have|been|was|is|now|successfully|already)\s+){0,5}(?:created|opened|queued|submitted)\b|\b(?:staff|bank|reviewers?|compliance team)\s+(?:(?:has|have|been|was|were|is|are|now|successfully|already)\s+){0,5}(?:notified|alerted|contacted)\b/i.test(staffClaims);
+  if (staffActionClaim && !results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested)) return 'A staff notification or investigation was claimed without a successful permitted review receipt.';
   if(/\b(?:I|we)\s+(?:(?:have|successfully|just|now)\s+)*(?:saved|bookmarked)\b|\b(?:dashboard|view)\s+(?:(?:has|have|been|was|is|now|successfully|privately)\s+){0,5}(?:saved|bookmarked)\b|^\s*(?:saved|bookmarked)\b/i.test(plain) && !results.some(r=>r.tool==='save_company_dashboard' && r.value.saved))return 'A saved dashboard was claimed without a successful save receipt.';
   const assessments = [report, ...results.map(r => r.value)].filter(Boolean).map(r => r.assessment).filter(Boolean);
   if (assessments.some(a => a.decision === 'allow') && /\b(?:high[ -]risk|flagged|blocked|held|rejected)\b/i.test(plain)) return 'The narrative conflicts with the recorded allow decision.';
@@ -43,6 +46,11 @@ function relevanceIssue(message, results) {
   const tools = new Set(results.map(r => r.tool));
   const newsAdvice=require('../news-insights').requested(message);
   if(newsAdvice&&!tools.has('analyze_news_insights'))return 'Retrieve sourced public news and its advisory analysis before offering the requested news advice or flags.';
+  // Public implications are not requests for an account projection. Remove only
+  // those qualified phrases; retain owned metrics and separate banking clauses.
+  const financialMessage = newsAdvice ? message
+    .replace(/\b((?:(?:my|our)(?:\s+(?:business|company|account)(?:'s)?)?|this\s+(?:business|company)(?:'s)?)\s+)?(?:liquidity|cash[ -]?flow)\s+(?:risks?|impacts?|implications?|effects?|concerns?)\b/gi, (phrase, owner) => owner ? phrase : '[public news implications]')
+    .replace(/\b(?:impacts?|implications?|effects?|risks?|concerns?)\s+(?:on|for|to)\s+(?:(?:industry|business|sector|corporate)\s+)?(?:liquidity|cash[ -]?flow)\b/gi, '[public news implications]') : message;
   if(require('../counterparty-risk').requested(message)&&!newsAdvice&&!tools.has('assess_counterparty_risk'))return 'The requested owned company reputation/financial interaction assessment was not retrieved.';
   if(/\b(?:sanctions?|compliance|regulatory|enforcement|news)\b/i.test(message)&&/\b(?:counterpart(?:y|ies)|suppliers?|business partners?|dealing|deal with|deals with|companies.*(?:account|transact)|account.*companies)\b/i.test(message)&&!tools.has('scan_counterparty_news'))return 'The requested owned-counterparty public research was not retrieved.';
   const planned=results.some(row=>row.tool==='check_payment_funds' && row.value?.paymentReadiness);
@@ -59,9 +67,9 @@ function relevanceIssue(message, results) {
   if (/\b(?:insufficient funds|low (?:on )?(?:funds|balance)|enough (?:money|funds)|sufficient funds)\b/i.test(message) && !has(['get_accounts','project_liquidity','prepare_payment_draft','check_payment_funds','get_finance_report'])) return 'The requested funding evidence was not retrieved.';
   if (/\b(?:finance|financial)\b/i.test(message) && /\breports?\b/i.test(message) && !has(['get_finance_report','assess_counterparty_risk'])) return 'The requested finance report was not retrieved.';
   if (/\b(?:balance|balances)\b/i.test(message) && !has(['get_accounts', 'project_liquidity', 'reconcile_accounts', 'get_finance_report','check_payment_funds'])) return 'The requested balance evidence was not retrieved.';
-  if (/\b(?:liquidity|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard']) && !covered && !currentPayment && !planned) return 'The requested liquidity scenario was not retrieved.';
+  if (/\b(?:liquidity|afford|shortfall|cover|projection)\b/i.test(financialMessage) && !has(['project_liquidity','get_company_activity','open_saved_dashboard']) && !covered && !currentPayment && !planned) return 'The requested liquidity scenario was not retrieved.';
   if (/\b(?:inflow|outflow)\b/i.test(message) && !has(['get_finance_report','get_company_activity','open_saved_dashboard']) && !planned)return 'The requested completed inflow and outflow were not retrieved.';
-  if (/\bcash.?flow\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report','check_payment_funds'])) return 'The requested cash flow evidence was not retrieved.';
+  if (/\bcash.?flow\b/i.test(financialMessage) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report','check_payment_funds'])) return 'The requested cash flow evidence was not retrieved.';
   if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity']) && !covered && !planned) return 'The requested scheduled-payment evidence was not retrieved.';
   if (/\b(?:history|recent transactions|find.*transaction|search.*transaction)\b/i.test(message) && !has(['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report'])) return 'The requested transaction evidence was not retrieved.';
   return null;

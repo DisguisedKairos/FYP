@@ -41,6 +41,15 @@ test('Assistant evaluation requires relevant tools for combined banking question
   assert.equal(relevanceIssue('Check balances and cover upcoming payments', [{ tool: 'project_liquidity' }]), null);
   assert.ok(relevanceIssue('Show recent transactions', [{ tool: 'get_accounts' }]));
 });
+test('Assistant staff-case claims require a successful review receipt',()=>{
+ const claims=['I have notified the bank staff [E1].','The review case has been opened [E1].','The compliance team was alerted [E1].'];
+ for(const claim of claims){
+  assert.ok(narrativeIssue(claim,null,{evidence,results:[],requireCitations:true}),claim);
+  assert.equal(narrativeIssue(claim,null,{evidence,results:[{tool:'flag_transaction_for_review',value:{reviewRequested:true}}],requireCitations:true}),null,claim);
+  assert.ok(narrativeIssue(claim,null,{evidence,results:[{tool:'flag_transaction_for_review',value:{reviewRequested:false,alreadyReviewed:true}}],requireCitations:true}),claim);
+ }
+ for(const reply of ['Ask bank staff to review the concern before opening a case [E1].','No staff case has been created and no reviewers were notified [E1].','Staff have not been notified and a case has not been opened [E1].'])assert.equal(narrativeIssue(reply,null,{evidence,requireCitations:true}),null,reply);
+});
 pg('Grounded model answers return saved evidence references and verified facts without moving money', async t => {
   const f = await fixture(t, { http: false }), user = await actor(f.db), before = await balances(f.db); let calls = 0;
   const agent = createAgents({ db: f.db, model: model(async messages => {

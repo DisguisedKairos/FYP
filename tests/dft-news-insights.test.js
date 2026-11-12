@@ -22,6 +22,25 @@ test('News advice intent distinguishes public implications from private fraud ch
  assert.ok(relevanceIssue('Show industry news and advise what to flag',[{tool:'get_market_insights'}]));
  assert.equal(relevanceIssue('Show industry news and advise what to flag',[{tool:'get_market_insights'},{tool:'analyze_news_insights'}]),null);
 });
+test('Public news implications do not require private projections, while explicit account questions still do',()=>{
+ const sources=[{tool:'get_market_insights'},{tool:'analyze_news_insights'}];
+ for(const message of ['Show current industry news and advise on liquidity risks','Review current news and its cash flow implications','Review current news and its cash-flow effects','Explain news impacts on industry liquidity','Read news and explain implications for cash flow'])assert.equal(relevanceIssue(message,sources),null,message);
+ for(const message of ['Read news and check my cash flow','Show current news and project my liquidity','Show news and assess my business liquidity risks','Read news and also show my balances','Explain news liquidity risks and project cash flow','Explain news cash flow implications and whether I can cover upcoming payments'])assert.ok(relevanceIssue(message,sources),message);
+ assert.ok(relevanceIssue('Show liquidity risks',[{tool:'get_market_insights'}]));
+ assert.equal(relevanceIssue('Read news and check my cash flow',[...sources,{tool:'get_finance_report'}]),null);
+});
+test('Chat-only news advice rejects invented staff notifications and review cases in every prose field',()=>{
+ const input=news.prepare([report()],{now});
+ for(const claim of ['I have notified the bank staff and opened a review case.','The staff case has been created and queued for investigation.','A review case was opened.','The compliance team has been notified.','I have alerted the reviewers.']){
+  for(const field of ['summary','headline','why']){
+   const value=reply(input),body=value.tool_calls[0].function.arguments;
+   if(field==='summary')body.summary=claim;else body.insights[0][field]=claim;
+   assert.throws(()=>news.validate(value,input),e=>e.code==='NEWS_ADVISORY_INVALID',field+': '+claim);
+  }
+ }
+ const valid=reply(input);valid.tool_calls[0].function.arguments.summary='Ask your compliance team to review the source before deciding whether to open a case.';
+ assert.equal(news.validate(valid,input).status,'completed');
+});
 test('News analysis uses only fresh cited public text and reports omitted parts and unavailable checks',()=>{
  const source={...report(),privateBalance:987654321,privateAccount:'1088800101'},input=news.prepare([source],{now,gaps:['counterparty_sanctions','private data']});
  assert.doesNotMatch(JSON.stringify(input),/987654321|1088800101|privateBalance|privateAccount/);assert.deepEqual(input.coverageGaps,['counterparty_sanctions']);assert.equal(input.parts.length,1);
