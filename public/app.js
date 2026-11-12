@@ -1,3 +1,4 @@
+import {loadFunding,cancelFunding} from './js/funding.js';
 import {financeReportControl} from './js/finance-reports.js';
 import {dashboardControl} from './js/assistant-dashboards.js';
 import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
@@ -14,7 +15,7 @@ import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview 
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,cancelBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
-Object.assign(ui,{ render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
 Object.assign(extraViews,{ aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
@@ -142,6 +143,8 @@ document.addEventListener('click',async event => {
       case 'refresh-business-applications': await loadBusinessApplications(); break;
       case 'assistant-toggle': toggleAssistant(); break;
       case 'assistant-close': closeAssistant(); break;
+      case 'funding-open': if(!state.assistant?.open)toggleAssistant(); document.querySelector('#automatic-funding')?.focus(); break;
+      case 'funding-refresh': await loadFunding({force:true}); break;
       case 'assistant-clear': clearAssistant(); break;
       case 'agents-refresh': await loadAgents(); break;
       case 'fraud-scan': await runFraudScan(); break;
@@ -257,7 +260,8 @@ async function start() {
   } catch (error) { connectionError(error.message); }
 }
 // Refresh operational updates while the browser is open, without interrupting forms.
-setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !state.modalBusy) loadNotifications(); }, 30000);
+setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !state.modalBusy) { loadNotifications(); loadFunding(); } }, 30000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.modalBusy) loadFunding(); });
 window.addEventListener('focus', async () => {
   if (!state.user || state.modalBusy || state.signingOut) return;
   await loadDashboard({ render: false });

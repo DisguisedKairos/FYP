@@ -10,6 +10,7 @@ const ledger = require('./banking/ledger');
 const history = require('./banking/history');
 const companyActivity = require('./banking/company-activity');
 const financeReports = require('./banking/finance-reports');
+const { fundingCoverage } = require('./banking/agents/reports');
 const dashboardViews = require('./banking/dashboard-views');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
@@ -119,6 +120,7 @@ async function createApplication(options = {}) {
     const mfa = (await db.query('SELECT enabled_at FROM user_mfa WHERE user_id=$1', [req.banking.user.id])).rows[0];
     return { security: { mfaEnabled: Boolean(mfa?.enabled_at), events: events.map(row => ({ id: String(row.id), type: row.event_type, createdAt: new Date(row.created_at).toISOString() })) } };
   });
+  route('get', '/api/funding-check', async req => ({ fundingCheck: await fundingCoverage(db, req.banking.user, { now }) }));
   route('get', '/api/dashboard', async req => ({ ...await history.dashboard(db, req.banking.user.id, { now }), user: security.publicUser(req.banking.user) }));
   route('get', '/api/dashboard-views', async req => ({ views: await dashboardViews.list(db,req.banking.user) }));
   route('get', '/api/dashboard-views/:id', req => { const params=query(req); for(const key of params.keys())if(key!=='page')throw new HttpError(400,'Unsupported saved dashboard filter.'); history.pagination(params); return dashboardViews.detail(db,req.banking.user,req.params.id,{now,page:params.get('page')||1}); });

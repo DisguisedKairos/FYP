@@ -157,6 +157,7 @@ export async function confirmSchedule(form) {
     await loadExtras('schedules',{force:true});
     if(!active())return;
     toast('Scheduled payment created. No funds have moved.');
+    ui.loadFunding?.({force:true});
     loadNotifications();
   } catch (error) {
     form.elements.authorizationPassword.value = '';
@@ -183,7 +184,7 @@ export async function cancelSchedule(form) {
     if(!active())return;
     state.modalBusy = false; closeDialog();
     await loadExtras('schedules',{force:true});
-    if(active()){toast('Future payments cancelled.');loadNotifications();}
+    if(active()){toast('Future payments cancelled.');ui.loadFunding?.({force:true});loadNotifications();}
   } catch (error) { if (active() && !await recoverSession(error)) formError(form,error.message); }
   finally { if(active()){state.modalBusy = false; formBusy(form,false);} }
 }

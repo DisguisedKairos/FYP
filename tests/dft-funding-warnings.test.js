@@ -83,3 +83,35 @@ test('Funding validation recognizes a retrieved default planning check only for 
   assert.ok(relevanceIssue('Can I cover upcoming payments over the next year?',[result]));
   assert.ok(relevanceIssue('Can I cover upcoming payments?',[{tool:'get_accounts'}]));
 });
+
+pg('Automatic funding checks require sign-in, isolate the owner and do not invoke AI or change money',async t=>{
+  let modelCalls=0;
+  const f=await fixture(t,{poolMax:1,agentModel:{name:'unused',complete:async()=>{modelCalls++;throw new Error('An automatic check must not call AI.');}}}),client=f.client();
+  assert.equal((await client.request('/api/funding-check')).status,401);
+  await client.login();const source=(await client.dashboard()).accounts[0];
+  const instruction=await schedule(client,source,{amount:((source.balanceCents+1)/100).toFixed(2)});
+  const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+  for(let i=0;i<2;i++){
+    const result=await client.request('/api/funding-check');
+    assert.equal(result.status,200,JSON.stringify(result.data));assert.equal(result.headers.get('cache-control'),'no-store');
+    assert.equal(result.data.fundingCheck.available,true);assert.equal(result.data.fundingCheck.days,30);
+    assert.equal(result.data.fundingCheck.warnings[0].shortageCents,1);assert.equal(result.data.fundingCheck.warnings[0].accountId,source.id);
+  }
+  const other=f.client();await other.login('jamie@greenlink.demo');
+  assert.deepEqual((await other.request('/api/funding-check')).data.fundingCheck.warnings,[]);
+  assert.equal(modelCalls,0);assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_runs')).rows[0].count),0);
+  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
+  assert.equal((await client.request('/api/scheduled-payments/'+instruction.schedule.id,{method:'DELETE',body:{}})).status,200);
+  assert.deepEqual((await client.request('/api/funding-check')).data.fundingCheck.warnings,[]);
+});
+pg('Automatic warnings recalculate after an owned-account top-up and include only the default planning window',async t=>{
+  const f=await fixture(t),client=f.client();await client.login();
+  const accounts=(await client.dashboard()).accounts,source=accounts[0],reserve=accounts[1];
+  await schedule(client,source,{amount:'40000',days:40});
+  assert.deepEqual((await client.request('/api/funding-check')).data.fundingCheck.warnings,[]);
+  await schedule(client,source,{amount:((source.balanceCents+1)/100).toFixed(2)});
+  assert.equal((await client.request('/api/funding-check')).data.fundingCheck.warnings[0].shortageCents,1);
+  const payment=await client.request('/api/transfers',{method:'POST',body:{fromAccountId:reserve.id,toAccountNumber:source.number,amount:'0.01',description:'Fund known obligation',requestId:randomUUID()}});
+  assert.equal(payment.status,200,JSON.stringify(payment.data));assert.equal(payment.data.transaction.status,'completed');
+  assert.deepEqual((await client.request('/api/funding-check')).data.fundingCheck.warnings,[]);
+});

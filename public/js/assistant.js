@@ -1,8 +1,9 @@
+import {fundingWarningsHtml,renderAutomaticFunding} from './funding.js';
 import {financeReportHtml,cancelFinanceReports} from './finance-reports.js';
 import {dashboardHtml,savedDashboardsHtml,hydrateDashboardCharts,cancelAssistantDashboards} from './assistant-dashboards.js';
 // Raw messages stay in browser memory. Reports, tool evidence and draft context
 // are retained privately; financial actions only open the ordinary banking forms.
-import { state, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, fullDate, navigate, toast, recoverSession } from './core.js';
+import { state, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
@@ -17,12 +18,9 @@ function itemContent(item) {
   const detail=[item.detail || item.subtitle || item.meta || '',item.accountNumber || '',item.status ? statusLabel(item.status) : '',item.date ? shortDate(item.date)+' SGT' : '',typeof item.score==='number'?'Risk score '+item.score:''].filter(Boolean).join(' · ');
   return '<li><div><strong>'+esc(label)+'</strong>'+(detail?'<small>'+esc(detail)+'</small>':'')+(Array.isArray(item.reasons)?'<ul>'+item.reasons.map(reason=>'<li>'+esc(reason)+'</li>').join('')+'</ul>':'')+'</div>'+(value!==''?'<span>'+esc(value)+'</span>':'')+'</li>';
 }
-function fundingWarningsHtml(message){
-  return (message.fundingWarnings||[]).map(warning=>'<section class="assistant-funding-warning" role="status" aria-label="Funding warning"><h4>'+esc(warning.title)+'</h4>'+(warning.accountName?'<p><strong>'+esc(warning.accountName)+'</strong></p>':'')+'<p>'+esc(warning.message)+'</p><dl>'+[['Available now',warning.availableCents],['Requested amount',warning.requiredCents],[warning.code==='scheduled_shortfall'?'Largest projected shortfall':'Funding shortfall',warning.shortageCents]].filter(([,value])=>Number.isSafeInteger(value)).map(([label,value])=>'<div><dt>'+label+'</dt><dd>'+money(value)+'</dd></div>').join('')+(warning.dueAt?'<div><dt>First projected shortfall (SGT)</dt><dd>'+fullDate(warning.dueAt)+'</dd></div>':'')+(warning.days?'<div><dt>Planning period</dt><dd>'+esc(warning.days)+' days</dd></div>':'')+'</dl><small>Checked '+esc(fullDate(warning.checkedAt))+' SGT</small></section>').join('');
-}
 function messageHtml(message) {
   const dashboard=message.role==='assistant'?savedDashboardsHtml(message)+dashboardHtml(message)+financeReportHtml(message):'';
-  return '<article data-message-id="'+message.id+'" class="assistant-message '+(message.role==='user'?'from-user':'from-assistant')+'" aria-label="'+(message.role==='user'?'You':'GLDB Assistant')+'"><div class="assistant-message-author">'+(message.role==='user'?'You':icon('chat')+' GLDB Assistant')+'</div><div class="assistant-message-text">'+esc(message.text)+'</div>'+(message.items?.length?'<ul class="assistant-items">'+message.items.map(itemContent).join('')+'</ul>':'')+fundingWarningsHtml(message)+dashboard+(message.actions?.length?'<div class="assistant-actions">'+message.actions.map((action,index)=>'<button type="button" class="button secondary" data-assistant-action="'+message.id+':'+index+'">'+esc(action.label || 'Open banking form')+' '+icon('arrow')+'</button>').join('')+'</div>':'')+(message.auditRunId && state.user?.role==='admin'?'<button type="button" class="text-button" data-ai-audit-kind="agent" data-ai-audit-id="'+esc(message.auditRunId)+'">View AI audit</button>':'')+'</article>';
+  return '<article data-message-id="'+message.id+'" class="assistant-message '+(message.role==='user'?'from-user':'from-assistant')+'" aria-label="'+(message.role==='user'?'You':'GLDB Assistant')+'"><div class="assistant-message-author">'+(message.role==='user'?'You':icon('chat')+' GLDB Assistant')+'</div><div class="assistant-message-text">'+esc(message.text)+'</div>'+(message.items?.length?'<ul class="assistant-items">'+message.items.map(itemContent).join('')+'</ul>':'')+fundingWarningsHtml(message.fundingWarnings||[])+dashboard+(message.actions?.length?'<div class="assistant-actions">'+message.actions.map((action,index)=>'<button type="button" class="button secondary" data-assistant-action="'+message.id+':'+index+'">'+esc(action.label || 'Open banking form')+' '+icon('arrow')+'</button>').join('')+'</div>':'')+(message.auditRunId && state.user?.role==='admin'?'<button type="button" class="text-button" data-ai-audit-kind="agent" data-ai-audit-id="'+esc(message.auditRunId)+'">View AI audit</button>':'')+'</article>';
 }
 function suggestionHtml() {
   const messages=thread().messages;
@@ -46,7 +44,7 @@ export function renderAssistant() {
     t.open=true;requestedOpen=false;
     const url=new URL(location.href);url.searchParams.delete('chat');history.replaceState({},'',url.pathname+url.search+url.hash);
   }
-  if(!root.querySelector('#assistant-popup'))root.innerHTML='<button type="button" class="assistant-launcher" data-action="assistant-toggle" aria-label="Open GLDB Assistant" aria-controls="assistant-popup" aria-expanded="false">'+icon('chat')+'<span>Ask GLDB</span><span class="assistant-unread" hidden>New reply</span></button><section id="assistant-popup" class="assistant-popup" role="dialog" aria-modal="false" aria-labelledby="assistant-title" hidden></section>';
+  if(!root.querySelector('#assistant-popup'))root.innerHTML='<div id="funding-announcement" class="sr-only" role="status" aria-live="polite"></div><div class="assistant-funding-preview" hidden></div><button type="button" class="assistant-launcher" data-action="assistant-toggle" aria-label="Open GLDB Assistant" aria-controls="assistant-popup" aria-expanded="false">'+icon('chat')+'<span>Ask GLDB</span><span class="assistant-unread" hidden>New reply</span></button><section id="assistant-popup" class="assistant-popup" role="dialog" aria-modal="false" aria-labelledby="assistant-title" hidden></section>';
   root.classList.toggle('assistant-open',t.open);
   root.classList.toggle('assistant-has-dashboard',t.messages.some(message=>message.dashboard));
   const popup=root.querySelector('#assistant-popup');popup.hidden=!t.open;
@@ -57,6 +55,7 @@ export function renderAssistant() {
   launcher.setAttribute('aria-label',t.open?'Minimize GLDB Assistant':'Open GLDB Assistant'+(t.unread?', new reply':''));
   launcher.querySelector('.assistant-unread').hidden=!t.unread;
   renderThread();
+  renderAutomaticFunding();
 }
 export function toggleAssistant() {
   if(!state.user || !state.data || state.signingOut)return;
@@ -81,7 +80,9 @@ function renderThread() {
   const target=document.querySelector('#assistant-thread');
   if(!target)return;
   const t=thread(),atBottom=target.scrollHeight-target.scrollTop-target.clientHeight<48;let added=false;
-  if(!t.messages.length)target.innerHTML=welcomeHtml();
+  if(!target.querySelector('#automatic-funding'))target.insertAdjacentHTML('afterbegin','<section id="automatic-funding" class="automatic-funding" tabindex="-1" aria-label="Automatic funding check" aria-live="off" hidden></section>');
+  if(!t.messages.length)target.querySelectorAll('[data-message-id]').forEach(message=>message.remove());
+  if(!t.messages.length && !target.querySelector('.assistant-welcome'))target.insertAdjacentHTML('beforeend',welcomeHtml());
   if(t.messages.length){
     target.querySelector('.assistant-welcome')?.remove();
     for(const message of t.messages){

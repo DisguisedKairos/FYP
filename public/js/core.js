@@ -25,7 +25,7 @@ export function routeFromLocation() {
   return { page: entry?.[0] ?? 'overview', account: url.searchParams.get('account') ?? '' };
 }
 export const state = {
-  data: null, user: null, csrf: '', demoAvailable: false, route: routeFromLocation(), intendedRoute: null,
+  data: null, user: null, funding: null, csrf: '', demoAvailable: false, route: routeFromLocation(), intendedRoute: null,
   authMode: location.pathname === '/register' ? 'register' : 'login', authNotice: '', authBusy: false, signingOut: false,
   hiddenBalance: false, refreshError: '', refreshing: false, filters: emptyFilters(), historyPage: 1, pageSize: 10,
   history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null,
@@ -136,7 +136,7 @@ export function clearBankingState() {
   cancelDashboardReads();ui.cancelReads?.();
   closeDialog(true);
   modal.replaceChildren();
-  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, funding: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
   ui.resetAssistant?.();
 }
@@ -170,7 +170,7 @@ export async function loadDashboard({ render = true } = {}) {
     if(!active())return false;
     // A slower earlier refresh cannot replace a newer snapshot. Its caller
     // can still render the latest accepted data and finish its own workflow.
-    if(request>=dashboardApplied){dashboardApplied=request;state.data=result;state.user=result.user;state.refreshError='';}
+    if(request>=dashboardApplied){dashboardApplied=request;state.data=result;state.user=result.user;state.refreshError='';ui.loadFunding?.({force:true});}
     if(render)ui.render();
     return true;
   }catch(error){

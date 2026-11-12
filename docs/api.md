@@ -16,6 +16,7 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | POST | `/api/auth/mfa/confirm` | `{otp}`; enable and return recovery codes once |
 | POST | `/api/auth/mfa/disable` | `{currentPassword,otp}`; remove factor and revoke old sessions |
 | GET | `/api/dashboard` | Owned active/closed savings, recent activity and summary |
+| GET | `/api/funding-check` | Read-only, current 30-day active-schedule coverage for the signed-in owner; no AI request |
 | POST | `/api/accounts` | `{name}`; zero-balance savings account |
 | PATCH/DELETE | `/api/accounts/:id` | Rename `{name}` / safe zero-balance closure |
 | POST | `/api/transfers` | Authorized transfer |
