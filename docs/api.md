@@ -92,3 +92,16 @@ Errors return `{error}` with an appropriate HTTP status. MFA login challenges ad
 The local Python model exposes `/internal/health`, `/internal/model` and `POST /internal/assess` on its separate loopback address. Every endpoint requires `Authorization: Bearer <SERVICE_TOKEN>`. Express never serves those private routes publicly. Assessment input binds `transactionId,userId,sourceAccountId,payloadHash,type,amountCents,payee,accountBalanceCents,isInternal,createdAt` and a validated `historySummary`. The scorer returns the same bindings with bounded score, decision, seven features, historical context, reasons and model provenance. It owns no ledger writes or fraud-rule administration.
 
 Assistant continuation expiry returns HTTP 409 with `code: ASSISTANT_CONTEXT_EXPIRED`. Clients must discard the expired reference and allow an explicit fresh request; they must not reuse the previous draft context.
+
+## Assistant customization and saved-chart refresh
+
+Endpoints require the signed-in operator and existing origin/CSRF checks for writes. No user ID override is accepted.
+
+| Method / path | Contract |
+| --- | --- |
+| GET /api/assistant-preferences | Own responseStyle, trendMonths, chartType and marketTopic, with defaults |
+| PATCH /api/assistant-preferences | Strict partial settings: concise/detailed; integer 1-12 months; bar/line/table; general/singapore/fx/trade/interest_rates |
+| PATCH /api/dashboard-views/:id | Own title/presentation/refreshCadence and current version; stale version 409, foreign ID 404 |
+| POST /api/dashboard-views/:id/refresh | Empty object; fresh owned snapshot and refreshedAt/nextRefreshAt; no financial action |
+
+Creation also accepts presentation/refreshCadence. Definitions support period kind months with integer months (1-12), alongside rolling/fixed. The existing job refreshes due weekly charts. Public research uses bounded assistant tools and is not an arbitrary URL proxy. See [workflow and boundaries](assistant-insights.md).

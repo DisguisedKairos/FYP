@@ -2,7 +2,7 @@
 
 // Only the banking application's known tables may be adopted by db:setup.
 const TABLES = Object.freeze([
-  'accounts', 'agent_runs', 'agent_tool_calls', 'audit_log', 'auth_attempts', 'billers', 'businesses',
+  'accounts', 'assistant_preferences', 'agent_runs', 'agent_tool_calls', 'audit_log', 'auth_attempts', 'billers', 'businesses',
   'fraud_assessments', 'fraud_cases', 'fraud_monitor_state', 'fraud_screenings', 'fraud_rule_audit', 'fraud_rules', 'fraud_settings',
   'legacy_imports', 'legacy_service_records', 'mfa_recovery_codes',
   'notification_outbox', 'notifications', 'payment_bindings', 'requests',
@@ -40,7 +40,8 @@ async function grantRuntime(client, { ownerRole, appRole }) {
   await client.query(`GRANT INSERT ON audit_log, payment_bindings, fraud_rule_audit TO ${app}`);
   await client.query(`GRANT INSERT, UPDATE(status,engine,report_json,context_json,error_code,completed_at) ON agent_runs TO ${app}`);
   await client.query(`GRANT INSERT ON agent_tool_calls TO ${app}`);
-  await client.query(`GRANT INSERT, DELETE ON saved_dashboard_views TO ${app}`);
+  await client.query(`GRANT INSERT, DELETE, UPDATE(title,presentation_json,refresh_cadence,version,refreshed_at,next_refresh_at,refresh_error,snapshot_json) ON saved_dashboard_views TO ${app}`);
+  await client.query(`GRANT INSERT, UPDATE(response_style,trend_months,chart_type,market_topic,updated_at) ON assistant_preferences TO ${app}`);
   await client.query(`GRANT INSERT ON fraud_screenings TO ${app}`);
   await client.query(`GRANT INSERT, UPDATE(screening_id,status,score,assigned_to,outcome,review_reason,version,updated_at,resolved_at) ON fraud_cases TO ${app}`);
   await client.query(`GRANT UPDATE(lease_owner,lease_until,next_run_at,last_started_at,last_completed_at,last_error,last_summary) ON fraud_monitor_state TO ${app}`);

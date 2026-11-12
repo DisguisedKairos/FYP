@@ -9,7 +9,7 @@ export function cancelAssistantDashboards(){
  for(const message of thread.messages){message.dashboardBusy=false;if(message.dashboard)message.dashboard.busy=false;paint(message);}
 }
 export function hydrateDashboardCharts(root){root?.querySelectorAll('[data-chart-height]').forEach(bar=>{bar.style.height=Number(bar.dataset.chartHeight)+'%';});}
-function periodLabel(definition){const period=definition?.period;return period?.kind==='rolling'?'Latest '+period.days+' days':period?'Fixed dates: '+period.from+' to '+period.to:'';}
+function periodLabel(definition){const period=definition?.period;return period?.kind==='months'?'Past '+period.months+' calendar months':period?.kind==='rolling'?'Latest '+period.days+' days':period?'Fixed dates: '+period.from+' to '+period.to:'';}
 function paging(data,busy){
  const page=data.pagination;
  return '<div class="assistant-dashboard-paging"><span>Page '+page.page+' of '+Math.max(1,page.totalPages)+'</span><button type="button" class="text-button" data-dashboard-command="prev" '+(busy||page.page<=1?'disabled':'')+'>Previous</button><button type="button" class="text-button" data-dashboard-command="next" '+(busy||page.page>=page.totalPages?'disabled':'')+'>Next</button></div>';
@@ -29,10 +29,10 @@ export function dashboardHtml(message){
  return start+'<div data-company-dashboard><h3 tabindex="-1">'+esc(data.company)+'</h3><p class="company-period">'+esc(data.period.from)+' to '+esc(data.period.to)+' &middot; SGD &middot; Singapore time</p>'+
  (dashboard.savedView?'<p class="assistant-saved-notice">Saved: '+esc(dashboard.savedView.title)+' &middot; '+esc(periodLabel(dashboard.savedView.definition))+'</p>':'')+
  '<div class="agent-metrics company-metrics">'+metric('Received',money(totals.incomeCents))+metric('Paid',money(totals.outgoingCents))+metric('Net movement',money(totals.netCents))+'</div>'+
- companyCharts(data,'chat-dashboard-'+message.id)+records(data,busy)+
+ companyCharts(data,'chat-dashboard-'+message.id,dashboard.savedView?.presentation||dashboard.presentation||{})+records(data,busy)+
  '<p class="chart-note">'+esc(data.scope)+'</p><div class="assistant-dashboard-controls"><button type="button" class="text-button" data-dashboard-command="refresh" '+(busy?'disabled':'')+'>Refresh figures</button>'+
- (!dashboard.savedView&&dashboard.definition?'<button type="button" class="button secondary" data-dashboard-command="save" '+(busy?'disabled':'')+'>Save this dashboard</button>':'')+
- '</div><p class="assistant-dashboard-status" role="status">'+(busy?'Updating dashboard...':'')+'</p>'+error+'</div></section>';
+ (!dashboard.savedView&&dashboard.definition?'<button type="button" class="button secondary" data-dashboard-command="save" '+(busy?'disabled':'')+'>Save to My dashboard</button>':'')+
+ '<a class="text-button" href="/custom-dashboard" data-nav="customDashboard">My dashboard</a></div><p class="assistant-dashboard-status" role="status">'+(busy?'Updating dashboard...':'')+'</p>'+error+'</div></section>';
 }
 export function savedDashboardsHtml(message){
  const views=message.savedDashboards,disabled=message.dashboardBusy?'disabled':'';
@@ -44,8 +44,9 @@ function paint(message){
  if(root){const chart=root.querySelector('[data-assistant-dashboard]'),list=root.querySelector('[data-assistant-saved-list]');if(chart)chart.outerHTML=dashboardHtml(message);if(list)list.outerHTML=savedDashboardsHtml(message);hydrateDashboardCharts(root);}
  document.querySelector('#assistant-root')?.classList.toggle('assistant-has-dashboard',Boolean(state.assistant?.messages.some(item=>item.dashboard)));
 }
+function monthRange(months){const today=singaporeDay(),start=new Date(today.slice(0,7)+'-01T00:00:00Z');start.setUTCMonth(start.getUTCMonth()-(months-1));return {from:start.toISOString().slice(0,10),to:today};}
 function queryFor(definition,data,page){
- const period=definition?.period,range=period?.kind==='rolling'?{from:singaporeDay(Date.now()-(period.days-1)*86400000),to:singaporeDay()}:period?.kind==='fixed'?period:data.period;
+ const period=definition?.period,range=period?.kind==='months'?monthRange(period.months):period?.kind==='rolling'?{from:singaporeDay(Date.now()-(period.days-1)*86400000),to:singaporeDay()}:period?.kind==='fixed'?period:data.period;
  return new URLSearchParams({scope:definition?.scope||data.scopeType||'company',company:definition?.company??(data.scopeType==='all'?'':data.company||data.query||''),from:range.from,to:range.to,page:String(page),pageSize:'10'});
 }
 async function operate(message,key,work){
@@ -73,7 +74,7 @@ async function load(message,{company,page=1,viewId}={}){
   const result=await api(savedId?'/dashboard-views/'+encodeURIComponent(savedId)+'?page='+page:'/company-activity?'+queryFor(definition,prior.data,page),undefined,'GET',{signal});
   if(!active())return;
   const data=result.dashboard;
-  message.dashboard={data,definition:result.view?.definition||definition,savedView:result.view||null};
+  message.dashboard={data,definition:result.view?.definition||definition,savedView:result.view||null,presentation:result.view?.presentation||prior?.presentation||{}};
   if(data.status==='ready'&&data.scopeType!=='all')message.dashboard.definition={...message.dashboard.definition,company:data.company};
   if(latest())thread.activeDashboardDefinition=data.status==='ready'?message.dashboard.definition:null;
  });}finally{if(latest())thread.dashboardSelectionPending=false;}
@@ -96,7 +97,7 @@ export async function dashboardControl(control){
   state.assistant.activeDashboardDefinition=message.dashboard.definition;
   state.assistant.dashboardSelectionVersion=(state.assistant.dashboardSelectionVersion||0)+1;state.assistant.dashboardSelectionPending=false;
   await operate(message,'dashboard:'+message.id,async({active,signal})=>{
-   const result=await api('/dashboard-views',{definition:message.dashboard.definition},'POST',{signal});
+   const result=await api('/dashboard-views',{definition:message.dashboard.definition,presentation:message.dashboard.presentation||message.dashboard.savedView?.presentation||{}},'POST',{signal});
    if(active())message.dashboard.savedView=result.view;
   });}
  else if(command==='list')await operate(message,'list:'+message.id,async({active,signal})=>{const result=await api('/dashboard-views',undefined,'GET',{signal});if(active())message.savedDashboards=result.views;});

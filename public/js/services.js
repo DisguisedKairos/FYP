@@ -47,6 +47,7 @@ export async function loadNotifications() {
   }
 }
 export async function loadExtras(page, { force = false } = {}) {
+  if(page==='customDashboard')return ui.loadCustomDashboard?.();
   if(page==='aiAudit')return ui.loadAiAudit?.();
   if(page==='agents')return ui.loadAgents?.();
   if(page==='onboarding')return ui.loadBusinessApplications?.();

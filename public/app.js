@@ -1,3 +1,4 @@
+import {customDashboardPage,loadCustomDashboard,cancelCustomDashboard,customDashboardControl,submitCustomSettings,submitAssistantPreferences} from './js/custom-dashboard.js';
 import {loadFunding,cancelFunding} from './js/funding.js';
 import {financeReportControl} from './js/finance-reports.js';
 import {dashboardControl} from './js/assistant-dashboards.js';
@@ -15,7 +16,7 @@ import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview 
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,cancelBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
-Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelCustomDashboard(); cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
 Object.assign(extraViews,{ aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
@@ -23,6 +24,9 @@ ui.loadFraudCases=loadFraudCases;
 ui.cancelFraudCases=cancelFraudCases;
 ui.restoreAgentForms=restoreAgentForms;
 extraViews.agents=agentsPage;
+extraViews.customDashboard=customDashboardPage;
+ui.loadCustomDashboard=loadCustomDashboard;
+ui.composeAssistant=text=>{if(!state.assistant?.open)toggleAssistant();rememberAssistantInput(text);renderAssistant();document.querySelector('#assistant-message')?.focus();};
 
 function switchAuth() {
   state.authMode = state.authMode === 'login' ? 'register' : 'login';
@@ -60,6 +64,8 @@ document.addEventListener('submit',async event => {
   event.preventDefault();
   if (form.id === 'history-filters') return updateHistoryFilters(form);
   if (!form.reportValidity()) return;
+  if(form.dataset.customForm)return submitCustomSettings(form);
+  if(form.id==='assistant-preferences-form')return submitAssistantPreferences(form);
   try {
     switch (form.id) {
       case 'ai-audit-filters': await loadAiAudit({form}); break;
@@ -104,12 +110,13 @@ document.addEventListener('click',async event => {
   const control = event.target.closest('button, a[data-nav], a[data-account], [data-action]');
   if (!control || control.disabled) return;
   if (control.tagName === 'A' && (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0)) return;
-  if (control.dataset.nav) { event.preventDefault(); return navigate(control.dataset.nav,{account:control.dataset.filterAccount || ''}); }
+  if (control.dataset.nav) { event.preventDefault(); if(control.dataset.nav==='customDashboard')closeAssistant({focus:false}); return navigate(control.dataset.nav,{account:control.dataset.filterAccount || ''}); }
   if (control.dataset.account) { event.preventDefault(); return navigate('accounts',{account:control.dataset.account}); }
   if (control.dataset.transaction) return openTransaction(control.dataset.transaction);
   if (control.dataset.retryTransaction) return openTransaction(control.dataset.retryTransaction);
   if (control.dataset.biller) { state.moneyDraft.payments.billerId = control.dataset.biller; navigate('payments'); document.querySelector('#reference')?.focus(); return; }
   try {
+    if(await customDashboardControl(control))return;
     if(await financeReportControl(control))return;
     if(await dashboardControl(control))return;
     if (control.dataset.aiAuditId) { if(control.closest('#assistant-root'))closeAssistant({focus:false}); if(state.route.page!=='aiAudit')navigate('aiAudit'); return showAiAudit(control.dataset.aiAuditKind,control.dataset.aiAuditId); }
@@ -145,6 +152,7 @@ document.addEventListener('click',async event => {
       case 'assistant-close': closeAssistant(); break;
       case 'funding-open': if(!state.assistant?.open)toggleAssistant(); document.querySelector('#automatic-funding')?.focus(); break;
       case 'funding-refresh': await loadFunding({force:true}); break;
+      case 'assistant-settings': closeAssistant({focus:false});navigate('customDashboard');break;
       case 'assistant-clear': clearAssistant(); break;
       case 'agents-refresh': await loadAgents(); break;
       case 'fraud-scan': await runFraudScan(); break;

@@ -567,3 +567,33 @@ dialog.wide-dialog { width:900px; }
 @media(max-width:760px){.assistant-funding-preview{right:16px;bottom:calc(78px + env(safe-area-inset-bottom))}}
 
 .assistant-payment-plan{padding:15px;border:1px solid var(--line);border-radius:10px;background:#fff;overflow-wrap:anywhere}.assistant-payment-plan h3{font-size:14px;margin:0 0 12px}.assistant-payment-plan h4{font-size:12px;margin:18px 0 8px}.assistant-payment-plan p,.assistant-payment-plan li,.assistant-payment-plan summary,.assistant-payment-plan small{font-size:11px;line-height:1.7}.payment-plan-status{padding:10px;border:1px solid #dbad47;border-radius:8px;background:#fff8e7;color:#644409}.payment-plan-status.covered{border-color:#a2c9b4;background:#edf8f0;color:#20563a}.payment-plan-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin:12px 0}.payment-plan-metrics>div{padding:10px;background:#f4f7fb;border-radius:6px;min-width:0}.payment-plan-metrics dt{font-size:10px;line-height:1.6}.payment-plan-metrics dd{font-size:14px;font-weight:700;margin:5px 0 0;overflow-wrap:anywhere}.assistant-payment-plan details{margin:16px 0}.assistant-payment-plan ul{padding-left:18px}.assistant-payment-plan small{display:block;margin-top:12px}.payment-plan-missing{color:#774c09}
+
+/* Private saved charts, preferences and sourced public research. */
+.custom-preferences{padding:24px;margin-bottom:24px}
+.custom-preferences>p,.custom-dashboard-card>.section-heading p{color:var(--muted,#64736c);font-size:.9rem}
+.custom-settings-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px}
+.custom-dashboard-list{display:grid;gap:24px}
+.custom-dashboard-card{padding:24px;min-width:0}
+.custom-dashboard-card>.section-heading{align-items:flex-start;gap:16px;flex-wrap:wrap}
+.custom-card-actions{display:flex;gap:16px;flex-wrap:wrap}
+.custom-chart-settings{margin-top:20px;border-top:1px solid var(--border,#e0e8e3);padding-top:16px}
+.custom-chart-settings>summary{cursor:pointer;font-weight:650}
+.custom-chart-form{margin-top:16px}
+.custom-checkbox{display:inline-flex;align-items:center;gap:8px;margin:0 20px 14px 0}
+.custom-action-error:empty{display:none}
+.trend-line-scroll{overflow-x:auto;padding-top:12px}
+.trend-line-chart{display:block;width:100%;min-width:600px;height:auto}
+.trend-line{fill:none;stroke-width:3;stroke-linejoin:round}
+.trend-line.received{stroke:var(--pine)}.trend-line.paid{stroke:#d98426}
+.trend-point.received{fill:var(--pine)}.trend-point.paid{fill:#d98426}
+.trend-axis{fill:none;stroke:#cad7cf;stroke-width:1}
+.trend-axis-label{font-size:11px;fill:#586c61}
+.public-research-card{border:1px solid var(--border,#dce7df);border-radius:14px;padding:16px;margin-top:16px;background:var(--surface,#fff)}
+.public-research-card h3{margin:0 0 8px}
+.public-research-text{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.9rem;line-height:1.65}
+.public-research-citation{color:#116c4a;text-decoration:underline;text-underline-offset:3px;font-weight:600}
+.public-research-citation:focus-visible{outline:2px solid #116c4a;outline-offset:3px}
+@media(max-width:760px){.custom-dashboard-card,.custom-preferences{padding:16px}.custom-settings-grid{grid-template-columns:1fr}.custom-card-actions{gap:12px}.assistant-window-actions{gap:4px}}
+
+.custom-preferences>p{margin:8px 0 18px;line-height:1.5}
+.assistant-window-actions .text-button{padding:6px;font-size:.75rem}

@@ -58,12 +58,15 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   await f.owner.query('INSERT INTO schema_migrations(name,checksum,applied_at) VALUES($1,$2,$3)', [latest.name, latest.checksum, latest.applied_at]);
   let report = await inspectDatabase(f.app);
   assert.equal(report.ready, true);
-  assert.equal(report.tables, 29);
-  assert.equal(report.migrations.length, 10);
+  assert.equal(report.tables, 30);
+  assert.equal(report.migrations.length, 11);
   assert.deepEqual(report.discrepancies, []);
   const savedViews=require('../banking/dashboard-views'),operator=(await f.app.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
   const saved=await savedViews.save(f.app,operator,{definition:{scope:'all',company:'',period:{kind:'rolling',days:90}}});
   assert.equal((await savedViews.detail(f.app,operator,saved.view.id)).dashboard.scopeType,'all');
+  const configured=await savedViews.configure(f.app,operator,saved.view.id,{version:saved.view.version,refreshCadence:'weekly',presentation:{chartType:'line'}});assert.equal(configured.view.refreshCadence,'weekly');
+  await savedViews.refresh(f.app,operator,saved.view.id);
+  const prefs=require('../banking/assistant-preferences');assert.equal((await prefs.update(f.app,operator,{chartType:'table'})).chartType,'table');
   await savedViews.remove(f.app,operator,saved.view.id);
 
   const denied = [
@@ -80,6 +83,8 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
     'DELETE FROM fraud_cases',
     "UPDATE fraud_cases SET transaction_id='forged'",
     'UPDATE saved_dashboard_views SET config_json=config_json',
+    'UPDATE saved_dashboard_views SET user_id=user_id',
+    'UPDATE assistant_preferences SET user_id=user_id',
     'DELETE FROM transactions',
     'UPDATE transactions SET amount_cents=amount_cents',
     'UPDATE accounts SET opening_balance_cents=0',

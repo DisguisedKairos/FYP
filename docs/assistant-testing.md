@@ -1,8 +1,8 @@
 # GLDB Assistant: questions and manual acceptance tests
 
-Prepared 12 November 2026 for the C300 wholesale banking prototype. Based on banking code at `ff00be3`; the latest GitHub pull adds review/documentation automation and a README line.
+Updated 12 November 2026 for the C300 wholesale banking prototype, including live public research and customized dashboards. Record the tested deployment commit with each result.
 
-This guide contains **107 manual cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
+This guide contains **116 manual cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
 
 Make a copy of [the Excel-compatible results sheet](assistant-test-cases.csv) per tester/session. Copy questions below after replacing every `{PLACEHOLDER}`. Instructions describing clicks are for the tester, not chat prompts.
 
@@ -101,7 +101,7 @@ Amounts are SGD unless testing unsupported currency. Planning cutoffs use Singap
 | `{OTHER_TX_ID}` | Owner-supplied outgoing ID owned by another business; never guess IDs. |
 | `{ALERT_TX_ID}` | Owner-selected eligible outgoing with genuine recorded evidence supporting review. |
 | `{QUIET_TX_ID}` | Owner-selected outgoing without eligible payment-specific review signals. |
-| `{SAVED_TITLE}` | Exact generated title after saving; custom naming/renaming through chat is not assumed. |
+| `{SAVED_TITLE}` | Exact generated title after saving; a quoted save title is supported, and My dashboard allows renaming. |
 
 ## Full case catalogue
 
@@ -284,6 +284,21 @@ Use a fresh chat for unrelated draft/date scenarios and the same chat for delibe
 | UI-13 | Staff + Reviewer | UI write | Eligible disposable case; reviewer not maker | Scan outgoing payments, inspect score/reason provenance, claim case and close independently with outcome/reason. | Genuine model result or explicit coverage gap; no invented score. Claims exclusive. Case closure does not approve/refund/reverse payment. |
 | UI-14 | Staff | UI write | Owner-supervised isolated instance only | Record high_value threshold/version; authorize small live edit in Fraud rules, inspect audit and restore via another authorized edit. | Admin/password/version checks; both audit events persist. Customer denied; assistant preview cannot change policy. |
 
+
+### Market research and customized dashboards
+
+| ID | Role | Effect | Setup | Question or steps | Expected result |
+| --- | --- | --- | --- | --- | --- |
+| INSIGHT-01 | Business | Read | Configured model supports live web search | Check the latest available Singapore business and financial market news and give me sourced market insights. | Public research card shows check time and clickable citations; publication dates/coverage limits clear. No streaming-price claim or banking decision. |
+| INSIGHT-02 | Business | Read | Public company name is explicit | Research the public company profile of DBS Group. | Sourced public activities/background/news with identity uncertainty where relevant; no private account access or claim of independent verification. |
+| INSIGHT-03 | Business | Read | Own submitted business profile exists | Analyze my business profile using my registered company details and transaction activity. | Owned legal name, industry, status and completed activity only; scope excludes independent verification/credit rating. No automatic public search of private profile details. |
+| INSIGHT-04 | Business | Read | Activity across months; zero months allowed | Show my transaction trends over the past 6 months as a dashboard. | Six calendar months include current partial month, completed counts, net, rounded average paid and change from prior nonzero baseline; no invented activity/forecast. |
+| INSIGHT-05 | Business | Saved view | Open unambiguous INSIGHT-04 chart | Add this chart to my customized dashboard and refresh it weekly as "Supplier trends". | Saves exact displayed filters/title with weekly cadence. Available in chat and My dashboard across sign-ins; no financial action. |
+| INSIGHT-06 | Business | Saved view | Disposable saved chart | On My dashboard rename it, choose line/table style, toggle status/comparison, save and Refresh saved chart. | Settings persist for this operator, chart renders chosen style, version rejects stale edits. Refresh updates saved metadata and live facts; removal affects only definition. |
+| INSIGHT-07 | Business | UI write | Dedicated identity or coordinate preference changes | In My dashboard set detailed replies, 6 default trend months, table style and trade topic. Ask Show my transaction trends over the past few months. | Preferences persist privately and apply to future requests; monthly table uses six months. Financial guards/permissions stay intact. |
+| INSIGHT-08 | Business | Owner setup | Owner-prepared disposable weekly due chart in isolated test instance | Run existing job when due; inspect next due/last success. Then arrange a safe refresh failure and retry. | Successful snapshot advances one week. Failure retains old snapshot, visibly reports failure and retries next day. Hosted daily window/batch limits are respected, without AI or money movement. |
+| INSIGHT-09 | Business | Read | Owner/admin can inspect permitted request traces | Check my balance and research the public company profile of DBS Group. | Private bank facts remain owned; public-search request contains public company/topic only. No account numbers, balances, receipts or raw conversation enter public search. Public links do not expose private banking evidence. |
+
 ## Banking feature coverage
 
 | Functional area | Cases |
@@ -307,6 +322,9 @@ Maintainer reference only; testers do not type tool names. The model may use add
 
 | Current tool | Representative cases |
 | --- | --- |
+| `get_business_profile` | INSIGHT-03 |
+| `get_market_insights` | INSIGHT-01 |
+| `research_public_company` | INSIGHT-02, INSIGHT-09 |
 | `check_payment_funds` | FUND-01, FUND-02, DATE-01, DATE-05 |
 | `get_finance_report` | FIN-01, FIN-03, FIN-07 |
 | `list_saved_dashboards` | DASH-08, DASH-11 |
@@ -362,5 +380,7 @@ Manual testers need no checkout. Maintainers may use existing suites with the do
 | `npm run demo:agents` | Optional real-provider demo in disposable PostgreSQL schema; may incur API usage |
 
 Controlled adapters are test doubles, not runtime AI fallback or accuracy measurement. Real manual AI requests use configured OpenAI. Missing access must be reported rather than replaced with simulated success.
+
+New workflow details: [market research and customized dashboards](assistant-insights.md).
 
 Related: [feature fixtures](feature-testing.md), [assistant boundaries](banking-agents.md), [company charts](company-activity.md), [AI evaluation limits](ai-evaluation.md), [API permissions](api.md), [financial controls](financial-controls.md).

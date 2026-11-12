@@ -27,6 +27,8 @@ function requestedPeriod(message,{now=Date.now}={}){
   }
   const today=day(now()),relative=/\b(?:last|past)\s+(\d+)\s+days?\b/i.exec(message);
   if(relative){const days=Number(relative[1]);if(days<1 || days>366)throw new HttpError(400,'Choose between 1 and 366 days.');return {from:day(now()-(days-1)*DAY),to:today};}
+  const months=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message);
+  if(months){const count=Number(months[1]);if(count<1||count>12)throw new HttpError(400,'Choose between 1 and 12 calendar months.');const start=new Date(today.slice(0,7)+'-01T00:00:00Z');start.setUTCMonth(start.getUTCMonth()-(count-1));return {from:start.toISOString().slice(0,10),to:today};}
   if(/\b(?:this|current) month\b/i.test(message))return {from:today.slice(0,7)+'-01',to:today};
   if(/\blast month\b/i.test(message)){
     const end=Date.parse(today.slice(0,7)+'-01T00:00:00+08:00')-DAY,to=day(end);return {from:to.slice(0,7)+'-01',to};
@@ -35,6 +37,20 @@ function requestedPeriod(message,{now=Date.now}={}){
   // can be selected in its date form rather than guessed by the model.
   return {};
 }
+
+function monthlyRows(rows,range){
+ const result=[];
+ for(let month=range.from.slice(0,7);month<=range.to.slice(0,7);){
+  const row=rows.find(r=>r.month===month),incomeCents=cents(row?.incoming||0),outgoingCents=cents(row?.outgoing||0);
+  const previous=result.at(-1),change=(value,old)=>old?Number(((value-old)/old*100).toFixed(1)):null;
+  const outgoingCount=Number(row?.outgoing_count||0);
+  const monthEnd=new Date(Date.UTC(Number(month.slice(0,4)),Number(month.slice(5)),0)).toISOString().slice(0,10);
+  result.push({month,incomeCents,outgoingCents,netCents:incomeCents-outgoingCents,completedCount:Number(row?.completed_count||0),incomingCount:Number(row?.incoming_count||0),outgoingCount,averageOutgoingCents:outgoingCount?Math.round(outgoingCents/outgoingCount):0,incomeChangePercent:previous?change(incomeCents,previous.incomeCents):null,outgoingChangePercent:previous?change(outgoingCents,previous.outgoingCents):null,partial:range.from>month+'-01'||range.to<monthEnd});
+  const date=new Date(month+'-01T00:00:00Z');date.setUTCMonth(date.getUTCMonth()+1);month=date.toISOString().slice(0,7);
+ }
+ return result;
+}
+
 async function dashboard(db,user,params=new URLSearchParams(),{now=Date.now,exactCompany=false}={}){
   for(const key of params.keys())if(!['company','scope','from','to','page','pageSize'].includes(key))throw new HttpError(400,'Unsupported company activity filter.');
   const scope=parameter(params,'scope');
@@ -61,12 +77,8 @@ async function dashboard(db,user,params=new URLSearchParams(),{now=Date.now,exac
     const paramsValues=[user.id,selected.name,range.start,range.end];
     const where=BASE+' AND lower('+LABEL+')=lower($2) AND '+WHEN+'>=$3::timestamptz AND '+WHEN+'<$4::timestamptz';
     const sums=(await client.query("SELECT count(*) AS total,count(*) FILTER(WHERE t.status='completed') AS completed,count(*) FILTER(WHERE t.status='pending_review') AS pending,count(*) FILTER(WHERE t.status='rejected') AS rejected,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.status='completed' AND t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.status='completed' AND t.amount_cents<0),0) AS outgoing "+where,paramsValues)).rows[0];
-    const monthly=(await client.query("SELECT to_char("+WHEN+" AT TIME ZONE 'Asia/Singapore','YYYY-MM') AS month,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0) AS outgoing "+where+" AND t.status='completed' GROUP BY month ORDER BY month",paramsValues)).rows;
-    const months=[];
-    for(let current=range.from.slice(0,7);current<=range.to.slice(0,7);){
-      const row=monthly.find(row=>row.month===current);months.push({month:current,incomeCents:cents(row?.incoming||0),outgoingCents:cents(row?.outgoing||0)});
-      const date=new Date(current+'-01T00:00:00Z');date.setUTCMonth(date.getUTCMonth()+1);current=date.toISOString().slice(0,7);
-    }
+    const monthly=(await client.query("SELECT to_char("+WHEN+" AT TIME ZONE 'Asia/Singapore','YYYY-MM') AS month,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0) AS outgoing,count(*) AS completed_count,count(*) FILTER(WHERE t.amount_cents>0) AS incoming_count,count(*) FILTER(WHERE t.amount_cents<0) AS outgoing_count "+where+" AND t.status='completed' GROUP BY month ORDER BY month",paramsValues)).rows;
+    const months=monthlyRows(monthly,range);
     const total=cents(sums.total),totalPages=Math.ceil(total/paging.pageSize),page=totalPages?Math.min(paging.page,totalPages):1;
     const rows=(await client.query('SELECT t.*,a.name AS account_name,a.number AS account_number '+where+' ORDER BY '+WHEN+' DESC,t.insert_seq DESC LIMIT $5 OFFSET $6',[...paramsValues,paging.pageSize,(page-1)*paging.pageSize])).rows;
     const incomeCents=cents(sums.incoming),outgoingCents=cents(sums.outgoing);
@@ -86,14 +98,14 @@ async function summary(db,user,params,{now=Date.now}={}){
     const total=(await client.query('SELECT '+SUMS+',count(DISTINCT lower('+LABEL+')) AS companies '+where,values)).rows[0];
     const count=cents(total.companies),totalPages=Math.ceil(count/paging.pageSize),page=totalPages?Math.min(paging.page,totalPages):1;
     const companies=(await client.query('SELECT MIN('+LABEL+') AS company,'+SUMS+' '+where+' GROUP BY lower('+LABEL+') ORDER BY SUM(abs(t.amount_cents)) FILTER(WHERE t.status=\'completed\') DESC NULLS LAST,lower('+LABEL+') LIMIT $4 OFFSET $5',[...values,paging.pageSize,(page-1)*paging.pageSize])).rows.map(row=>({company:row.company,...monetary(row),transactionCount:cents(row.total)}));
-    const monthly=(await client.query("SELECT to_char("+WHEN+" AT TIME ZONE 'Asia/Singapore','YYYY-MM') AS month,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0) AS outgoing "+where+" AND t.status='completed' GROUP BY month",values)).rows;
-    const months=[];for(let month=range.from.slice(0,7);month<=range.to.slice(0,7);){const row=monthly.find(r=>r.month===month);months.push({month,incomeCents:cents(row?.incoming||0),outgoingCents:cents(row?.outgoing||0)});const date=new Date(month+'-01T00:00:00Z');date.setUTCMonth(date.getUTCMonth()+1);month=date.toISOString().slice(0,7);}
+    const monthly=(await client.query("SELECT to_char("+WHEN+" AT TIME ZONE 'Asia/Singapore','YYYY-MM') AS month,COALESCE(SUM(t.amount_cents) FILTER(WHERE t.amount_cents>0),0) AS incoming,COALESCE(SUM(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0) AS outgoing,count(*) AS completed_count,count(*) FILTER(WHERE t.amount_cents>0) AS incoming_count,count(*) FILTER(WHERE t.amount_cents<0) AS outgoing_count "+where+" AND t.status='completed' GROUP BY month",values)).rows;
+    const months=monthlyRows(monthly,range);
     return {status:'ready',scopeType:'all',company:'All companies',currency:'SGD',period:{from:range.from,to:range.to,timeZone:'Asia/Singapore',dateBasis:'Completed date for settled payments; request date for pending or rejected payments.'},scope:'Only transactions on your accounts. Companies and billers are grouped by recorded counterparty name, not verified legal identity. Own-account transfers and opening balances are excluded.',generatedAt:new Date(now()).toISOString(),totals:{...monetary(total),companyCount:count,transactionCount:cents(total.total)},months,companies,pagination:{page,pageSize:paging.pageSize,total:count,totalPages}};
   });
 }
 function definition(data,message=''){
-  const selected=requestedPeriod(message),relative=/\b(?:last|past)\s+(\d+)\s+days?\b/i.exec(message);
-  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period:relative?{kind:'rolling',days:Number(relative[1])}:!selected.from && !selected.to?{kind:'rolling',days:90}:{kind:'fixed',from:data.period.from,to:data.period.to}};
+  const selected=requestedPeriod(message),monthWindow=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message),relative=/\b(?:last|past)\s+(\d+)\s+days?\b/i.exec(message);
+  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period:monthWindow?{kind:'months',months:Number(monthWindow[1])}:relative?{kind:'rolling',days:Number(relative[1])}:!selected.from && !selected.to?{kind:'rolling',days:90}:{kind:'fixed',from:data.period.from,to:data.period.to}};
 }
 function assistantResult(data,viewDefinition){
   const actions=[]; // The assistant renders the returned dashboard directly in chat.
@@ -101,8 +113,9 @@ function assistantResult(data,viewDefinition){
   const receipts=data.transactions?.map(t=>({id:t.id,type:t.type,description:t.description,reference:t.reference,amountCents:t.amountCents,status:t.status,date:t.completedAt||t.requestedAt}));
   return {...data,...(receipts?{transactions:receipts}:{}),actions,items:[...items,{title:'Dashboard period',subtitle:data.period.from+' to '+data.period.to+' (SGT)'}],...(data.status==='ready'?{viewDefinition}: {})};
 }
-async function assistantDashboard(db,user,{company},message,{now=Date.now}={}){
+async function assistantDashboard(db,user,{company},message,{now=Date.now,defaultMonths=3}={}){
   if(company!==undefined && (typeof company!=='string' || !normalize(company) || !normalize(message).includes(normalize(company))))throw new HttpError(400,'Use a company name from your message.');
+  if(!Object.keys(requestedPeriod(message,{now})).length && /\b(?:transaction trends?|past few months|monthly trends?)\b/i.test(message))message+=' over the past '+defaultMonths+' months';
   const data=await dashboard(db,user,new URLSearchParams({...company?{company}:{scope:'all'},...requestedPeriod(message,{now}),pageSize:'10'}),{now});
   return assistantResult(data,data.status==='ready'?definition(data,message):null);
 }

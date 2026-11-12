@@ -44,7 +44,7 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
     }
     const schemas=tools.map(({function:fn})=>{
       const required=new Set(fn.parameters.required || []);
-      return {type:'function',name:fn.name,description:fn.description,strict:true,parameters:{...fn.parameters,properties:Object.fromEntries(Object.entries(fn.parameters.properties).map(([key,value])=>[key,required.has(key)?value:{...value,type:[value.type,'null']} ])),required:Object.keys(fn.parameters.properties)}};
+      return {type:'function',name:fn.name,description:fn.description,strict:true,parameters:{...fn.parameters,properties:Object.fromEntries(Object.entries(fn.parameters.properties).map(([key,value])=>[key,required.has(key)?value:{...value,type:[value.type,'null'],...(value.enum?{enum:[...value.enum,null]}:{})} ])),required:Object.keys(fn.parameters.properties)}};
     });
     const data=await request('responses',{model,input,tools:schemas,store:false,include:['reasoning.encrypted_content'],...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{}),parallel_tool_calls:false,max_output_tokens:1800},signal || AbortSignal.timeout(45000));
     const invalid=()=>new HttpError(503,'OpenAI returned an invalid, refused or incomplete response. Retry the request.');
@@ -67,6 +67,13 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
     if(content.length>12000 || calls.length>4 || (!content.trim() && !calls.length))throw invalid();
     return {role:'assistant',content,...(calls.length?{tool_calls:calls,responseItems:data.output}:{}),modelResponse:{provider:'openai',model:data.model,responseId:typeof data.id==='string'?data.id:null}};
   }
-  return {mode:'openai',model,inspect,chat};
+
+  async function research(publicRequest,{signal}={}){
+    const publicResearch=require('../public-research');
+    if(!publicRequest||!['company','market'].includes(publicRequest.kind)||typeof publicRequest.query!=='string'||publicRequest.query.length>900)throw new HttpError(400,'Choose a valid public research task.');
+    const data=await request('responses',{model,instructions:publicResearch.PROMPT+' Server check time: '+publicRequest.checkedAt,input:publicRequest.query,tools:[{type:'web_search',external_web_access:true,search_context_size:'low'}],tool_choice:'required',store:false,max_output_tokens:1800,...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{})},signal||AbortSignal.timeout(25000));
+    return publicResearch.parseResponse(data,model,publicRequest);
+  }
+  return {mode:'openai',model,inspect,chat,research};
 }
 module.exports={createOpenAIModel};

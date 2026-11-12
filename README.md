@@ -152,7 +152,7 @@ See [banking agents](docs/banking-agents.md), [fraud scoring contract](docs/frau
 
 ### Company transaction dashboards
 
-Ask the popup assistant: "Summarize my transactions with other companies in a dashboard and save it for future use." The reply displays received/paid/net SGD totals, monthly bar graphs, clickable company comparison bars and a transaction-status ring directly in chat. Dashboards appear only when requested; they have no separate page or sidebar link. Ask "Show my saved dashboards" to reopen a private saved view in chat. Rolling periods refresh when reopened; fixed dates stay fixed. Views persist across sign-ins and stay limited to your own accounts, including for administrators. See [company activity documentation](docs/company-activity.md).
+Ask the popup assistant: "Summarize my transactions with other companies in a dashboard and save it for future use." The reply displays received/paid/net SGD totals, monthly bar graphs, clickable company comparison bars and a transaction-status ring directly in chat. Charts appear in chat when requested and can be saved to the dedicated My dashboard page. Ask "Show my saved dashboards" to reopen a private saved view in chat. Rolling periods refresh when reopened; fixed dates stay fixed. Views persist across sign-ins and stay limited to your own accounts, including for administrators. See [company activity documentation](docs/company-activity.md).
 
 Ask the assistant: "Generate a downloadable finance report for this month" or "Pull a finance report for the last 30 days." The chat reply shows current owned account balances and completed external cash flow, with **Download CSV** and **Download PDF** buttons. Each download queries a fresh PostgreSQL snapshot for the displayed date range and records its generation time.
 
@@ -173,3 +173,8 @@ The chat card separates completed business and source-account inflow/outflow fro
 
 
 testing MR part 2
+### Live research and customized dashboards
+
+Ask "Check the latest Singapore business news and give me market insights", "Research the public company profile of DBS Group", or "Analyze my business profile". Public web search uses the configured OpenAI model in a separate request from private banking tools, with clickable citations and a check time.
+
+Ask "Show my transaction trends over the past 6 months", then 'Add this chart to my customized dashboard and refresh it weekly as "Supplier trends".' Open **My dashboard** to rename charts, choose bar/line/table display, change visible sections and select manual/weekly refresh. Private preferences control explanation style, default trend months, chart style and market topic. Weekly snapshots use the existing daily hosted job; opening a chart also reads live figures. See [scope, setup and test prompts](docs/assistant-insights.md). Apply migration 011 and runtime grants before deployment; do not reseed accounts.

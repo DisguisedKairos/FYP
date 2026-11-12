@@ -12,6 +12,7 @@ const companyActivity = require('./banking/company-activity');
 const financeReports = require('./banking/finance-reports');
 const { fundingCoverage } = require('./banking/agents/reports');
 const dashboardViews = require('./banking/dashboard-views');
+const assistantPreferences=require('./banking/assistant-preferences');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
 const { createAgents } = require('./banking/agents');
@@ -46,7 +47,7 @@ function accountName(value) {
 function serveFrontend(app) {
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
   app.get(['/assistant','/company-activity','/saved-dashboards'], (_req, res) => res.redirect(302, '/dashboard?chat=open'));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit']);
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit', '/custom-dashboard']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
 }
 
@@ -122,6 +123,10 @@ async function createApplication(options = {}) {
   });
   route('get', '/api/funding-check', async req => ({ fundingCheck: await fundingCoverage(db, req.banking.user, { now }) }));
   route('get', '/api/dashboard', async req => ({ ...await history.dashboard(db, req.banking.user.id, { now }), user: security.publicUser(req.banking.user) }));
+  route('get','/api/assistant-preferences',async req=>({preferences:await assistantPreferences.read(db,req.banking.user)}));
+  route('patch','/api/assistant-preferences',async req=>({preferences:await assistantPreferences.update(db,req.banking.user,req.body,{now,validateSession:validateSessionFor(req)})}));
+  route('patch','/api/dashboard-views/:id',req=>dashboardViews.configure(db,req.banking.user,req.params.id,req.body,{now,validateSession:validateSessionFor(req)}));
+  route('post','/api/dashboard-views/:id/refresh',req=>{if(Object.keys(req.body||{}).length)throw new HttpError(400,'No refresh arguments are required.');return dashboardViews.refresh(db,req.banking.user,req.params.id,{now,validateSession:validateSessionFor(req)});});
   route('get', '/api/dashboard-views', async req => ({ views: await dashboardViews.list(db,req.banking.user) }));
   route('get', '/api/dashboard-views/:id', req => { const params=query(req); for(const key of params.keys())if(key!=='page')throw new HttpError(400,'Unsupported saved dashboard filter.'); history.pagination(params); return dashboardViews.detail(db,req.banking.user,req.params.id,{now,page:params.get('page')||1}); });
   route('post', '/api/dashboard-views', req => dashboardViews.save(db,req.banking.user,req.body,{now,validateSession:validateSessionFor(req)}));
@@ -238,7 +243,9 @@ async function createApplication(options = {}) {
     let monitoring;
     try { monitoring = await fraudCases.scan(db, riskClient, { now }); }
     catch { monitoring = { unavailable: true }; }
-    return { ...schedules, fraudMonitoring: monitoring, ...await workflows.dispatch(db, { now }) };
+    let dashboardRefresh;
+    try{dashboardRefresh=await dashboardViews.refreshDue(db,{now});}catch{dashboardRefresh={unavailable:true};}
+    return { ...schedules, fraudMonitoring: monitoring, dashboardRefresh, ...await workflows.dispatch(db, { now }) };
   })().finally(() => { activeJobs = null; }));
   server.db = db; server.auth = auth; server.riskClient = riskClient; server.app = app;
   server.closeResources = async () => { stopped = true; clearInterval(timer); if (activeJobs) await activeJobs.catch(() => {}); await riskClient.close?.(); if (!options.db) await db.close(); };

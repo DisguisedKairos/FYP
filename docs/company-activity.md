@@ -2,7 +2,7 @@
 
 Ask GLDB Assistant: "Summarize my transactions with other companies in a dashboard and save it for future use." The reply displays received/paid/net SGD totals, monthly bar graphs, company comparison bars and a transaction-status ring directly in the chat popup.
 
-You can ask about a named company, for example "Show a dashboard with Harbour Supplies for the last 30 days." Ambiguous recorded names produce choices inside the reply. Selecting a company, paging results or refreshing figures keeps the current banking page open. Dashboards are generated only after an assistant request; there is no company dashboard page or sidebar link. The ordinary account overview remains available.
+You can ask about a named company, for example "Show a dashboard with Harbour Supplies for the last 30 days." Ambiguous recorded names produce choices inside the reply. Selecting a company, paging results or refreshing figures keeps the current banking page open. Charts appear in chat after a request; saved charts are also available on the private My dashboard page. The ordinary account overview remains available.
 
 ## Saved dashboards
 
@@ -30,6 +30,8 @@ Former /company-activity and /saved-dashboards URLs redirect to the account over
 
 The assistant uses get_company_activity, save_company_dashboard, list_saved_dashboards and open_saved_dashboard. Its validated response carries structured companyDashboard data or savedDashboards definitions for the chat renderer. List/open tools are read-only. Saving requires explicit user intent and uses the server's retrieved definition. After a company selection in chat, a save-this-dashboard follow-up submits the displayed definition; the server validates its shape, dates and ownership against fresh ledger queries before using it as save context. The model never supplies save filters.
 
-The authenticated /api/company-activity and /api/dashboard-views endpoints support chart refreshes, drill-downs, pagination and private saves in chat. They do not provide separate frontend views. Existing installations need migration 010_saved_dashboard_views.sql and its runtime grants; this UI change needs no new migration.
+The authenticated /api/company-activity and /api/dashboard-views endpoints support chart refreshes, drill-downs, pagination and private saves in chat. The private My dashboard page also uses versioned settings and explicit snapshot refresh endpoints. Apply migration 011_assistant_customization.sql and updated runtime grants.
 
 PostgreSQL tests verify ownership, ambiguity, Singapore date boundaries, integer-cent totals, pagination, saved definitions, session revocation and model selection of an owned saved ID. Browser tests cover inline charts on desktop and mobile, unchanged page URLs, saved views across sign-ins, out-of-order chart responses, recovery after a failed logout, save requests during chart loading, empty periods and removal of the former navigation links. Test model doubles are confined to tests; production uses the configured OpenAI model.
+
+See [customized charts, private preferences and weekly refresh](assistant-insights.md). Calendar-month windows support 1-12 months including the current partial month, with counts, rounded averages and monthly changes. Existing rolling-day/fixed definitions remain valid.

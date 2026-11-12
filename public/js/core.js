@@ -5,6 +5,7 @@ export const mobileQuery = matchMedia('(max-width: 760px)');
 export const ui = {};
 export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
+  customDashboard: {path:'/custom-dashboard',label:'My dashboard',icon:'grid'},
   business: { path: '/business', label: 'Business profile', icon: 'wallet' },
   aiAudit: { path: '/ai-audit', label: 'AI audit log', icon: 'statement', admin: true },
   agents: { path: '/banking-insights', label: 'Banking insights', icon: 'activity' },
