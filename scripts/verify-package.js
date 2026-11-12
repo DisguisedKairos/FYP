@@ -13,6 +13,7 @@ for(const file of ['banking/ai-provider.js','banking/agents/openai.js','database
 for (const file of ['application.js','vercel.json','.vercelignore','deploy/vercel.js','docs/vercel.md','scripts/verify-vercel.js']) REQUIRED_FILES.add(file);
 for(const file of ['banking/finance-reports.js','banking/finance-pdf.js','public/js/finance-reports.js','tests/dft-finance-reports.test.js','tests/dft-finance-reports-browser.js'])REQUIRED_FILES.add(file);
 for(const file of ['public/js/funding.js','banking/agents/funds.js','tests/dft-funding-warnings.test.js','tests/dft-funding-warnings-browser.js'])REQUIRED_FILES.add(file);
+for(const file of ['banking/payment-planning.js','public/js/payment-planning.js','tests/dft-payment-planning.test.js','tests/dft-payment-planning-browser.js'])REQUIRED_FILES.add(file);
 const MANIFEST_NAME = 'PACKAGE-MANIFEST.json';
 for(const name of ['tests/dft-agent-model.js','public/js/model-activity.js','tests/dft-model-activity.test.js'])REQUIRED_FILES.add(name);
 for (const file of ['banking/fraud-cases.js', 'database/migrations/008_fraud_monitoring.sql', 'public/js/fraud-cases.js', 'tests/dft-fraud-cases.test.js', 'tests/dft-fraud-cases-browser.js', 'docs/fraud-monitoring.md']) REQUIRED_FILES.add(file);

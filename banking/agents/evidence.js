@@ -29,8 +29,10 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const fundingWarnings=require('./funds').collect(results);
   const fundingClaims=plain.replace(/\b(?:(?:do|does|did|will|would|should|may|might|could|can)\s+not|cannot|can't|don't|doesn't|won't|wouldn't|shouldn't|couldn't|not)\s+(?:(?:have|be)\s+)?(?:sufficient funds|enough (?:money|funds)|fully funded|cover all(?:\s+(?:payments|bills))?)/gi,'[funding limitation]');
   if(fundingWarnings.length && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded|funds (?:are|will be) sufficient)\b/i.test(fundingClaims))return 'The narrative conflicts with a funding shortfall or an incomplete funding check.';
+  const planningClaims=fundingClaims.replace(/\b(?:cannot|can't|couldn't|can not|could not|not able to)\s+(?:pay|afford|cover)\b/gi,'[funding limitation]');
+  if(fundingWarnings.length && /\b(?:can|able to|ready to)\s+(?:pay|afford)|\bpayment (?:is|will be) (?:covered|funded)\b/i.test(planningClaims))return 'The narrative asserts payment readiness despite an incomplete or shortfall check.';
   const projections = [report, ...results.filter(r => r.tool === 'project_liquidity').map(r => r.value)].filter(r => Array.isArray(r?.shortfalls));
-  if (projections.some(r => r.shortfalls.length > 0) && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded)\b/i.test(fundingClaims)) return 'The narrative conflicts with a projected funding shortfall.';
+  if (!results.some(r=>r.value?.paymentReadiness) && projections.some(r => r.shortfalls.length > 0) && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded)\b/i.test(fundingClaims)) return 'The narrative conflicts with a projected funding shortfall.';
   const checks = [report, ...results.filter(r => r.tool === 'reconcile_accounts').map(r => r.value)].filter(r => Array.isArray(r?.discrepancies));
   if (checks.some(r => r.discrepancies.length || r.failedSchedules?.length) && /\b(?:no (?:issues|exceptions|discrepancies)|all (?:clear|balanced|reconciled)|everything (?:balances|reconciles))\b/i.test(plain)) return 'The narrative conflicts with recorded operational exceptions.';
   if (results.some(r => r.tool === 'prepare_payment_draft' && r.value.complete === false) && /\b(?:draft|payment form)\s+(?:is\s+)?ready\b/i.test(plain)) return 'Required draft details are still missing.';
@@ -38,6 +40,8 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
 }
 function relevanceIssue(message, results) {
   const tools = new Set(results.map(r => r.tool));
+  const planned=results.some(row=>row.tool==='check_payment_funds' && row.value?.paymentReadiness);
+  if(require('../payment-planning').requested(message) && !planned)return 'The proposed dated payment and cash flow must be checked using check_payment_funds; a balance or general projection alone is insufficient.';
   const has = names => names.some(name => tools.has(name));
   const coverage=[...results].reverse().find(row=>row.value?.fundingCheck)?.value.fundingCheck;
   const duration=message.match(/\b(\d+)\s+(days?|weeks?|months?)\b/i),unit=duration?.[2]?.toLowerCase();
@@ -49,9 +53,10 @@ function relevanceIssue(message, results) {
   if (/\b(?:insufficient funds|low (?:on )?(?:funds|balance)|enough (?:money|funds)|sufficient funds)\b/i.test(message) && !has(['get_accounts','project_liquidity','prepare_payment_draft','check_payment_funds','get_finance_report'])) return 'The requested funding evidence was not retrieved.';
   if (/\b(?:finance|financial)\b/i.test(message) && /\breports?\b/i.test(message) && !has(['get_finance_report'])) return 'The requested finance report was not retrieved.';
   if (/\b(?:balance|balances)\b/i.test(message) && !has(['get_accounts', 'project_liquidity', 'reconcile_accounts', 'get_finance_report','check_payment_funds'])) return 'The requested balance evidence was not retrieved.';
-  if (/\b(?:liquidity|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard']) && !covered && !currentPayment) return 'The requested liquidity scenario was not retrieved.';
-  if (/\bcash.?flow\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report'])) return 'The requested cash flow evidence was not retrieved.';
-  if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity']) && !covered) return 'The requested scheduled-payment evidence was not retrieved.';
+  if (/\b(?:liquidity|afford|shortfall|cover|projection)\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard']) && !covered && !currentPayment && !planned) return 'The requested liquidity scenario was not retrieved.';
+  if (/\b(?:inflow|outflow)\b/i.test(message) && !has(['get_finance_report','get_company_activity','open_saved_dashboard']) && !planned)return 'The requested completed inflow and outflow were not retrieved.';
+  if (/\bcash.?flow\b/i.test(message) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report','check_payment_funds'])) return 'The requested cash flow evidence was not retrieved.';
+  if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity']) && !covered && !planned) return 'The requested scheduled-payment evidence was not retrieved.';
   if (/\b(?:history|recent transactions|find.*transaction|search.*transaction)\b/i.test(message) && !has(['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report'])) return 'The requested transaction evidence was not retrieved.';
   return null;
 }

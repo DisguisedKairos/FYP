@@ -19,6 +19,7 @@ function draftWarnings(source,requiredCents,{scheduled=false,now=Date.now}={}){
 function collect(results){
   const coverage=[...results].reverse().find(row=>row.value?.fundingCheck)?.value.fundingCheck;
   const payment=[...results].reverse().find(row=>['prepare_payment_draft','check_payment_funds'].includes(row.tool))?.value;
+  if(payment?.paymentReadiness)return payment.fundingWarnings||[];
   return [...(coverage?.warnings||[]),...(payment?.fundingWarnings||[])];
 }
 module.exports={projectionWarnings,draftWarnings,collect};
