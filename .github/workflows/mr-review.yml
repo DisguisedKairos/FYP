@@ -1,4 +1,5 @@
 name: AI Merge Request Review
+
 on:
   pull_request:
     types: [opened, synchronize]
@@ -6,6 +7,9 @@ on:
 jobs:
   ai-review:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -16,12 +20,10 @@ jobs:
           node-version: '20'
 
       - name: Install Agent Dependencies
-        run: npm install @actions/core @actions/github openai
+        run: npm install @actions/core@1 @actions/github@6 openai
 
       - name: Execute QA Review Agent
         run: node scripts/mr-review-agent.js
         env:
-          # This uses the default GitHub token to allow the bot to comment
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # This safely pulls the API key you secured in the repository settings
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
