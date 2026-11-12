@@ -19,6 +19,14 @@ test('Payment deadlines use inclusive Singapore dates, calendar month ends and b
   assert.equal(planning.deadlineFor('this month',Date.parse('2026-11-30T16:00:00Z')).date,'2026-12-31');
   for(const text of ['2026-02-30','2026-11-11','2027-12-01','2026-13','by next week','by this date','by 2026-11-20 at 15:30','2026-11-20 and 2026-11-21','by 20 Nov 2026 or 21 Nov 2026','by November 2026 or December 2026','by 31 November 2026'])assert.ok(planning.deadlineFor(text,NOW).error,text);
 });
+test('Alternative payment deadlines require clarification even when relative and explicit dates are mixed',()=>{
+  for(const text of ['by tomorrow or today','by 2026-11-20 or tomorrow','by tomorrow or next month','by 20 Nov 2026 or tomorrow','by next month and tomorrow','by tomorrow, or by 2026-11-20','by 2026-12 or next month']){
+    const result=planning.deadlineFor(text,NOW);
+    assert.ok(result.error,text);assert.equal(result.until,undefined,text);
+  }
+  assert.equal(planning.deadlineFor('Summarize inflow and outflow this month. Can I pay by next month?',NOW).date,'2026-12-31');
+  assert.equal(planning.deadlineFor('Can I pay SGD 100 to Tomorrow or Today Pte. Ltd. from Operating savings by 2026-11-20?',NOW).date,'2026-11-20');
+});
 test('Amounts and owned sources are derived from user text, and malformed or ambiguous details are never guessed',()=>{
   const own=[{id:'1',name:'Operating savings',number:'1020001001'},{id:'2',name:'Reserve',number:'1020001002'}];
   const input=planning.details(message(own[0],{amount:'1,234.56'}),own,NOW);
@@ -43,6 +51,16 @@ pg('A dated company check counts only schedules through the Singapore cutoff and
   assert.deepEqual(result.actions,[]);assert.equal(result.fundingWarnings[0].code,'dated_payment_shortfall');assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
   const early=await planning.assess(f.db,user,message(source,{date:'2026-11-19',amount:(source.balanceCents/100).toFixed(2)}),{now});
   assert.equal(early.paymentReadiness.status,'covered');assert.equal(early.paymentReadiness.afterPaymentCents,0);assert.deepEqual(early.fundingWarnings,[]);
+});
+pg('Ambiguous relative deadlines return clarification through the assistant without calculating payment coverage',async t=>{
+  const f=await fixture(t,{now}),client=f.client();await client.login();const source=(await accounts(f.db))[0];
+  const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+  const response=await client.request('/api/agents/assistant',{method:'POST',body:{message:message(source,{date:'tomorrow or next month'})}});
+  assert.equal(response.status,200,JSON.stringify(response.data));
+  assert.equal(response.data.paymentReadiness.status,'needs_details');assert.equal(response.data.paymentReadiness.deadline,null);
+  assert.ok(response.data.paymentReadiness.missing.some(value=>/one.*deadline/i.test(value)));
+  assert.equal(response.data.fundingWarnings[0].code,'payment_details_required');assert.deepEqual(response.data.actions,[]);
+  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });
 pg('Month-end planning expands recurring outflows only through the chosen calendar month',async t=>{
   const f=await fixture(t,{now}),client=f.client();await client.login();const source=(await accounts(f.db))[0];

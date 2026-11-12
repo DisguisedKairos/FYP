@@ -272,7 +272,11 @@ setInterval(() => { if (state.user && !state.signingOut && !document.hidden && !
 document.addEventListener('visibilitychange', () => { if (!document.hidden && !state.modalBusy) loadFunding(); });
 window.addEventListener('focus', async () => {
   if (!state.user || state.modalBusy || state.signingOut) return;
+  const focusedRoute = state.route;
   await loadDashboard({ render: false });
+  // Saved charts have explicit refresh controls. A focus refresh must not reset
+  // their current receipt page, drill-down or unsaved chart settings.
+  if (state.route !== focusedRoute || state.route.page === 'customDashboard') return;
   if (document.activeElement?.closest('button,a,input,select,textarea,[role=button]')) return;
   if (state.data && ['overview', 'accounts', 'activity'].includes(state.route.page) && !modal.open && !document.activeElement?.matches('input,select,textarea')) render();
   if (state.user) loadExtras(state.route.page);

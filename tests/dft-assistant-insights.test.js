@@ -27,6 +27,22 @@ test('Live public research requires completed search, valid model provenance and
  const bad=publicResponse();bad.output.at(-1).content[0].annotations[0].end_index=99999;assert.throws(()=>research.parseResponse(bad,model,spec),e=>e.status===503);
 });
 test('Weekly chart refresh requires affirmative intent and respects negative wording',()=>{assert.equal(views.messageOptions('Save this chart and refresh it weekly').refreshCadence,'weekly');assert.equal(views.messageOptions("Save this chart but do not refresh weekly").refreshCadence,'manual');assert.equal(views.messageOptions('Save this chart; no weekly refresh').refreshCadence,'manual');assert.equal(views.messageOptions('Save this chart').refreshCadence,undefined);});
+test('Window focus preserves customized chart paging and edits and does not refresh a newly navigated route',async()=>{
+ const source=require('node:fs').readFileSync(require('node:path').join(__dirname,'../public/app.js'),'utf8');
+ const start=source.indexOf("window.addEventListener('focus', async () => {");
+ assert.ok(start>=0);const end=source.indexOf('\n});',start)+4;
+ async function run(page,{navigateDuringRead=false}={}){
+  let listener,reads=0,renders=0,reloads=0;
+  const state={user:{id:'operator'},route:{page},data:{},remote:{customDashboard:{charts:{saved:{page:2}},unsavedTitle:'Unsubmitted chart title'}}};
+  const context={state,modal:{open:false},document:{activeElement:null},window:{addEventListener:(_event,handler)=>{listener=handler;}},loadDashboard:async()=>{reads++;if(navigateDuringRead)state.route={page:'transfers'};},render:()=>{renders++;},loadExtras:()=>{reloads++;state.remote.customDashboard.charts.saved.page=1;}};
+  require('node:vm').runInNewContext(source.slice(start,end),context);await listener();
+  return {state,reads,renders,reloads};
+ }
+ const chart=await run('customDashboard');assert.equal(chart.reads,1);assert.equal(chart.reloads,0);assert.equal(chart.renders,0);
+ assert.equal(chart.state.remote.customDashboard.charts.saved.page,2);assert.equal(chart.state.remote.customDashboard.unsavedTitle,'Unsubmitted chart title');
+ const changed=await run('overview',{navigateDuringRead:true});assert.equal(changed.renders,0);assert.equal(changed.reloads,0);
+ const overview=await run('overview');assert.equal(overview.renders,1);assert.equal(overview.reloads,1);
+});
 test('OpenAI public search is an isolated live request with storage disabled and no banking tools',async()=>{
  let captured;
  const provider=createOpenAIModel({model,apiKey:key,fetchImpl:async(_url,options)=>{captured=JSON.parse(options.body);return new Response(JSON.stringify(publicResponse()));}});

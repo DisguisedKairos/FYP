@@ -11,6 +11,8 @@ const iso=value=>new Date(value).toISOString();
 const literal=value=>value.replace(/[.*+?^$(){}|[\]\\]/g,'\\$&');
 const MONTHS=['january','february','march','april','may','june','july','august','september','october','november','december'];
 const MONTH_PATTERN=MONTHS.map(name=>name+'|'+name.slice(0,3)).join('|');
+const DEADLINE_PATTERN='(?:\\d{4}-\\d{2}(?:-\\d{2})?|(?:\\d{1,2}\\s+)?(?:'+MONTH_PATTERN+')\\s+\\d{4}|today|tomorrow|(?:this|current|next)\\s+month|(?:the\\s+)?end of (?:the )?month|month.end)';
+const ALTERNATIVE_DEADLINES=new RegExp('(?:^|\\b(?:by|before|until|on|in|at)\\s+)'+DEADLINE_PATTERN+'\\b\\s*,?\\s*(?:or|and)\\s+(?:(?:by|before|until|on|in|at)\\s+)?'+DEADLINE_PATTERN+'\\b','i');
 function requested(message){
   const proposed=/\bSGD\s*\S|S\$|\$|\b(?:pay|payment to|transfer to|company|supplier|vendor)\b/i.test(message);
   return proposed && /\b(?:afford|enough|sufficient|funding|cover|can (?:i|we|my business|the business) pay)\b/i.test(message)
@@ -18,6 +20,7 @@ function requested(message){
 }
 function endOfMonth(year,month){return new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);}
 function deadlineFor(message,now){
+  if(ALTERNATIVE_DEADLINES.test(message))return {error:'Give one payment deadline or month, rather than multiple alternatives.'};
   if(/\b\d{1,2}:\d{2}\b|\b\d{1,2}\s*(?:am|pm)\b|T\d{2}:/i.test(message))return {error:'Use a date without a clock time; checks cover the end of that Singapore date.'};
   const dates=message.match(/\b\d{4}-\d{2}-\d{2}\b/g)||[];
   if(dates.length>1)return {error:'Give one payment deadline, using YYYY-MM-DD.'};

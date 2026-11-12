@@ -46,6 +46,18 @@ test('An incomplete company question shows missing details and still returns his
   text=await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent');
   assert.match(text,/Current funds cover this conservative/);assert.doesNotMatch(text,/\[E\d+\]|Evidence for this response/);assert.deepEqual(page.errors,[]);
 });
+test('Chat asks for one deadline when relative alternatives are given and accepts the clarified date',async t=>{
+  const {f,page}=await open(t),before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+  await ask(page,'Can I pay SGD 100 to Harbour Supplies Pte. Ltd. from Operating savings by tomorrow or next month?');
+  let text=await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent');
+  assert.match(text,/More details are needed/);assert.match(text,/one payment deadline/);
+  assert.doesNotMatch(text,/Current funds cover this conservative|More settled funds are needed/);
+  assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),0);
+  await ask(page,'Can I pay SGD 100 to Harbour Supplies Pte. Ltd. from Operating savings by tomorrow?');
+  text=await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent');
+  assert.match(text,/Current funds cover this conservative/);assert.match(text,/2026-11-13/);
+  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
+});
 test('A company funding report delayed across sign-out cannot appear in the next operator chat',async t=>{
   const {page}=await open(t);
   await page.evaluate("window.planningFetch=window.fetch;window.holdPlanning=true;window.fetch=async(...args)=>{const r=await window.planningFetch(...args);if(window.holdPlanning&&String(args[0])==='/api/agents/assistant'){window.holdPlanning=false;const body=await r.text();await new Promise(resolve=>window.releasePlanning=resolve);return new Response(body,{status:r.status,headers:r.headers});}return r;};");
