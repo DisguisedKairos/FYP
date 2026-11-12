@@ -10,7 +10,7 @@
     "dev": "node --env-file-if-exists=.env scripts/start-platform.js",
     "setup": "node scripts/setup.js",
     "test": "node --env-file-if-exists=.env.test --test --test-concurrency=4 tests/dft-*.test.js",
-    "test:browser": "node --env-file-if-exists=.env.test --test --test-concurrency=1 tests/browser.e2e.js tests/dft-security-browser.js tests/dft-agents-browser.js tests/dft-fraud-cases-browser.js tests/dft-assistant-dashboards-browser.js tests/dft-finance-reports-browser.js tests/dft-funding-warnings-browser.js tests/dft-payment-planning-browser.js tests/dft-assistant-insights-browser.js",
+    "test:browser": "node --env-file-if-exists=.env.test --test --test-concurrency=1 tests/browser.e2e.js tests/dft-security-browser.js tests/dft-agents-browser.js tests/dft-fraud-cases-browser.js tests/dft-assistant-dashboards-browser.js tests/dft-finance-reports-browser.js tests/dft-funding-warnings-browser.js tests/dft-payment-planning-browser.js tests/dft-assistant-insights-browser.js tests/dft-news-insights-browser.js",
     "package": "node scripts/package.js",
     "package:verify": "node scripts/verify-package.js",
     "admin:grant": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/manage-admin.js",

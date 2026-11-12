@@ -14,6 +14,24 @@ Public research uses the configured OpenAI model with live web search, a check t
 
 Existing dated ScamShield/ECB context remains separate for guarded fraud review. News alone does not establish fraud, change scores, authorize payments or determine creditworthiness.
 
+## Industry news advice and advisory flags
+
+Ask **Show current news for my industry, explain the business implications and advise what concerns to flag**. For a named public company, ask **Research the latest public news about DBS Group and advise what operating risks deserve attention**. For existing suppliers, ask **Scan news for my counterparties and advise what concerns to flag**.
+
+The assistant retrieves relevant public news first, then calls the configured OpenAI model to analyze only those sourced summaries. The industry option maps the signed-in business profile to a fixed generic sector, including energy/utilities; it does not send the submitted industry text, private profile, balances or receipts to search. Searches prioritize recent developments and ask for source/event dates, while clearly distinguishing background and unverified dates. Check time is not publication time or a continuous news feed.
+
+Chat cards show business implications, practical independent checks, clickable source links and one of these advisory labels:
+
+- **Watch this development:** monitor an operating or market development.
+- **Consider human review:** independently verify a concern before applying it to the business.
+- **Insufficient evidence:** the retrieved news cannot support a conclusion; this is not clearance.
+
+The model can recommend checking source dates, legal identity, official compliance records, beneficiary changes, supplier dependencies, liquidity or cyber safeguards. Its summary context must match the retrieved text; source URLs are inherited from the search results. A quoted context excerpt comes from the retrieved summary, not a separately verified publisher quotation. Unavailable official checks and omitted report parts remain visible. Missing news or failed AI analysis never produces substitute flags.
+
+These are **advisory flags in chat only**. They create no staff review item, payment flag, block, authorization, fraud score or rule change. A news-advice request cannot invoke the payment-review flag tool; a separate supported payment-specific fraud-review request uses the existing controls. Allegations and name matches do not prove fraud or verify a company's legal identity. Raw prompts and hidden model reasoning are not added to the audit log; authorized administrators can inspect the existing `news_advisory_evaluation` metadata for their own runs.
+
+No database migration or additional API key is required. Existing OpenAI access must support web search. See [official OpenAI web search and citation requirements](https://developers.openai.com/api/docs/guides/tools-web-search) and [strict function tools](https://developers.openai.com/api/docs/guides/function-calling).
+
 ## Private and public company analysis
 
 Private analysis reads only the signed-in operator's submitted business name, industry, country, legal form, application status and owned completed activity. It excludes registered addresses, registration identifiers and other operators' profiles. Submitted details are not independently verified.

@@ -32,7 +32,7 @@ function suggestionHtml() {
   return suggestions.slice(0,4).map(text=>'<button type="button" class="assistant-suggestion" data-assistant-suggestion="'+esc(text)+'">'+esc(text)+'</button>').join('');
 }
 function welcomeHtml() {
-  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, summarize company activity, save dashboards, check counterparty news and compliance sources, download finance reports or prepare a payment draft. You stay in control of every payment.</p></div>';
+  return '<div class="assistant-welcome">'+icon('chat')+'<h3>How can I help your business?</h3><p>Check balances, summarize company activity, save dashboards, get industry news advice and advisory flags, check counterparty compliance sources, download finance reports or prepare a payment draft. You stay in control of every payment.</p></div>';
 }
 function popupContent() {
   const t=thread();
@@ -102,7 +102,7 @@ function renderThread() {
   hydrateDashboardCharts(target);
   if(added && atBottom){
     const latest=t.messages.at(-1),message=target.querySelector('[data-message-id="'+latest?.id+'"]');
-    if((latest?.dashboard || latest?.paymentReadiness) && message)target.scrollTop+=message.getBoundingClientRect().top-target.getBoundingClientRect().top-12;
+    if((latest?.dashboard || latest?.paymentReadiness || latest?.newsInsights) && message)target.scrollTop+=message.getBoundingClientRect().top-target.getBoundingClientRect().top-12;
     else target.scrollTop=target.scrollHeight;
   }
 }
@@ -136,7 +136,7 @@ export async function sendAssistant(message,{retry=false}={}) {
     if(result.sensitiveInput){const submitted=[...t.messages].reverse().find(message=>message.role==='user');if(submitted)submitted.text='[Sensitive message removed]';}
     t.previousRunId=result.runId || null;
     if((t.dashboardSelectionVersion||0)===selectionVersion){t.activeDashboardDefinition=result.companyDashboard?.definition||null;t.dashboardSelectionVersion=selectionVersion+1;t.dashboardSelectionPending=false;}
-    t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,publicResearch:result.publicResearch||null,counterpartyScan:result.counterpartyScan||null,counterpartyRisk:result.counterpartyRisk||null,paymentReadiness:result.paymentReadiness||null,financeReport:result.financeReport||null,fundingWarnings:Array.isArray(result.fundingWarnings)?result.fundingWarnings:[],dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
+    t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,publicResearch:result.publicResearch||null,newsInsights:result.newsInsights||null,counterpartyScan:result.counterpartyScan||null,counterpartyRisk:result.counterpartyRisk||null,paymentReadiness:result.paymentReadiness||null,financeReport:result.financeReport||null,fundingWarnings:Array.isArray(result.fundingWarnings)?result.fundingWarnings:[],dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
     if(!t.open)t.unread=true;
   } catch(error) {

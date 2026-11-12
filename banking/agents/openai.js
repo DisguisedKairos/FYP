@@ -81,6 +81,12 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
     const reply=await chat([{role:'system',content:risk.SYSTEM},{role:'user',content:JSON.stringify(input)}],[risk.TOOL],{signal,maxOutputTokens:4000,requireTool:true});
     return risk.validateEvaluation(reply,input);
   }
-  return {mode:'openai',model,inspect,chat,research,assessCounterparties};
+  async function assessNews(input,{signal}={}){
+    const news=require('../news-insights');
+    if(!input||!Array.isArray(input.parts)||!input.parts.length||input.parts.length>8||Buffer.byteLength(JSON.stringify(input))>42000)throw new HttpError(400,'Choose bounded, sourced public news.');
+    const reply=await chat([{role:'system',content:news.SYSTEM},{role:'user',content:JSON.stringify(input)}],[news.TOOL],{signal,maxOutputTokens:3500,requireTool:true});
+    return news.validate(reply,input);
+  }
+  return {mode:'openai',model,inspect,chat,research,assessCounterparties,assessNews};
 }
 module.exports={createOpenAIModel};

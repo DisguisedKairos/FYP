@@ -8,6 +8,7 @@ const normalized=value=>value.normalize('NFKC').trim().replace(/\s+/g,' ').toLow
 const requested=message=>/\b(?:news|sanctions?|compliance|regulatory|regulators?|enforcement|adverse media)\b/i.test(message);
 function industryTopic(value=''){
  const topics=[[/logistic|freight|transport|shipping|supply.chain/i,'logistics and transport'],[/manufactur|industrial|engineering/i,'manufacturing and engineering'],[/retail|wholesale|trading|commerce/i,'retail and wholesale trade'],[/technology|software|information|digital|comput/i,'technology and software'],[/construct|property|real.estate/i,'construction and property'],[/financial|bank|insurance|investment/i,'financial services'],[/food|hospitality|hotel|restaurant/i,'food and hospitality'],[/health|medical|pharma/i,'healthcare'],[/professional|consult|legal|accounting/i,'professional services']];
+ if(/\b(?:energy|renewable|solar|oil|gas|utilities)\b/i.test(value))return 'energy and utilities';
  return topics.find(([pattern])=>pattern.test(value))?.[1]||'general business';
 }
 function safeName(value){

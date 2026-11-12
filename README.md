@@ -34,7 +34,7 @@ There are two permission roles: customer (authorized business operator) and admi
 
 ## Test accounts and passwords
 
-For assistant testing, use the [27 use cases and 152 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases). Each case includes its role, setup and expected result.
+For assistant testing, use the [28 use cases and 160 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases). Each case includes its role, setup and expected result.
 
 Open **http://localhost:3000**. The current workspace uses **Neon PostgreSQL**, so use the verified email/password table in [the Neon testing guide](data/testing/neon/README.md). The detailed Neon walkthrough and MFA details are in `data/testing/neon/FEATURE-TESTING.md`; its JSON credential file is `data/testing/neon/feature-accounts.json` (the `password` field). These synthetic demo login files are included in Git for project testing and excluded from release packages. Anyone with repository access can use these demo credentials; rotate or remove the demo accounts before public deployment.
 
@@ -180,6 +180,8 @@ Ask "Check the latest Singapore business news and give me market insights", "Res
 Ask "Show my transaction trends over the past 6 months", then 'Add this chart to my customized dashboard and refresh it weekly as "Supplier trends".' Open **My dashboard** to rename charts, choose bar/line/table display, change visible sections and select manual/weekly refresh. Private preferences control explanation style, default trend months, chart style and market topic. Weekly snapshots use the existing daily hosted job; opening a chart also reads live figures. See [scope, setup and test prompts](docs/assistant-insights.md). Apply migration 011 and runtime grants before deployment; do not reseed accounts.
 
 Ask **Scan news for companies this account deals with, including sanctions and compliance issues** to research up to five recent recorded counterparties plus relevant industry news. Official UN/MAS/OFAC checks are separated from general news, with dated sources, omitted-name coverage and human identity-review limits. No sanctions clearance or payment decision is automated. See [counterparty research](docs/assistant-insights.md#counterparty-news-sanctions-and-compliance-sources).
+
+Ask **Show current news for my industry, explain the business implications and advise what concerns to flag** for sourced industry-news advice. The assistant shows watch, human-review or insufficient-evidence advisory cards with practical checks and source links. These flags stay in chat and do not create staff cases or change payments, fraud scores or rules. See [news advice and its limits](docs/assistant-insights.md#industry-news-advice-and-advisory-flags).
 
 ### Sector company risk examples
 
