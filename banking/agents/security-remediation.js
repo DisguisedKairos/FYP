@@ -1,436 +1,904 @@
+
 'use strict';
 
-// Security Remediation Agent
-// Reads security scanner results and recommends fixes.
-// Does not automatically modify banking source code.
+// Greenlink Security Remediation Agent
+// Read-only: never changes application files.
 
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
-const SEVERITIES = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
-const MAX_FINDINGS = 5000;
+const ROOT = path.resolve(__dirname, '..', '..');
 
-// Convert severity values into a standard format
-function severity(value) {
-    const name = String(value || 'UNKNOWN').toUpperCase();
-
-    if (name === 'MODERATE' || name === 'WARNING') {
-        return 'MEDIUM';
-    }
-
-    if (name === 'ERROR') {
-        return 'HIGH';
-    }
-
-    if (name === 'INFO' || name === 'INFORMATIONAL') {
-        return 'LOW';
-    }
-
-    return SEVERITIES.includes(name) ? name : 'UNKNOWN';
-}
-
-// Clean scanner text and hide common secret formats
-function clean(value, maximum = 300) {
-    return String(value == null ? '' : value)
-        .replace(/[\x00-\x1f\x7f]/g, ' ')
-        .replace(
-            /\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g,
-            '[REDACTED]'
-        )
-        .slice(0, maximum);
-}
-
-// Recommend a fix based on vulnerability type
-function recommendation(type) {
-    switch (type) {
-        case 'secret_leak':
-            return 'Revoke or rotate the exposed credential, remove it from source and history where appropriate, and store replacements in a secrets manager.';
-
-        case 'sql_injection':
-            return 'Use parameterized queries, enforce database permissions, and add a regression test.';
-
-        case 'access_control':
-            return 'Enforce authorization and record ownership on the server, and add tests for unauthorized access.';
-
-        case 'vulnerable_dependency':
-            return 'Review the advisory and upgrade to a compatible patched version, then rerun tests and dependency scans.';
-
-        case 'insecure_code':
-            return 'Review the flagged code path, implement a least-privilege fix, and add regression tests.';
-
-        default:
-            return 'Manually investigate this scanner finding and verify any proposed fix.';
-    }
-}
-
-function executeCommand(command, args, root = path.resolve(__dirname, '..', '..'), env = process.env) {
-    const result = spawnSync(command, args, {
-        cwd: root,
-        encoding: 'utf8',
-        shell: false,
-        env: { ...env },
-        timeout: 120000,
-        windowsHide: true
-    });
-
-    return {
-        command: [command, ...args].join(' '),
-        stdout: result.stdout || '',
-        stderr: result.stderr || '',
-        status: result.status ?? (result.error ? 1 : 0),
-        signal: result.signal || null,
-        error: result.error ? String(result.error.message || result.error) : null
-    };
-}
-
-function maybeParseJson(text) {
-    if (!text || !text.trim()) return null;
-    try {
-        return JSON.parse(text);
-    } catch {
-        return null;
-    }
-}
-
-function readReportFile(filePath) {
-    try {
-        if (!filePath || !fs.existsSync(filePath)) return null;
-        const text = fs.readFileSync(filePath, 'utf8');
-        return maybeParseJson(text) || text;
-    } catch {
-        return null;
-    }
-}
-
-const AGENT_TOOLS = [
-    { type: 'function', function: { name: 'npm_audit', description: 'Run npm audit to identify vulnerable dependencies.', parameters: { type: 'object', properties: {} } } },
-    { type: 'function', function: { name: 'gitleaks_scan', description: 'Scan the repository for exposed secrets with gitleaks.', parameters: { type: 'object', properties: {} } } },
-    { type: 'function', function: { name: 'semgrep_scan', description: 'Run static code scanning for insecure patterns.', parameters: { type: 'object', properties: {} } } },
-    { type: 'function', function: { name: 'verify_tests', description: 'Verify the security remediation tests still pass.', parameters: { type: 'object', properties: {} } } }
+const SEVERITIES = [
+  'CRITICAL',
+  'HIGH',
+  'MEDIUM',
+  'LOW',
+  'UNKNOWN'
 ];
 
-function executeAgentTool(name, root = path.resolve(__dirname, '..', '..'), env = process.env) {
-    const isWindows = process.platform === 'win32';
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'security-agent-'));
-    const outfile = path.join(tempDir, 'scan.json');
+const MAX_FINDINGS = 5000;
 
-    switch (name) {
-        case 'npm_audit': {
-            const result = executeCommand(isWindows ? 'npm.cmd' : 'npm', ['audit', '--json', '--omit=dev'], root, env);
-            const parsed = maybeParseJson(result.stdout) || maybeParseJson(result.stderr) || null;
-            return JSON.stringify({ tool: 'npm_audit', ...result, parsed }, null, 2);
-        }
-        case 'gitleaks_scan': {
-            const command = isWindows ? 'gitleaks.exe' : 'gitleaks';
-            const result = executeCommand(command, ['detect', '--no-banner', '--redact', '--source', root, '--report-format', 'json', '--report-path', outfile], root, env);
-            return JSON.stringify({ tool: 'gitleaks_scan', ...result, report: readReportFile(outfile) }, null, 2);
-        }
-        case 'semgrep_scan': {
-            const command = isWindows ? 'semgrep.exe' : 'semgrep';
-            const result = executeCommand(command, ['--config', 'auto', '--json', '--error', '--output', outfile, root], root, env);
-            return JSON.stringify({ tool: 'semgrep_scan', ...result, report: readReportFile(outfile) }, null, 2);
-        }
-        case 'verify_tests': {
-            const result = executeCommand(isWindows ? 'node.exe' : 'node', ['--test', 'tests/security-remediation.test.js'], root, env);
-            return JSON.stringify({ tool: 'verify_tests', ...result }, null, 2);
-        }
-        default:
-            return `Tool ${name} is not permitted.`;
+const SCANNERS = {
+  npm_audit: 'npmAudit',
+  gitleaks_scan: 'gitleaks',
+  semgrep_scan: 'semgrep'
+};
+
+const AGENT_TOOLS = [
+  ['npm_audit', 'Check installed production npm dependencies for vulnerabilities'],
+  ['gitleaks_scan', 'Find exposed credentials in tracked Git history'],
+  ['semgrep_scan', 'Find insecure source-code patterns'],
+  ['verify_tests', 'Run the Security Remediation Agent unit tests']
+].map(([name, description]) => ({
+  type: 'function',
+  function: {
+    name,
+    description,
+    parameters: {
+      type: 'object',
+      properties: {},
+      additionalProperties: false
     }
+  }
+}));
+
+// --------------------------------------------------
+// Severity classification
+// --------------------------------------------------
+
+function severity(value) {
+  const name = String(value || 'UNKNOWN').toUpperCase();
+
+  if (['MODERATE', 'WARNING'].includes(name)) {
+    return 'MEDIUM';
+  }
+
+  if (name === 'ERROR') {
+    return 'HIGH';
+  }
+
+  if (['INFO', 'INFORMATIONAL'].includes(name)) {
+    return 'LOW';
+  }
+
+  return SEVERITIES.includes(name) ? name : 'UNKNOWN';
 }
 
-async function runAgent({ root = path.resolve(__dirname, '..', '..'), env = process.env, endpoint = env.AGENTIC_SECURITY_ENDPOINT, token = env.AGENTIC_SECURITY_TOKEN, model = env.AGENTIC_SECURITY_MODEL } = {}) {
-    if (endpoint && token && model) {
-        const response = await fetch(endpoint, {
-            method: 'POST',
-                        headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                model,
-                messages: [{
-                    role: 'system',
-                    content: 'You are a security remediation agent. Run only the approved scanner tools, redact secrets, and report the results as a concise remediation report. Never invent vulnerabilities or copy raw secrets.'
-                }, {
-                    role: 'user',
-                    content: `Scan the repository at ${root} and return a security remediation report.`
-                }],
-                tools: AGENT_TOOLS,
-                tool_choice: 'auto'
-            }),
-            signal: AbortSignal.timeout(90000)
-        });
+// --------------------------------------------------
+// Clean and redact sensitive information
+// --------------------------------------------------
 
-        if (!response.ok) throw new Error(`Security agent endpoint returned HTTP ${response.status}`);
-        const payload = await response.json();
-        const message = payload.choices?.[0]?.message;
-        if (!message) throw new Error('Security agent endpoint returned no assistant message.');
-        return message.content || null;
-    }
-
-    const autoReport = await runAutonomousScan({ root, env });
-    return runSecurityAgent(autoReport);
+function clean(value, maximum = 300) {
+  return String(value ?? '')
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(
+      /\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b/g,
+      '[REDACTED]'
+    )
+    .slice(0, maximum);
 }
 
-async function runAutonomousScan({ root = path.resolve(__dirname, '..', '..'), env = process.env } = {}) {
-    const scans = { npmAudit: 'not_run', gitleaks: 'not_run', semgrep: 'not_run' };
-    const findings = [];
-    const verification = { tests: 'not_run', rescan: 'not_run' };
+// --------------------------------------------------
+// Security remediation recommendations
+// --------------------------------------------------
 
-    const npmResult = executeCommand(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['audit', '--json', '--omit=dev'], root, env);
-    if (!npmResult.error) {
-        scans.npmAudit = npmResult.status === 0 ? 'passed' : 'failed';
-        const parsed = maybeParseJson(npmResult.stdout) || maybeParseJson(npmResult.stderr);
-        if (parsed && parsed.vulnerabilities && typeof parsed.vulnerabilities === 'object') {
-            findings.push(...fromNpmAudit(parsed));
-        }
-    }
+function recommendation(type) {
+  const recommendations = {
+    secret_leak:
+      'Revoke and rotate the exposed credential, remove it from source/history as appropriate, and use a secret manager.',
 
-    const gitleaksResult = executeCommand(process.platform === 'win32' ? 'gitleaks.exe' : 'gitleaks', ['detect', '--no-banner', '--redact', '--source', root, '--report-format', 'json'], root, env);
-    if (!gitleaksResult.error) {
-        scans.gitleaks = gitleaksResult.status === 0 ? 'passed' : 'failed';
-        const report = maybeParseJson(gitleaksResult.stdout) || maybeParseJson(gitleaksResult.stderr);
-        if (Array.isArray(report)) findings.push(...fromGitleaks(report));
-    }
+    sql_injection:
+      'Use parameterized SQL, restrict database permissions, and add a regression test.',
 
-    const semgrepResult = executeCommand(process.platform === 'win32' ? 'semgrep.exe' : 'semgrep', ['--config', 'auto', '--json', '--error', root], root, env);
-    if (!semgrepResult.error) {
-        scans.semgrep = semgrepResult.status === 0 ? 'passed' : 'failed';
-        const report = maybeParseJson(semgrepResult.stdout) || maybeParseJson(semgrepResult.stderr);
-        if (report && Array.isArray(report.results)) findings.push(...fromSemgrep(report));
-    }
+    access_control:
+      'Enforce server-side authorization and ownership checks; test unauthorized requests.',
 
-    const tests = executeCommand(process.platform === 'win32' ? 'node.exe' : 'node', ['--test', 'tests/security-remediation.test.js'], root, env);
-    verification.tests = tests.status === 0 ? 'passed' : 'failed';
-    verification.rescan = verification.tests;
+    vulnerable_dependency:
+      'Review the advisory, upgrade to a patched compatible dependency, and rerun npm audit.',
 
+    insecure_code:
+      'Review the flagged code, apply least privilege, and add regression tests.'
+  };
+
+  return recommendations[type] ||
+    'Investigate this finding manually and verify the proposed fix.';
+}
+
+// --------------------------------------------------
+// Execute security scanner commands
+// Includes Windows npm and Python UTF-8 fixes
+// --------------------------------------------------
+
+function executeCommand(
+  command,
+  args,
+  root = ROOT,
+  env = process.env
+) {
+  const windows = process.platform === 'win32';
+
+  // npm.cmd cannot reliably run with shell:false on Windows.
+  // Only permit the fixed npm audit command used by this agent.
+
+  const isWindowsNpm =
+    windows && command.toLowerCase() === 'npm.cmd';
+
+  const expectedNpmArgs = [
+    'audit',
+    '--json',
+    '--omit=dev'
+  ];
+
+  if (
+    isWindowsNpm &&
+    JSON.stringify(args) !== JSON.stringify(expectedNpmArgs)
+  ) {
     return {
-        findings,
-        scans,
-        verification,
-        npmAudit: maybeParseJson(npmResult.stdout) || maybeParseJson(npmResult.stderr),
-        gitleaks: maybeParseJson(gitleaksResult.stdout) || maybeParseJson(gitleaksResult.stderr),
-        semgrep: maybeParseJson(semgrepResult.stdout) || maybeParseJson(semgrepResult.stderr)
+      status: null,
+      error: 'UNSUPPORTED_NPM_ARGUMENTS',
+      stdout: '',
+      stderr: ''
     };
+  }
+
+  const actualCommand = isWindowsNpm
+    ? (env.ComSpec || 'cmd.exe')
+    : command;
+
+  const actualArgs = isWindowsNpm
+    ? ['/d', '/s', '/c', 'npm audit --json --omit=dev']
+    : args;
+
+  const result = spawnSync(actualCommand, actualArgs, {
+    cwd: root,
+    encoding: 'utf8',
+    shell: false,
+
+    // Fix Windows Python encoding for Semgrep.
+    env: {
+      ...env,
+      PYTHONUTF8: '1',
+      PYTHONIOENCODING: 'utf-8'
+    },
+
+    timeout: 120000,
+    maxBuffer: 16 * 1024 * 1024,
+    windowsHide: true
+  });
+
+  return {
+    status: result.status,
+
+    error: result.error
+      ? (result.error.code || 'EXECUTION_ERROR')
+      : null,
+
+    stdout: result.stdout || '',
+    stderr: result.stderr || ''
+  };
 }
 
-// Convert findings into a consistent report format
-function normalizeFinding(item) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {
-        throw new TypeError('Each finding must be an object.');
-    }
+// --------------------------------------------------
+// Parse JSON safely
+// --------------------------------------------------
 
-    const supportedTypes = [
-        'secret_leak',
-        'sql_injection',
-        'access_control',
-        'vulnerable_dependency',
-        'insecure_code'
-    ];
-
-    const type = supportedTypes.includes(item.type)
-        ? item.type
-        : 'other';
-
-    return {
-        source: clean(item.source || 'unknown', 50),
-        id: clean(item.id || 'unclassified', 100),
-        type: type,
-        severity: severity(item.severity),
-        location: clean(item.location || '', 200),
-
-        description: type === 'secret_leak'
-            ? 'Potential secret exposure detected; raw matched content is intentionally excluded.'
-            : clean(item.description || 'Scanner finding requires review.', 400),
-
-        recommendation: recommendation(type),
-        status: 'REQUIRES_REVIEW'
-    };
+function maybeParseJson(value) {
+  try {
+    return value && JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
-// Read vulnerabilities from npm audit JSON
+// --------------------------------------------------
+// Convert npm audit results into findings
+// --------------------------------------------------
+
 function fromNpmAudit(audit) {
-    if (
-        !audit ||
-        typeof audit !== 'object' ||
-        Array.isArray(audit) ||
-        !audit.vulnerabilities ||
-        typeof audit.vulnerabilities !== 'object'
-    ) {
-        throw new TypeError(
-            'Expected npm audit --json output with vulnerabilities.'
-        );
-    }
+  if (
+    !audit ||
+    typeof audit.vulnerabilities !== 'object' ||
+    Array.isArray(audit.vulnerabilities) ||
+    !audit.vulnerabilities
+  ) {
+    throw new TypeError(
+      'Expected npm audit JSON with vulnerabilities object.'
+    );
+  }
 
-    return Object.entries(audit.vulnerabilities).map(([name, issue]) => ({
-        source: 'npm audit',
-        id: name,
-        type: 'vulnerable_dependency',
-        severity: issue && issue.severity,
-        location: 'dependency:' + name,
-        description: 'Dependency security advisory for ' + name +
-            '. Check the npm audit report for details.'
-    }));
+  return Object.entries(audit.vulnerabilities).map(
+    ([name, issue]) => ({
+      source: 'npm audit',
+      id: name,
+      type: 'vulnerable_dependency',
+      severity: issue?.severity,
+      location: `dependency:${name}`,
+      description: `Dependency security advisory for ${name}.`
+    })
+  );
 }
 
-// Read findings from Gitleaks JSON
+// --------------------------------------------------
+// Convert Gitleaks results into findings
+// Never include the actual secret
+// --------------------------------------------------
+
 function fromGitleaks(report) {
-    if (!Array.isArray(report)) {
-        throw new TypeError('Expected Gitleaks JSON array.');
-    }
+  if (!Array.isArray(report)) {
+    throw new TypeError('Expected Gitleaks JSON array.');
+  }
 
-    return report.map(item => ({
-        source: 'Gitleaks',
-        id: item.RuleID || 'secret',
-        type: 'secret_leak',
-        severity: 'CRITICAL',
-        location: [
-            item.File || '',
-            item.StartLine || ''
-        ].filter(Boolean).join(':'),
-        description: 'Possible exposed credential.'
+  return report.map(item => ({
+    source: 'Gitleaks',
+    id: item.RuleID || 'secret',
+    type: 'secret_leak',
+    severity: 'CRITICAL',
 
-        // Never copy item.Secret, item.Match or item.Line
-    }));
+    location: [
+      item.File,
+      item.StartLine
+    ].filter(Boolean).join(':'),
+
+    description: 'Possible exposed credential.'
+  }));
 }
 
-// Read findings from Semgrep JSON
+// --------------------------------------------------
+// Convert Semgrep results into findings
+// --------------------------------------------------
+
 function fromSemgrep(report) {
-    if (!report || !Array.isArray(report.results)) {
-        throw new TypeError(
-            'Expected Semgrep JSON results array.'
-        );
-    }
+  if (!report || !Array.isArray(report.results)) {
+    throw new TypeError(
+      'Expected Semgrep JSON results array.'
+    );
+  }
 
-    return report.results.map(item => ({
-        source: 'Semgrep',
-        id: item.check_id || 'rule',
-        type: 'insecure_code',
-        severity: item.extra && item.extra.severity,
-        location: [
-            item.path || '',
-            (item.start && item.start.line) || ''
-        ].filter(Boolean).join(':'),
-        description: 'Static analysis rule matched. Review the finding in the scanner output.'
+  return report.results.map(item => ({
+    source: 'Semgrep',
+    id: item.check_id || 'rule',
+    type: 'insecure_code',
+    severity: item.extra?.severity,
 
-        // Avoid copying source snippets or exposed secrets
-    }));
+    location: [
+      item.path,
+      item.start?.line
+    ].filter(Boolean).join(':'),
+
+    description:
+      'Static analysis rule matched; review the scanner finding.'
+  }));
 }
 
-// Main function that coordinates the security report
+// --------------------------------------------------
+// Normalize findings
+// --------------------------------------------------
+
+function normalizeFinding(item) {
+  if (
+    !item ||
+    typeof item !== 'object' ||
+    Array.isArray(item)
+  ) {
+    throw new TypeError('Finding must be an object.');
+  }
+
+  const allowedTypes = [
+    'secret_leak',
+    'sql_injection',
+    'access_control',
+    'vulnerable_dependency',
+    'insecure_code'
+  ];
+
+  const type = allowedTypes.includes(item.type)
+    ? item.type
+    : 'other';
+
+  return {
+    source: clean(item.source || 'unknown', 50),
+    id: clean(item.id || 'unclassified', 100),
+    type,
+    severity: severity(item.severity),
+    location: clean(item.location || '', 200),
+
+    description: type === 'secret_leak'
+      ? 'Potential secret exposure; matched content intentionally excluded.'
+      : clean(
+          item.description || 'Review scanner finding.',
+          400
+        ),
+
+    recommendation: recommendation(type),
+    status: 'REQUIRES_REVIEW'
+  };
+}
+
+// --------------------------------------------------
+// Generate the security remediation report
+// --------------------------------------------------
+
 function runSecurityAgent({
-    findings = [],
-    npmAudit,
-    gitleaks,
-    semgrep,
-    scans = {},
-    verification = {}
+  findings = [],
+  npmAudit,
+  gitleaks,
+  semgrep,
+  scans = {},
+  verification = {},
+  scanErrors = {}
 } = {}) {
 
-    if (!Array.isArray(findings)) {
-        throw new TypeError('findings must be an array.');
-    }
+  if (!Array.isArray(findings)) {
+    throw new TypeError('findings must be an array.');
+  }
 
-    // Collect findings from all sources
-    const all = [...findings];
+  const all = [...findings];
 
-    if (npmAudit !== undefined && npmAudit !== null) {
-        all.push(...fromNpmAudit(npmAudit));
-    }
+  if (npmAudit != null) {
+    all.push(...fromNpmAudit(npmAudit));
+  }
 
-    if (gitleaks !== undefined && gitleaks !== null) {
-        all.push(...fromGitleaks(gitleaks));
-    }
+  if (gitleaks != null) {
+    all.push(...fromGitleaks(gitleaks));
+  }
 
-    if (semgrep !== undefined && semgrep !== null) {
-        all.push(...fromSemgrep(semgrep));
-    }
+  if (semgrep != null) {
+    all.push(...fromSemgrep(semgrep));
+  }
 
-    if (all.length > MAX_FINDINGS) {
-        throw new RangeError(
-            'Too many findings. Split the report into smaller batches.'
-        );
-    }
-
-    // Process findings and attach recommendations
-    const processed = all.map(normalizeFinding);
-
-    // Count vulnerabilities by severity
-    const summary = Object.fromEntries(
-        SEVERITIES.map(name => [name, 0])
+  if (all.length > MAX_FINDINGS) {
+    throw new RangeError(
+      'Too many findings; split the scan.'
     );
+  }
 
-    for (const item of processed) {
-        summary[item.severity]++;
+  // Remove duplicate findings.
+  const unique = new Map();
+
+  for (const finding of all.map(normalizeFinding)) {
+    const key = JSON.stringify([
+      finding.source,
+      finding.id,
+      finding.type,
+      finding.location
+    ]);
+
+    if (!unique.has(key)) {
+      unique.set(key, finding);
     }
+  }
 
-    // Check whether required security scans passed
-    const requiredScanners = [
-        'npmAudit',
-        'gitleaks',
-        'semgrep'
-    ];
+  const processed = [...unique.values()];
 
-    const scanStatus = Object.fromEntries(
-        requiredScanners.map(name => [
-            name,
-            scans[name] === 'passed'
-                ? 'passed'
-                : scans[name] === 'failed'
-                    ? 'failed'
-                    : 'not_run'
-        ])
-    );
+  // Count vulnerabilities by severity.
+  const severitySummary = Object.fromEntries(
+    SEVERITIES.map(s => [s, 0])
+  );
 
-    const scansComplete = Object.values(scanStatus)
-        .every(status => status === 'passed');
+  for (const finding of processed) {
+    severitySummary[finding.severity]++;
+  }
 
-    // Check verification results
-    const testsPassed =
-        verification.tests === 'passed' &&
-        verification.rescan === 'passed';
+  // Check scanner completion.
+  const scanStatus = Object.fromEntries(
+    ['npmAudit', 'gitleaks', 'semgrep'].map(name => [
+      name,
+      ['passed', 'failed', 'not_run'].includes(scans[name])
+        ? scans[name]
+        : 'not_run'
+    ])
+  );
 
-    // Decide overall report status
-    let status;
+  const scansComplete = Object.values(scanStatus)
+    .every(status => status === 'passed');
 
-    if (!scansComplete) {
-        status = 'INCOMPLETE_SCAN';
-    } else if (processed.length > 0) {
-        status = 'REQUIRES_REVIEW';
-    } else if (!testsPassed) {
-        status = 'PENDING_VERIFICATION';
-    } else {
-        status = 'NO_FINDINGS_DETECTED';
-    }
+  const verified =
+    verification.tests === 'passed' &&
+    verification.rescan === 'passed';
 
-    // Return the final security report
-    return {
-        title: 'Banking Security Remediation Report',
-        generatedAt: new Date().toISOString(),
-        status: status,
-        totalFindings: processed.length,
-        severitySummary: summary,
-        scanStatus: scanStatus,
-        verification: {
-            tests: verification.tests || 'not_run',
-            rescan: verification.rescan || 'not_run'
-        },
-        findings: processed,
-        limitations: 'Scanner results do not prove the application is vulnerability-free. Human security review is required.'
-    };
+  let status;
+
+  if (!scansComplete) {
+    status = 'INCOMPLETE_SCAN';
+  } else if (processed.length > 0) {
+    status = 'REQUIRES_REVIEW';
+  } else if (!verified) {
+    status = 'PENDING_VERIFICATION';
+  } else {
+    status = 'NO_FINDINGS_DETECTED';
+  }
+
+  return {
+    title: 'Banking Security Remediation Report',
+    generatedAt: new Date().toISOString(),
+    status,
+    totalFindings: processed.length,
+    severitySummary,
+    scanStatus,
+
+    scanErrors: Object.fromEntries(
+      Object.entries(scanErrors).map(([key, value]) => [
+        clean(key, 30),
+        clean(value, 120)
+      ])
+    ),
+
+    verification: {
+      tests: verification.tests || 'not_run',
+      rescan: verification.rescan || 'not_run'
+    },
+
+    findings: processed,
+
+    limitations:
+      'No findings does not prove the application is secure. Human review is required.'
+  };
 }
 
-// Export functions for other JavaScript files
+// --------------------------------------------------
+// Run individual security scanner
+// --------------------------------------------------
+
+function scanTool(
+  name,
+  root = ROOT,
+  env = process.env
+) {
+  const windows = process.platform === 'win32';
+
+  const dir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'greenlink-security-')
+  );
+
+  try {
+    let result;
+    let data;
+    let findings = [];
+
+    // ----------------------------------------------
+    // npm audit
+    // ----------------------------------------------
+
+    if (name === 'npm_audit') {
+      result = executeCommand(
+        windows ? 'npm.cmd' : 'npm',
+        ['audit', '--json', '--omit=dev'],
+        root,
+        env
+      );
+
+      if (result.error) {
+        return {
+          tool: name,
+          status: 'failed',
+          error: `npm audit could not start: ${result.error}`
+        };
+      }
+
+      data = maybeParseJson(result.stdout);
+
+      if (
+        data?.vulnerabilities &&
+        typeof data.vulnerabilities === 'object' &&
+        !Array.isArray(data.vulnerabilities)
+      ) {
+        findings = fromNpmAudit(data);
+      } else {
+        return {
+          tool: name,
+          status: 'failed',
+          error: 'npm audit returned invalid JSON'
+        };
+      }
+
+    // ----------------------------------------------
+    // Gitleaks
+    // ----------------------------------------------
+
+    } else if (name === 'gitleaks_scan') {
+      const output = path.join(dir, 'gitleaks.json');
+
+      result = executeCommand(
+        windows ? 'gitleaks.exe' : 'gitleaks',
+        [
+          'git',
+          '--redact',
+          '--report-format',
+          'json',
+          '--report-path',
+          output,
+          root
+        ],
+        root,
+        env
+      );
+
+      data = fs.existsSync(output)
+        ? maybeParseJson(fs.readFileSync(output, 'utf8'))
+        : null;
+
+      // Gitleaks may not create a report when no
+      // findings are detected.
+      if (result.status === 0 && data === null) {
+        data = [];
+      }
+
+      if (!Array.isArray(data)) {
+        return {
+          tool: name,
+          status: 'failed',
+          error: 'Gitleaks report missing or invalid'
+        };
+      }
+
+      findings = fromGitleaks(data);
+
+    // ----------------------------------------------
+    // Semgrep
+    // ----------------------------------------------
+
+    } else if (name === 'semgrep_scan') {
+      const output = path.join(dir, 'semgrep.json');
+
+      result = executeCommand(
+        windows ? 'semgrep.exe' : 'semgrep',
+        [
+          'scan',
+          '--config',
+          'p/security-audit',
+          '--exclude',
+          'Dockerfile',
+          '--json',
+          '--output',
+          output,
+          root
+        ],
+        root,
+        env
+      );
+
+      data = fs.existsSync(output)
+        ? maybeParseJson(fs.readFileSync(output, 'utf8'))
+        : maybeParseJson(result.stdout);
+
+      if (result.error) {
+        return {
+          tool: name,
+          status: 'failed',
+          error: `Semgrep execution failed: ${result.error}`
+        };
+      }
+
+      if (!data || !Array.isArray(data.results)) {
+        return {
+          tool: name,
+          status: 'failed',
+          error: 'Semgrep did not produce a valid JSON report'
+        };
+      }
+
+      if (
+        Array.isArray(data.errors) &&
+        data.errors.length > 0
+      ) {
+        return {
+          tool: name,
+          status: 'failed',
+          error:
+            `Semgrep reported ${data.errors.length} scanner error(s)`
+        };
+      }
+
+      findings = fromSemgrep(data);
+
+    // ----------------------------------------------
+    // Verify unit tests
+    // ----------------------------------------------
+
+    } else if (name === 'verify_tests') {
+      result = executeCommand(
+        'node',
+        [
+          '--test',
+          'tests/security-remediation.test.js'
+        ],
+        root,
+        env
+      );
+
+      return {
+        tool: name,
+
+        status:
+          result.status === 0 && !result.error
+            ? 'passed'
+            : 'failed',
+
+        error: result.error ||
+          (result.status !== 0
+            ? 'Unit tests failed'
+            : undefined)
+      };
+
+    } else {
+      throw new Error('Tool is not allowlisted.');
+    }
+
+    // npm audit and Gitleaks may return exit code 1
+    // when findings are detected.
+    // Semgrep should normally return 0.
+
+    if (
+      result.error ||
+      ![0, 1].includes(result.status) ||
+      (name === 'semgrep_scan' && result.status !== 0)
+    ) {
+      return {
+        tool: name,
+        status: 'failed',
+        error: result.error ||
+          `${name} exited with status ${result.status}`
+      };
+    }
+
+    return {
+      tool: name,
+      status: 'passed',
+      findings
+    };
+
+  } finally {
+    // Delete temporary scanner reports.
+    fs.rmSync(dir, {
+      recursive: true,
+      force: true
+    });
+  }
+}
+
+// --------------------------------------------------
+// Allowlisted tool execution for AI
+// --------------------------------------------------
+
+function executeAgentTool(
+  name,
+  root = ROOT,
+  env = process.env
+) {
+  const allowed = AGENT_TOOLS.some(
+    tool => tool.function.name === name
+  );
+
+  if (!allowed) {
+    return JSON.stringify({
+      tool: name,
+      status: 'failed',
+      error: 'Tool not permitted'
+    });
+  }
+
+  // Only sanitized findings are returned.
+  return JSON.stringify(scanTool(name, root, env));
+}
+
+// --------------------------------------------------
+// Run all scanners without AI
+// --------------------------------------------------
+
+async function runAutonomousScan({
+  root = ROOT,
+  env = process.env
+} = {}) {
+
+  const findings = [];
+  const scans = {};
+  const scanErrors = {};
+
+  for (const [tool, key] of Object.entries(SCANNERS)) {
+    const result = scanTool(tool, root, env);
+
+    scans[key] = result.status;
+
+    if (result.error) {
+      scanErrors[key] = result.error;
+    }
+
+    findings.push(...(result.findings || []));
+  }
+
+  const tests = scanTool('verify_tests', root, env);
+
+  return {
+    findings,
+    scans,
+    scanErrors,
+
+    verification: {
+      tests: tests.status,
+      rescan: 'not_run'
+    }
+  };
+}
+
+// --------------------------------------------------
+// Optional AI agent with tool calling
+// --------------------------------------------------
+
+async function runAgent({
+  root = ROOT,
+  env = process.env,
+  endpoint = env.AGENTIC_SECURITY_ENDPOINT,
+  token = env.AGENTIC_SECURITY_TOKEN,
+  model = env.AGENTIC_SECURITY_MODEL
+} = {}) {
+
+  // Default mode runs scanners locally without AI.
+  if (!(endpoint && token && model)) {
+    return runSecurityAgent(
+      await runAutonomousScan({ root, env })
+    );
+  }
+
+  const url = new URL(endpoint);
+
+  if (
+    url.protocol !== 'https:' &&
+    !(url.hostname === 'localhost' &&
+      url.protocol === 'http:')
+  ) {
+    throw new Error(
+      'AI endpoint must use HTTPS (except localhost).'
+    );
+  }
+
+  const messages = [
+    {
+      role: 'system',
+      content:
+        'You are a read-only security analyst. ' +
+        'Call approved scanner tools, never request secrets, ' +
+        'and provide concise recommendations grounded only ' +
+        'in tool results. Never claim to have fixed code.'
+    },
+    {
+      role: 'user',
+      content:
+        'Analyse this repository using approved tools and explain security findings.'
+    }
+  ];
+
+  const collected = {
+    findings: [],
+    scans: {},
+    verification: {
+      tests: 'not_run',
+      rescan: 'not_run'
+    }
+  };
+
+  const used = new Set();
+
+  for (let round = 0; round < 6; round++) {
+    const response = await fetch(url, {
+      method: 'POST',
+
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+
+      body: JSON.stringify({
+        model,
+        messages,
+        tools: AGENT_TOOLS,
+        tool_choice: 'auto'
+      }),
+
+      signal: AbortSignal.timeout(90000)
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `AI endpoint returned HTTP ${response.status}`
+      );
+    }
+
+    const payload = await response.json();
+    const message = payload.choices?.[0]?.message;
+
+    if (!message) {
+      throw new Error(
+        'AI endpoint returned no message.'
+      );
+    }
+
+    messages.push({
+      role: 'assistant',
+      content: message.content || null,
+
+      ...(message.tool_calls
+        ? { tool_calls: message.tool_calls }
+        : {})
+    });
+
+    // If the AI has finished requesting tools,
+    // generate the final security report.
+    if (!message.tool_calls?.length) {
+      const report = runSecurityAgent(collected);
+
+      return {
+        ...report,
+        aiSummary: clean(
+          message.content || 'No AI summary returned.',
+          2000
+        )
+      };
+    }
+
+    // Execute tools requested by the AI.
+    for (const call of message.tool_calls) {
+      const name = call.function?.name;
+
+      const allowed = AGENT_TOOLS.some(
+        tool => tool.function.name === name
+      );
+
+      const result = allowed && !used.has(name)
+        ? scanTool(name, root, env)
+        : {
+            tool: name,
+            status: 'failed',
+            error: 'Unknown or repeated tool'
+          };
+
+      used.add(name);
+
+      if (SCANNERS[name]) {
+        const key = SCANNERS[name];
+
+        collected.scans[key] = result.status;
+
+        if (result.error) {
+          collected.scanErrors ||= {};
+          collected.scanErrors[key] = result.error;
+        }
+
+        collected.findings.push(
+          ...(result.findings || [])
+        );
+
+      } else if (name === 'verify_tests') {
+        collected.verification.tests = result.status;
+      }
+
+      messages.push({
+        role: 'tool',
+        tool_call_id: call.id,
+        content: JSON.stringify(result)
+      });
+    }
+  }
+
+  throw new Error(
+    'AI agent exceeded its tool-call round limit.'
+  );
+}
+
+// --------------------------------------------------
+// Export functions
+// --------------------------------------------------
+
 module.exports = {
-    runSecurityAgent,
-    runAgent,
-    runAutonomousScan,
-    executeAgentTool,
-    normalizeFinding,
-    fromNpmAudit,
-    fromGitleaks,
-    fromSemgrep
+  runSecurityAgent,
+  runAgent,
+  runAutonomousScan,
+  executeAgentTool,
+  normalizeFinding,
+  fromNpmAudit,
+  fromGitleaks,
+  fromSemgrep,
+  scanTool
 };
