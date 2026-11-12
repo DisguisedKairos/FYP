@@ -1,0 +1,29 @@
+name: Release Documentation Agent
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10 # Fetches the last 10 commits to build the summary
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Dependencies
+        run: npm install @actions/core @actions/github openai
+
+      - name: Run Documentation Agent
+        run: node scripts/docs-agent.js
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          CHATBOT_WEBHOOK_URL: ${{ secrets.CHATBOT_WEBHOOK_URL }}
