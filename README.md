@@ -34,7 +34,7 @@ There are two permission roles: customer (authorized business operator) and admi
 
 ## Test accounts and passwords
 
-For assistant testing, use the [27 use cases and 152 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases) and the [CSV results sheet](docs/assistant-test-cases.csv). The sheet maps questions to workflows and starts every result as Not run.
+For assistant testing, use the [27 use cases and 152 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases). Each case includes its role, setup and expected result.
 
 Open **http://localhost:3000**. The current workspace uses **Neon PostgreSQL**, so use the verified email/password table in [the Neon testing guide](data/testing/neon/README.md). The detailed Neon walkthrough and MFA details are in `data/testing/neon/FEATURE-TESTING.md`; its JSON credential file is `data/testing/neon/feature-accounts.json` (the `password` field). These synthetic demo login files are included in Git for project testing and excluded from release packages. Anyone with repository access can use these demo credentials; rotate or remove the demo accounts before public deployment.
 

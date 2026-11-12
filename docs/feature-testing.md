@@ -1,6 +1,6 @@
 # Test accounts and complete feature walkthrough
 
-For copy-and-paste assistant questions and expected outcomes, see [GLDB Assistant manual acceptance tests](assistant-testing.md) and [the CSV checklist](assistant-test-cases.csv).
+For copy-and-paste assistant questions, use cases and expected outcomes, see [GLDB Assistant manual acceptance tests](assistant-testing.md).
 
 
 For the current Neon-backed app, open the verified demo login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The remaining walkthrough applies to both environments. See [Neon setup](neon.md).

@@ -1,6 +1,6 @@
 # Private banking agents and evidence workflows
 
-Test each assistant capability with the [manual question bank and expected results](assistant-testing.md), with an [Excel-compatible results sheet](assistant-test-cases.csv).
+Test each assistant capability with the [manual question bank, use cases and expected results](assistant-testing.md).
 
 
 Version 2.8.0 adds explicit tool citations, evidence links, qualitative consistency/relevance checks, user-bound draft values and an automated adversarial evaluation suite. See [AI evaluation and reliability](ai-evaluation.md) and run `npm run evaluate:assistant`.

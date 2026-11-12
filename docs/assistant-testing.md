@@ -4,7 +4,7 @@ Updated 12 November 2026 for the C300 wholesale banking prototype, including liv
 
 This guide contains **152 manual cases** grouped into **27 end-to-end use cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
 
-Make a copy of [the Excel-compatible results sheet](assistant-test-cases.csv) per tester/session. Its Use cases column links each case to the workflows below. Copy questions below after replacing every `{PLACEHOLDER}`. Instructions describing clicks are for the tester, not chat prompts.
+Copy questions below after replacing every `{PLACEHOLDER}`. Use the case IDs and workflow coverage below to organize each tester's notes. Instructions describing clicks are for the tester, not chat prompts.
 
 ## Getting started
 
@@ -95,7 +95,7 @@ These **27 use cases** group the question bank into business goals. Use the refe
 - **Admin and independent reviewer:** UC-18 through UC-20, UC-25, and the explicitly authorized UI cases in UC-27. Staff permission does not grant ownership of every private assistant run.
 - **Owner-supervised drills:** UC-08, UC-12, UC-26 and all cases labelled Owner setup, using an isolated instance. Testers without these prerequisites record Blocked rather than resetting shared data or disabling production services.
 
-For a short first session use the smoke run below; complete the remaining assigned cases later. Do not send the whole use-case table as one prompt or run all requests concurrently. Each CSV row records one actual observation; use cases are coverage groups, not extra passed results.
+For a short first session use the smoke run below; complete the remaining assigned cases later. Do not send the whole use-case table as one prompt or run all requests concurrently. Record one actual observation per case and test session; use cases are coverage groups, not extra passed results.
 
 ## Quick smoke run
 
@@ -458,7 +458,7 @@ Hosted execution depends on configured jobs. The repository free-plan Vercel con
 
 ## Recording results and reporting bugs
 
-Keep the case ID and Use cases mapping in [the CSV](assistant-test-cases.csv). Fill Actual result, Status, Tester, Tested at (SGT), Environment / commit, and Issue link. Duplicate a row for another role/browser/retest rather than overwriting earlier observations. Import as UTF-8; treat account/ID fields as text to avoid spreadsheet number conversion.
+Record the case ID, use case, actual result, status, tester, Singapore time, environment/deployed commit and issue link in your test notes. Keep separate observations for another role, browser or retest rather than overwriting earlier results.
 
 For failures, record URL/commit, role, exact synthetic prompt, Singapore time, expected/observed result, permitted receipt/run ID, repeatability and steps. Use sanitized screenshots/files in the team's issue process. Do not attach credentials/cookies/connection strings or foreign financial records.
 
