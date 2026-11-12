@@ -55,6 +55,6 @@ Setup inserts deterministic, fictional historical receipts and adjusts only the 
 
 ## Verification
 
-tests/dft-counterparty-risk.test.js covers seeding, exact monetary totals, ownership, CSRF, provider schemas, unsafe/invented assessments, model outages, current-session checks and escaped report rendering. The PostgreSQL permission suite denies runtime writes to the scenario table. Controlled adapters are tests only; live evaluation uses the configured OpenAI model. Manual cases SECTOR-01 through SECTOR-06 are in the [assistant checklist](assistant-testing.md).
+tests/dft-counterparty-risk.test.js covers seeding, exact monetary totals, ownership, CSRF, provider schemas, unsafe/invented assessments, model outages, current-session checks and escaped report rendering. The PostgreSQL permission suite denies runtime writes to the scenario table. Controlled adapters are tests only; live evaluation uses the configured OpenAI model. Manual cases SECTOR-01 through SECTOR-11 are in the [assistant checklist](assistant-testing.md).
 
 Assessment request metadata uses the existing admin-only AI audit with phase counterparty_risk_evaluation. Raw model reasoning is not stored.
