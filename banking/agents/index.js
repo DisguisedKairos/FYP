@@ -274,7 +274,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
               // needing clarification can use trusted application wording
               // without retrieving unrelated private banking records.
               clarification=true;
-              reply=conversational?'GLDB Assistant is responding. Ask about account balances, transaction history, company dashboards, downloadable finance reports or scheduled payments, save a dashboard, or prepare a payment draft.':'I have not retrieved banking records for this request. Choose a suggested task or provide more specific payment details. Try again after checking the AI provider.';
+              reply=conversational?'GLDB Assistant is responding. Ask about account balances, transaction history, company dashboards, downloadable finance reports or scheduled payments, save a dashboard, or prepare a payment draft.':'That request is outside the scope of this banking app. What banking task can I help you with?';
               break;
             }
             reply=response.content.slice(0,5000);break;

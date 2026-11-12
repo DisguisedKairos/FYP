@@ -191,7 +191,7 @@ pg('Repeated missing evidence returns trusted clarification and cannot publish f
   const f=await fixture(t,{http:false}),users=await actors(f.db),before=await financialSnapshot(f.db);let calls=0;
   const model=fakeModel(async()=>{calls++;return {role:'assistant',content:'Your account has SGD 999999 [E1].'};});
   const result=await createAgents({db:f.db,model}).execute(users.jamie,'assistant',{message:'test my balance'});
-  assert.equal(calls,2);assert.equal(result.clarification,true);assert.match(result.reply,/not retrieved banking records/);
+  assert.equal(calls,2);assert.equal(result.clarification,true);assert.equal(result.reply,'That request is outside the scope of this banking app. What banking task can I help you with?');
   assert.deepEqual(result.steps,[]);assert.deepEqual(result.actions,[]);assert.equal(result.evidenceReferences,undefined);
   assert.ok(!JSON.stringify(result).includes('999999'));assert.deepEqual(await financialSnapshot(f.db),before);
 });
