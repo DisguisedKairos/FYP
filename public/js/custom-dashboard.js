@@ -1,4 +1,4 @@
-import {state,api,esc,icon,money,fullDate,captureSession,recoverSession,ui,toast} from './core.js';
+import {state,api,esc,icon,money,fullDate,statusPill,captureSession,recoverSession,ui,toast} from './core.js';
 import {heading} from './views.js';
 import {companyCharts} from './company-charts.js';
 import {hydrateDashboardCharts} from './assistant-dashboards.js';
@@ -11,6 +11,14 @@ function periodLabel(p){return p.kind==='months'?'Past '+p.months+' calendar mon
 function preferencesHtml(p){
  return '<section class="panel custom-preferences" aria-labelledby="assistant-settings-title"><h2 id="assistant-settings-title">Assistant preferences</h2><p>These settings apply to future assistant requests. Financial permissions and Singapore dates stay the same.</p><form id="assistant-preferences-form"><div class="custom-settings-grid"><div class="field"><label for="assistant-style">Explanation style</label><select id="assistant-style" name="responseStyle">'+options([['concise','Concise'],['detailed','Detailed']],p.responseStyle)+'</select></div><div class="field"><label for="assistant-months">Default transaction trend period</label><select id="assistant-months" name="trendMonths">'+options(Array.from({length:12},(_,i)=>[String(i+1),(i+1)+' calendar months']),String(p.trendMonths))+'</select></div><div class="field"><label for="assistant-chart">New chart style</label><select id="assistant-chart" name="chartType">'+options([['bar','Bar graph'],['line','Line graph'],['table','Table']],p.chartType)+'</select></div><div class="field"><label for="assistant-topic">Default market topic</label><select id="assistant-topic" name="marketTopic">'+options(Object.entries(labels),p.marketTopic)+'</select></div></div><p class="error-message" role="alert"></p><button type="submit" class="button secondary">Save assistant preferences</button></form></section>';
 }
+function chartPaging(data){
+ const page=data.pagination;
+ return '<div class="assistant-dashboard-paging" data-custom-paging><span>Page '+page.page+' of '+Math.max(1,page.totalPages)+'</span><button type="button" class="text-button" data-custom-command="prev" '+(page.page<=1?'disabled':'')+'>Previous</button><button type="button" class="text-button" data-custom-command="next" '+(page.page>=page.totalPages?'disabled':'')+'>Next</button></div>';
+}
+function chartRecords(data){
+ if(data.scopeType==='all')return chartPaging(data);
+ return '<details class="custom-dashboard-records"><summary>Matching transactions</summary><div class="table-scroll"><table class="statement-table"><caption class="sr-only">Transactions with '+esc(data.company)+'</caption><thead><tr><th scope="col">Transaction</th><th scope="col">Status</th><th scope="col">Amount</th></tr></thead><tbody>'+data.transactions.map(row=>'<tr><td><button type="button" class="text-button" data-transaction="'+esc(row.id)+'">'+esc(row.description)+'</button><small>'+fullDate(row.completedAt||row.requestedAt||row.date)+'</small></td><td>'+statusPill(row.status)+'</td><td>'+money(row.amountCents)+'</td></tr>').join('')+'</tbody></table></div>'+chartPaging(data)+'</details>';
+}
 function chartBody(id){
  const remote=state.remote.customDashboard,item=remote?.charts?.[id],view=remote?.data?.views.find(v=>v.id===id);
  if(!item)return '<p role="status">Loading live chart...</p>';
@@ -18,7 +26,7 @@ function chartBody(id){
  const data=item.dashboard;
  if(!data)return '<p role="status">Loading live chart...</p>';
  const total=data.totals;
- return '<p class="company-period">'+esc(data.company)+' &middot; '+esc(data.period.from)+' to '+esc(data.period.to)+' &middot; SGD &middot; Singapore time</p><p class="chart-note">Live query: '+fullDate(data.generatedAt)+'. Last saved refresh: '+(view?.refreshedAt?fullDate(view.refreshedAt):'not completed')+'. '+(view?.refreshCadence==='weekly'?'Weekly refresh next due: '+fullDate(view.nextRefreshAt)+'.':'Manual refresh.')+'</p>'+(view?.refreshError?'<p class="notice">The last scheduled refresh failed. These live figures were checked separately; retry the saved refresh below.</p>':'')+(data.status!=='ready'?'<p>No matching recorded company is available.</p>':'<div class="agent-metrics company-metrics"><div><span>Received</span><strong>'+money(total.incomeCents)+'</strong></div><div><span>Paid</span><strong>'+money(total.outgoingCents)+'</strong></div><div><span>Net movement</span><strong>'+money(total.netCents)+'</strong></div></div>'+companyCharts(data,'custom-'+id,view.presentation))+(item.drilldown?'<button type="button" class="text-button" data-custom-command="reset">Back to saved chart</button>':'');
+ return '<p class="company-period">'+esc(data.company)+' &middot; '+esc(data.period.from)+' to '+esc(data.period.to)+' &middot; SGD &middot; Singapore time</p><p class="chart-note">Live query: '+fullDate(data.generatedAt)+'. Last saved refresh: '+(view?.refreshedAt?fullDate(view.refreshedAt):'not completed')+'. '+(view?.refreshCadence==='weekly'?'Weekly refresh next due: '+fullDate(view.nextRefreshAt)+'.':'Manual refresh.')+'</p>'+(view?.refreshError?'<p class="notice">The last scheduled refresh failed. These live figures were checked separately; retry the saved refresh below.</p>':'')+(data.status!=='ready'?'<p>No matching recorded company is available.</p>':'<div class="agent-metrics company-metrics"><div><span>Received</span><strong>'+money(total.incomeCents)+'</strong></div><div><span>Paid</span><strong>'+money(total.outgoingCents)+'</strong></div><div><span>Net movement</span><strong>'+money(total.netCents)+'</strong></div></div>'+companyCharts(data,'custom-'+id,view.presentation)+chartRecords(data))+(item.drilldown?'<button type="button" class="text-button" data-custom-command="reset">Back to saved chart</button>':'');
 }
 function settings(view){
  const p=view.presentation;
@@ -80,11 +88,15 @@ export async function customDashboardControl(control){
    await api('/dashboard-views/'+encodeURIComponent(id),{},'DELETE',{signal});if(!active())return;
    remote.data.views=remote.data.views.filter(v=>v.id!==id);delete remote.charts[id];card.remove();if(!remote.data.views.length)ui.render();return;
   }
-  const query=control.dataset.companyChoice?'/company-activity?'+new URLSearchParams({scope:'company',company:control.dataset.companyChoice,from:remote.charts[id].dashboard.period.from,to:remote.charts[id].dashboard.period.to}):'/dashboard-views/'+encodeURIComponent(id)+(command==='refresh'?'/refresh':'');
+  const current=remote.charts[id],data=current?.dashboard,paging=command==='next'||command==='prev';
+  if(paging&&(!data?.pagination||data.status!=='ready'))return;
+  const page=paging?Math.max(1,Math.min(Math.max(1,data.pagination.totalPages),data.pagination.page+(command==='next'?1:-1))):1;
+  const drilldown=Boolean(control.dataset.companyChoice||(paging&&current?.drilldown));
+  const query=drilldown?'/company-activity?'+new URLSearchParams({scope:'company',company:control.dataset.companyChoice||data.company,from:data.period.from,to:data.period.to,page:String(page),pageSize:'10'}):'/dashboard-views/'+encodeURIComponent(id)+(command==='refresh'?'/refresh':paging?'?page='+page:'');
   const result=await api(query,command==='refresh'?{}:undefined,command==='refresh'?'POST':'GET',{signal});
   if(!active())return;
   if(result.view)remote.data.views=remote.data.views.map(v=>v.id===id?result.view:v);
-  remote.charts[id]={dashboard:result.dashboard,drilldown:Boolean(control.dataset.companyChoice)};paint(id);
+  remote.charts[id]={dashboard:result.dashboard,drilldown};paint(id);
  });
  if(control.isConnected)control.disabled=false;return true;
 }

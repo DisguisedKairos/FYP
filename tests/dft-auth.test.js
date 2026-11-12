@@ -256,3 +256,21 @@ pgTest('DFT transaction session checks are read-only and reject expired, revoked
  await f.db.query('UPDATE sessions SET auth_version=$2,expires_at=$3 WHERE token_hash=$1',[token,user.auth_version,new Date(f.now())]);
  await assert.rejects(f.auth.validateSession(current,user),failure(401));
 });
+
+pgTest('DFT login quota consumption remains atomic when a successful login clears the same bucket concurrently',async t=>{
+ const f=await fixture(t),{consumeLimits}=require('../banking/auth'),bucket={key:'concurrent-successful-login',maximum:5},date=new Date(f.now());
+ await consumeLimits(f.db,[bucket],date);
+ let clearing,scheduled=false;
+ const concurrent={transaction:work=>f.db.transaction(client=>work({query:async(sql,values)=>{
+  const result=await client.query(sql,values);
+  if(!scheduled&&/^INSERT INTO auth_attempts/.test(sql)){
+   scheduled=true;clearing=f.db.query('DELETE FROM auth_attempts WHERE bucket_key=$1',[bucket.key]);
+   let timer;try{await Promise.race([clearing,new Promise(resolve=>{timer=setTimeout(resolve,250);})]);}finally{clearTimeout(timer);}
+  }
+  return result;
+ }}))};
+ try{await consumeLimits(concurrent,[bucket],date);}finally{await clearing;}
+ assert.equal(scheduled,true);
+ await consumeLimits(f.db,[bucket],date);
+ assert.equal((await f.db.query('SELECT attempts FROM auth_attempts WHERE bucket_key=$1',[bucket.key])).rows[0].attempts,1);
+});

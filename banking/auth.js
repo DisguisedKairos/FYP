@@ -28,9 +28,11 @@ async function consumeLimits(db, buckets, now) {
     // account and IP buckets on separate PostgreSQL connections.
     for (const bucket of [...buckets].sort((left, right) => left.key.localeCompare(right.key))) {
       const expires = new Date(now.getTime() + LIMIT_WINDOW_MS);
-      await client.query(`INSERT INTO auth_attempts(bucket_key,attempts,window_started_at,expires_at)
-        VALUES($1,0,$2,$3) ON CONFLICT(bucket_key) DO NOTHING`, [bucket.key, now, expires]);
-      const row = (await client.query('SELECT * FROM auth_attempts WHERE bucket_key=$1 FOR UPDATE', [bucket.key])).rows[0];
+      // Lock and return the bucket atomically: a successful login can clear it
+      // concurrently, between a separate insert-if-missing and SELECT.
+      const row = (await client.query(`INSERT INTO auth_attempts(bucket_key,attempts,window_started_at,expires_at)
+        VALUES($1,0,$2,$3) ON CONFLICT(bucket_key) DO UPDATE
+        SET attempts=auth_attempts.attempts RETURNING *`, [bucket.key, now, expires])).rows[0];
       const expired = milliseconds(row.expires_at) <= now.getTime();
       const attempts = expired ? 0 : row.attempts;
       if ((!expired && row.locked_until && milliseconds(row.locked_until) > now.getTime()) || attempts >= bucket.maximum) throw rateError(row.expires_at, now);

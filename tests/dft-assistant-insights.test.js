@@ -110,3 +110,37 @@ pg('Agentic public company research never sends retrieved private account facts 
  assert.equal(result.publicResearch.length,1);assert.equal(result.narrativeWithheld,undefined);assert.doesNotMatch(JSON.stringify(request),/9988776655|balanceCents|get_accounts|account_id/);
  const audit=(await f.db.query("SELECT metadata FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'phase'='public_web_research'")).rows;assert.equal(audit.length,1);assert.equal(audit[0].metadata.status,'completed');
 });
+
+test('Saved chart names support straight and typographic quotes without treating question marks as delimiters',()=>{
+ for(const message of ['Save this chart as "Supplier trends"','Save this chart as \u201cSupplier trends\u201d','Save this chart as \u2018Supplier trends\u2019'])assert.equal(views.messageOptions(message).title,'Supplier trends');
+ assert.equal(views.messageOptions('Can I save this as ?Supplier trends?').title,undefined);
+});
+
+pg('Customized dashboard controls reach later company pages and retain company scope while paging receipts',async t=>{
+ const f=await fixture(t),client=f.client();await client.login();
+ const account=(await client.dashboard()).accounts[0];
+ for(let i=1;i<=13;i++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,'transfer',$3,$4,$5,'completed',now(),now(),now(),nextval('settlement_sequence'))",[randomUUID(),account.id,'Paging receipt '+i,-i*100,'Paging Supplier '+String(i).padStart(2,'0')]);
+ const saved=(await client.request('/api/dashboard-views',{method:'POST',body:{definition}})).data;
+ const detail=(await client.request('/api/dashboard-views/'+saved.view.id)).data;
+ const state={user:{id:'current'},remote:{customDashboard:{data:{views:[saved.view],preferences:preferences.DEFAULTS},charts:{[saved.view.id]:{dashboard:detail.dashboard}},chartVersions:{}}}};
+ const card={dataset:{customCard:saved.view.id},querySelector:()=>({innerHTML:''}),querySelectorAll:()=>[]};
+ const sources=require('node:fs').readFileSync(require('node:path').join(__dirname,'../public/js/custom-dashboard.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
+ const context={state,api:async(route,body,method)=>{const result=await client.request('/api'+route,{method,body});assert.equal(result.status,200);return result.data;},esc:value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])),money:value=>String(value),fullDate:value=>String(value),statusPill:value=>value,icon:()=>'',heading:()=>'',companyCharts:()=>'',hydrateDashboardCharts:()=>{},captureSession:()=>()=>true,recoverSession:async()=>false,toast:()=>{},ui:{render:()=>{}},document:{querySelector:()=>card},AbortController,URLSearchParams,console};
+ require('node:vm').runInNewContext(sources+';globalThis.frontend={customDashboardControl,customDashboardPage};',context);
+ const control=(command,company)=>({dataset:{...(command?{customCommand:command}:{}),...(company?{companyChoice:company}:{})},closest:()=>card,isConnected:true,disabled:false});
+ assert.match(context.frontend.customDashboardPage(),/data-custom-command="next"/);
+ await context.frontend.customDashboardControl(control('next'));
+ const remote=state.remote.customDashboard;
+ assert.equal(remote.charts[saved.view.id].dashboard.pagination.page,2);
+ assert.match(context.frontend.customDashboardPage(),/Page 2 of/);
+ const company=remote.charts[saved.view.id].dashboard.companies[0].company;
+ for(let i=0;i<12;i++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,'transfer','Paging detail receipt',-1,$3,'completed',now(),now(),now(),nextval('settlement_sequence'))",[randomUUID(),account.id,company]);
+ await context.frontend.customDashboardControl(control(null,company));
+ assert.equal(remote.charts[saved.view.id].dashboard.company,company);assert.equal(remote.charts[saved.view.id].drilldown,true);
+ assert.match(context.frontend.customDashboardPage(),/custom-dashboard-records/);assert.match(context.frontend.customDashboardPage(),/Paging (?:detail )?receipt/);
+ await context.frontend.customDashboardControl(control('next'));
+ assert.equal(remote.charts[saved.view.id].dashboard.pagination.page,2);
+ assert.equal(remote.charts[saved.view.id].dashboard.company,company);assert.equal(remote.charts[saved.view.id].drilldown,true);
+ await context.frontend.customDashboardControl(control('reset'));
+ assert.equal(remote.charts[saved.view.id].dashboard.scopeType,'all');assert.equal(remote.charts[saved.view.id].dashboard.pagination.page,1);assert.equal(remote.charts[saved.view.id].drilldown,false);
+});

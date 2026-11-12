@@ -78,3 +78,26 @@ test('A delayed initial custom chart cannot overwrite a newer manual refresh',as
  assert.ok((await page.evaluate('document.querySelector("[data-custom-card] .company-metrics").textContent')).includes(expected));
  assert.deepEqual(page.errors,[]);
 });
+
+test('Customized charts page through every company and open matching transactions',async t=>{
+ const {f,page}=await open(t),client=f.client();await client.login();
+ const account=(await client.dashboard()).accounts[0];
+ for(let i=1;i<=13;i++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,'transfer',$3,$4,$5,'completed',now(),now(),now(),nextval('settlement_sequence'))",[require('node:crypto').randomUUID(),account.id,'Pagination supplier receipt '+i,-i*100,'Pagination Supplier '+String(i).padStart(2,'0')]);
+ const saved=await client.request('/api/dashboard-views',{method:'POST',body:{definition:{scope:'all',company:'',period:{kind:'months',months:3}}}});
+ await page.navigate(f.baseUrl+'/custom-dashboard');await page.waitFor('!!document.querySelector("[data-custom-card] .activity-company-bars")');
+ const root='[data-custom-card="'+saved.data.view.id+'"]';
+ const first=(await page.evaluate('Array.from(document.querySelectorAll('+JSON.stringify(root+' [data-company-choice]')+')).map(e=>e.dataset.companyChoice)'));
+ await page.click(root+' [data-custom-command="next"]');
+ await page.waitFor('document.querySelector('+JSON.stringify(root+' [data-custom-paging]')+')?.textContent.includes("Page 2")');
+ const second=await page.evaluate('Array.from(document.querySelectorAll('+JSON.stringify(root+' [data-company-choice]')+')).map(e=>e.dataset.companyChoice)');
+ assert.ok(second.length>0);assert.ok(second.every(name=>!first.includes(name)));
+ await page.click(root+' [data-company-choice]');await page.waitFor('!!document.querySelector('+JSON.stringify(root+' .custom-dashboard-records tbody tr')+')');
+ assert.match(await page.evaluate('document.querySelector('+JSON.stringify(root+' .custom-dashboard-records')+').textContent'),/Pagination supplier receipt/);
+ await page.click(root+' [data-custom-command="reset"]');
+ await page.waitFor('!!document.querySelector('+JSON.stringify(root+' .activity-company-bars')+')');
+ await page.click(root+' [data-custom-command="next"]');
+ await page.waitFor('document.querySelector('+JSON.stringify(root+' [data-custom-paging]')+')?.textContent.includes("Page 2")');
+ await page.click(root+' [data-custom-command="prev"]');
+ await page.waitFor('document.querySelector('+JSON.stringify(root+' [data-custom-paging]')+')?.textContent.includes("Page 1")');
+ assert.deepEqual(page.errors,[]);
+});

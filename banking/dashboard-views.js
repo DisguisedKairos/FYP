@@ -94,7 +94,7 @@ async function refreshDue(db,{now=Date.now,limit=10}={}){
 async function remove(db,user,id){return db.transaction(async client=>{await assertCurrentUser(client,user,{lock:true});const row=(await client.query('DELETE FROM saved_dashboard_views WHERE id=$1 AND user_id=$2 RETURNING id',[validId(id),user.id])).rows[0];if(!row)throw new HttpError(404,'Saved dashboard not found.');await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata) VALUES($1,$1,'dashboard_view.removed',$2)",[user.id,{viewId:row.id}]);return {removed:true};});}
 function messageOptions(message,{chartType='bar'}={}){
  const options={presentation:{...DEFAULT_PRESENTATION,chartType}};
- const named=message.match(/\bas\s+["?]([^"?]{2,80})["?]/i);if(named)options.title=titleFor(named[1]);
+ const named=message.match(/\bas\s+(?:"([^"]{2,80})"|\u201c([^\u201d]{2,80})\u201d|'([^']{2,80})'|\u2018([^\u2019]{2,80})\u2019)/i);if(named)options.title=titleFor(named.slice(1).find(value=>value!==undefined));
  const noWeekly=/\b(?:do not|don't|never|without)\s+(?:\w+\s+){0,3}(?:refresh|refreshing|update|updating)\b.{0,30}\b(?:weekly|every week)\b|\bno weekly refresh\b/i.test(message.replace(/\u2019/g,"'"));
  if(noWeekly)options.refreshCadence='manual';else if(/\bweekly\b|\bevery week\b/i.test(message))options.refreshCadence='weekly';
  return options;
