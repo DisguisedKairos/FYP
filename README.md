@@ -167,3 +167,7 @@ A funding notice now appears automatically beside the assistant after sign-in wh
 Ask: "Summarize inflow and outflow this month. Do I have enough funds to pay SGD 5,000 to Harbour Supplies Pte. Ltd. from Operating savings by this month?" Replace the amount, company and source account with your details. A single ISO date such as `2026-11-20`, an ISO month such as `2026-12`, a named date/month with a year, `today`, `tomorrow`, `this month` or `next month` can set the deadline, up to 90 days ahead. Deadlines are end of day in Singapore; `before YYYY-MM-DD` excludes that date.
 
 The chat card separates completed business and source-account inflow/outflow from the proposed payment calculation. It uses current source funds minus active outgoing schedules through the deadline and the additional proposed payment. Historical cash flow is not added again. Future credits, including scheduled incoming transfers, are shown separately and excluded until settled. A positive result is a conservative funding scenario, not payment approval or a forecast; balances and obligations can change. Existing matching schedules still count separately from this additional proposal. Missing or unsupported details produce a clarification. No draft or payment is created by a funding question. A standalone "Summarize inflow and outflow this month" retrieves the existing finance report.
+
+
+
+testing MR part 2
