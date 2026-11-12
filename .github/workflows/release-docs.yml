@@ -19,7 +19,7 @@ jobs:
           node-version: '20'
 
       - name: Install Dependencies
-        run: npm install @actions/core @actions/github openai
+        run: npm install @actions/core@1 @actions/github@6 openai
 
       - name: Run Documentation Agent
         run: node scripts/docs-agent.js
