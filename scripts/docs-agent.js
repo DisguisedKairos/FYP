@@ -14,13 +14,19 @@ async function run() {
 
     const context = github.context;
     const { owner, repo } = context.repo;
+    const shortSha = context.sha ? context.sha.slice(0, 7) : 'unknown';
 
-    // Collect recent commits from the push payload (or fallback to API)
     let commitList = [];
+    const changedFilesSet = new Set();
+
+    // Collect commits and modified filenames from push payload
     if (context.payload.commits && context.payload.commits.length > 0) {
-      commitList = context.payload.commits.map(
-        (c) => `- ${c.message} (by ${c.author.name || 'developer'})`
-      );
+      for (const c of context.payload.commits) {
+        commitList.push(`- ${c.message} (by ${c.author.name || 'developer'})`);
+        (c.added || []).forEach((f) => changedFilesSet.add(`added: ${f}`));
+        (c.modified || []).forEach((f) => changedFilesSet.add(`modified: ${f}`));
+        (c.removed || []).forEach((f) => changedFilesSet.add(`removed: ${f}`));
+      }
     } else if (githubToken) {
       const octokit = github.getOctokit(githubToken);
       const { data: commits } = await octokit.rest.repos.listCommits({
@@ -36,7 +42,13 @@ async function run() {
     const commitSummary =
       commitList.length > 0
         ? commitList.join('\n')
-        : `- Push to ${context.ref} (${context.sha})`;
+        : `- Push to ${context.ref} (${shortSha})`;
+
+    const changedFilesList = Array.from(changedFilesSet).slice(0, 30);
+    const filesContext =
+      changedFilesList.length > 0
+        ? `\n\nModified Files:\n${changedFilesList.map((f) => `- ${f}`).join('\n')}`
+        : '';
 
     console.log('Generating release documentation with OpenAI...');
     const openai = new OpenAI({ apiKey: openaiApiKey });
@@ -47,11 +59,11 @@ async function run() {
         {
           role: 'system',
           content:
-            'You are a Release Documentation Agent. Summarize the provided git commits into clean, structured release notes suitable for a project changelog and chatbot knowledge base. Include: What Changed, Impact, and Technical Notes.',
+            'You are a Release Documentation Agent for a wholesale banking and fraud detection platform. Summarize the git commits and modified files into structured Markdown release notes suitable for a changelog and chatbot knowledge base. Include three sections: 1) ### What Changed, 2) ### System & User Impact, and 3) ### Technical & Deployment Notes.',
         },
         {
           role: 'user',
-          content: `Generate release notes for repository ${owner}/${repo} from these recent commits:\n\n${commitSummary}`,
+          content: `Generate release notes for ${owner}/${repo} (commit ${shortSha}):\n\nCommits:\n${commitSummary}${filesContext}`,
         },
       ],
       temperature: 0.3,
@@ -59,6 +71,8 @@ async function run() {
 
     const releaseNotes = completion.choices[0].message.content;
     console.log('Generated Release Notes:\n', releaseNotes);
+
+    let webhookStatus = 'Skipped (No CHATBOT_WEBHOOK_URL configured)';
 
     if (webhookUrl) {
       console.log('Sending release notes payload to webhook...');
@@ -69,23 +83,43 @@ async function run() {
           event: 'release_documentation_generated',
           repository: `${owner}/${repo}`,
           commit_sha: context.sha,
+          short_sha: shortSha,
           timestamp: new Date().toISOString(),
           commits: commitList,
+          changed_files: changedFilesList,
           release_notes: releaseNotes,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(
-          `Webhook request failed with status ${response.status}`
-        );
+        throw new Error(`Webhook request failed with status ${response.status}`);
       }
+      webhookStatus = `Delivered (HTTP ${response.status})`;
       console.log('Successfully delivered payload to webhook.');
     } else {
-      console.log(
-        'No CHATBOT_WEBHOOK_URL secret configured. Skipping webhook transmission.'
-      );
+      console.log(webhookStatus);
     }
+
+    // Render formatted Release Notes card directly on the GitHub Actions Summary page
+    await core.summary
+      .addHeading(`🚀 Release Documentation (${shortSha})`)
+      .addRaw(releaseNotes)
+      .addBreak()
+      .addTable([
+        [
+          { data: 'Repository', header: true },
+          { data: 'Commit', header: true },
+          { data: 'Files Tracked', header: true },
+          { data: 'Webhook Status', header: true },
+        ],
+        [
+          `${owner}/${repo}`,
+          `\`${shortSha}\``,
+          `${changedFilesList.length}`,
+          webhookStatus,
+        ],
+      ])
+      .write();
   } catch (error) {
     core.setFailed(`Documentation Agent failed: ${error.message}`);
   }
