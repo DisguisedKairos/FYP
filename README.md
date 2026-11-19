@@ -195,3 +195,4 @@ Ask **Show current news for my industry, explain the business implications and a
 The dedicated sector login is retired in the hosted roster. In an owner-controlled isolated sector fixture, sign in with that fixture's current credentials. Ask **Evaluate reputation and money risk of interacting with my demo companies across sectors**. The dedicated portfolio contains eight fictional sectors with scenario flags and historical receipts; OpenAI generates separate reputation/financial grades and the database supplies exact exposure totals. Fictional companies are excluded from live web research. Setup: `npm run db:migrate` then `npm run demo:companies`. See [company names, scenarios and safeguards](docs/counterparty-risk.md). Existing changed credentials remain unchanged on rerun.
 
 
+testing for MR
