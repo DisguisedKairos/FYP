@@ -3,6 +3,7 @@
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
+const TRIAGE_MENTION = '@IreneeW';
 
 const AGENT_TOOLS = [
   { type: 'function', function: { name: 'source_check', description: 'Run the repository JavaScript syntax checks.', parameters: { type: 'object', properties: {} } } },
@@ -60,6 +61,8 @@ function createReport({ run, log }) {
   const commands = [...new Set(hypotheses.flatMap(item => item.commands))];
   const lines = [
     '## Automated DevOps failure triage',
+    '',
+    `${TRIAGE_MENTION} — this workflow run needs attention.`,
     '',
     'An evidence-based CI triage agent analyzed the failed workflow logs.',
     '',
@@ -139,6 +142,7 @@ async function main() {
   catch (error) { report = null; console.error(`Agentic triage unavailable; deterministic fallback used: ${error.message}`); }
   report ||= createReport({ run: triageRun, log });
   if (!/^## /m.test(report)) report = `## Automated DevOps failure triage\n\n${report}`;
+  if (!report.includes(TRIAGE_MENTION)) report = `${TRIAGE_MENTION} — this workflow run needs attention.\n\n${report}`;
   fs.mkdirSync('artifacts', { recursive: true });
   fs.writeFileSync('artifacts/failure-triage.md', report);
 
@@ -147,7 +151,12 @@ async function main() {
     const pulls = JSON.parse(gitHub(['api', `repos/${repository}/commits/${run.headSha}/pulls`, '--jq', '[.[] | select(.state == "open") | .number]']));
     pullNumber = Array.isArray(pulls) ? pulls[0] : undefined;
   } catch {}
-  if (pullNumber) gitHub(['pr', 'comment', String(pullNumber), '--repo', repository, '--body-file', path.resolve('artifacts/failure-triage.md')]);
+  if (pullNumber) {
+    gitHub(['pr', 'comment', String(pullNumber), '--repo', repository, '--body-file', path.resolve('artifacts/failure-triage.md')]);
+  } else {
+    const notificationBody = fs.readFileSync(path.resolve('artifacts/failure-triage.md'), 'utf8');
+    gitHub(['api', `repos/${repository}/commits/${run.headSha}/comments`, '--method', 'POST', '--raw-field', `body=${notificationBody}`]);
+  }
   process.stdout.write(report);
 }
 

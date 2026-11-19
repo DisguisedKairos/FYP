@@ -27,6 +27,7 @@ test('creates an actionable report without raw secrets', () => {
     log: 'npm test failed: AssertionError\npostgresql://owner:secret@db/greenlink'
   });
   assert.match(report, /Automated DevOps failure triage/);
+  assert.match(report, /@IreneeW/);
   assert.match(report, /npm test/);
   assert.match(report, /### Suggested fix/);
   assert.match(report, /Update the implementation or test expectation/);
