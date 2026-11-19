@@ -4,6 +4,8 @@ Updated 13 November 2026 for the C300 wholesale banking prototype, including liv
 
 This guide contains **160 manual cases** grouped into **28 end-to-end use cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
 
+For a three-person test run, use the [assigned teammate packets](assistant-team-testing.md): all 160 catalogue cases are allocated once, with four supplementary news-advice regressions and per-case result fields.
+
 Copy questions below after replacing every `{PLACEHOLDER}`. Use the case IDs and workflow coverage below to organize each tester's notes. Instructions describing clicks are for the tester, not chat prompts.
 
 ## Getting started
