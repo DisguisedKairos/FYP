@@ -6,11 +6,11 @@ Prepared **19 November 2026, Singapore**. Covers all **160 existing acceptance c
 
 ## Assignments
 
-| Tester | Shareable packet | Cases | Focus |
-| --- | --- | ---: | --- |
-| Tester 1 | [Banking and funding](assistant-test-packets/tester-1.md) | 54 | Accounts, transactions, finance CSV/PDF, funds, dates, drafts and banking handoff |
-| Tester 2 | [Chat, dashboards and news](assistant-test-packets/tester-2.md) | 55 | Popup/scope, charts, customization, company profiles, public research and news advice |
-| Tester 3 | [Fraud, permissions and recovery](assistant-test-packets/tester-3.md) | 55 | Fraud/sector risks, staff analysis, audit/privacy, security boundaries and recovery |
+| Tester | Questions and setup | Fill-in Word document | Cases | Focus |
+| --- | --- | --- | ---: | --- |
+| Tester 1 | [Banking and funding](assistant-test-packets/tester-1.md) | [Response and error form](assistant-test-packets/tester-1-results.docx) | 54 | Accounts, transactions, finance CSV/PDF, funds, dates, drafts and banking handoff |
+| Tester 2 | [Chat, dashboards and news](assistant-test-packets/tester-2.md) | [Response and error form](assistant-test-packets/tester-2-results.docx) | 55 | Popup/scope, charts, customization, company profiles, public research and news advice |
+| Tester 3 | [Fraud, permissions and recovery](assistant-test-packets/tester-3.md) | [Response and error form](assistant-test-packets/tester-3-results.docx) | 55 | Fraud/sector risks, staff analysis, audit/privacy, security boundaries and recovery |
 
 Replace the labels with your teammates' names. Each teammate edits only their own packet's results, keeping case IDs and expected outcomes intact. Packets contain the full assigned questions, preconditions, expected results and per-case result fields.
 
@@ -21,6 +21,18 @@ Replace the labels with your teammates' names. Each teammate edits only their ow
 **Tester 3 coverage:** MARKET-01 through MARKET-07; STAFF-01 through STAFF-06; AUDIT-01 through AUDIT-04; SAFE-01 through SAFE-11; RES-01 through RES-05; UI-01 through UI-04 and UI-10 through UI-14; SECTOR-01 through SECTOR-11; REG-03 and REG-04.
 
 REG-01 checks public news/liquidity wording, REG-02 checks cash-flow implications/effects, REG-03 checks invented staff-action claims, and REG-04 checks mixed public-news/private-balance requests. The canonical guide remains 160 cases; these four are supplementary regressions in the packets.
+
+## Using the Word response forms
+
+Download the document for your assigned tester and open it in Microsoft Word. Save your own copy as Tester-N-YourName-YYYY-MM-DD.docx in the team's private results location.
+
+1. Fill in your name, environment URL, deployed commit, Singapore test time, browser and test identity on the first page.
+2. Each case starts on a new page with its original question, role, setup and expected result. Click the response field to paste the assistant's exact reply, or describe the observed UI result. Label separate variants and follow-ups.
+3. Fill in the error field with the exact error and what went wrong. Enter None when no error occurred. Paste sanitized screenshots or evidence references into the evidence field.
+4. Choose Not run, Pass, Fail, Blocked or Not applicable from the result dropdown. Record the case time/role/variant and bug or retest notes. All result dropdowns initially show Not run.
+5. Keep the original failure observation when adding a retest result. Filled responses are actual test evidence; use the agreed private results location rather than uploading them with the blank templates.
+
+The fields support multiline text and pasted evidence. Longer responses can expand onto another page. The original Markdown packets remain available as the editable question bank. Maintainers can regenerate the blank documents with `python scripts/export-assistant-test-documents.py`; it uses the Python standard library and reads the three Markdown packets. Regeneration replaces only the three blank Word templates, so keep completed copies elsewhere.
 
 ## Book accounts and test slots
 

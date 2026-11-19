@@ -4,6 +4,8 @@ Prepared 19 November 2026 (Singapore). **54 assigned cases. All results start as
 
 [Team instructions and placeholder values](../assistant-team-testing.md) | [Canonical 160-case question bank](../assistant-testing.md) | [Neon test-login guide](../../data/testing/neon/README.md)
 
+[Download the fill-in Word response and error form](tester-1-results.docx). Open it in Word, save your own named copy, and record responses, errors, evidence and the result for each case.
+
 **Environment / URL:** _fill in_
 
 **Deployed app commit:** _record the commit shown in Vercel_
