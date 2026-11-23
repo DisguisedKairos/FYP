@@ -148,7 +148,7 @@ npm run package:verify
 
 The source archive is releases/greenlink-digital-bank-2.11.4.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
 
-See [banking agents](docs/banking-agents.md), [fraud scoring contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md) and [APIs](docs/api.md).
+See [banking requirements and security controls](docs/requirements.md), [banking agents and chat](docs/banking-agents.md), [fraud scoring contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md), [APIs](docs/api.md) and [developer verification commands](tests/README.md).
 
 ### Company transaction dashboards
 

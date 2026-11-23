@@ -19,6 +19,18 @@ Version 2.7.0 adds five features to the existing DFT banking application. No onb
 
 See [daily market and scam context](market-context.md) for official public feeds and the assistant's guarded human-review requests.
 
+## Chat popup and payment drafts
+
+Select **Ask GLDB** in the lower-right corner after signing in. GLDB Assistant opens as a floating chat popup on every banking screen, with no separate sidebar page. Minimize it with the close button or Escape and reopen it to continue. Unsent text and replies remain in the current session while navigating; replies arriving while minimized show a **New reply** badge. Signing out clears the popup and conversation. Existing `/assistant` links redirect to the dashboard and open the popup.
+
+The assistant reads only the signed-in operator's permitted business records. It can show balances, search transaction history, list scheduled payments and prepare transfer, bill or schedule drafts. Use the [question bank and expected results](assistant-testing.md) for examples and the [three-person testing assignment](assistant-team-testing.md) for tester worksheets.
+
+Draft actions minimize chat and open the ordinary banking forms. Chat cannot create, authorize, send, approve or cancel payments. Review the source, recipient, amount and reference in the form, then authorize with the current password. Current balances, business eligibility and fraud controls are checked at submission.
+
+Raw messages stay in browser memory and clear on reload, logout or Clear conversation. The banking service retains private reports, tool evidence and structured draft context; it does not store raw chat messages. Credentials and security codes belong only in the dedicated banking/security forms.
+
+Completed responses must match the configured OpenAI model and pass completion/tool-shape validation. Incomplete or invalid model responses return an explicit unavailable error. Structured draft continuations expire after fifteen minutes; the UI clears an expired reference so **Try again** starts a fresh request without reusing old draft details. Bill drafts require a reference of 3-64 characters before the payment form is offered.
+
 ## Provider and startup
 
 Every assistant and insight report requires the configured AI provider. OpenAI is the default; there is no offline report engine, deterministic-only AI simulation or automatic fallback. Verified reads, arithmetic, draft validation and financial controls remain application tools.
