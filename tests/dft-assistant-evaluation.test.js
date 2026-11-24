@@ -65,6 +65,42 @@ pg('Grounded model answers return saved evidence references and verified facts w
   assert.deepEqual(saved.report.evidenceReferences, response.evidenceReferences);
   assert.equal(response.items[0].amountCents, 120000); assert.deepEqual(await balances(f.db), before);
 });
+pg('Brief and detailed assistant answers stay in a single paragraph without losing warnings or evidence', async t => {
+  const f = await fixture(t, { http: false }), user = await actor(f.db), before = await balances(f.db);
+  const prose = 'Review your available balance before making a payment [E1].\r\n\r\n- Check upcoming scheduled payments.\n1. A projection does not guarantee funding.';
+  const expected = 'Review your available balance before making a payment [E1]. Check upcoming scheduled payments. A projection does not guarantee funding.';
+  for (const responseStyle of ['concise', 'detailed']) {
+    await require('../banking/assistant-preferences').update(f.db, user, { responseStyle });
+    let calls = 0;
+    const agent = createAgents({ db: f.db, model: model(async messages => {
+      const system = messages.find(m => m.role === 'system').content;
+      assert.match(system, /single paragraph in plain language/);
+      assert.match(system, responseStyle === 'detailed' ? /at most five short sentences/ : /at most three short sentences/);
+      return ++calls === 1 ? tool('get_accounts') : { role: 'assistant', content: prose };
+    }) });
+    const result = await agent.execute(user, 'assistant', { message: 'Check my balance.' });
+    assert.equal(result.narrativeWithheld, undefined);
+    assert.equal(result.reply, expected);
+    assert.equal((await agent.detail(user, result.runId)).report.reply, expected);
+    assert.equal(result.items[0].amountCents, 120000);
+    assert.equal(result.evidenceReferences[0].tool, 'get_accounts');
+  }
+  assert.deepEqual(await balances(f.db), before);
+});
+
+pg('Paragraph formatting cannot hide unsafe claims in later paragraphs or beyond the old text cutoff', async t => {
+  const f = await fixture(t, { http: false }), user = await actor(f.db);
+  for (const padding of ['', 'Review the retrieved account evidence. '.repeat(140)]) {
+    let calls = 0;
+    const reply = 'Review the account evidence [E1].\n\n' + padding + '\n\nI have approved your payment.';
+    const result = await createAgents({ db: f.db, model: model(async () => ++calls === 1 ? tool('get_accounts') : { role: 'assistant', content: reply }) }).execute(user, 'assistant', { message: 'Check my balance.' });
+    assert.equal(result.narrativeWithheld, true);
+    assert.doesNotMatch(result.reply, /I have approved/);
+    assert.doesNotMatch(result.reply, /[\r\n]/);
+    assert.equal(result.evidenceReferences[0].tool, 'get_accounts');
+  }
+});
+
 pg('Unsupported tools, wrong evidence and misleading qualitative claims fail closed', async t => {
   const f = await fixture(t, { http: false }), user = await actor(f.db), before = await balances(f.db);
   for (const [name, message, reply] of [['get_accounts', 'Check my balance', 'The balance is guaranteed safe [E1].'], ['get_accounts', 'Check my balance', 'Use the balance evidence [E99].'], ['get_accounts', 'Can I cover upcoming bills?', 'Your business can cover its bills [E1].']]) {

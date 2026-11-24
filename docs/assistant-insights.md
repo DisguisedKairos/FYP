@@ -72,7 +72,7 @@ Ask to save/add/pin the displayed chart, or select **Save to My dashboard**. It 
 
 The dedicated page supports chart titles, bar/line/table style, comparison/status visibility, manual/weekly refresh, Refresh now and removal. Current versions protect concurrent edits. Saved filters remain immutable; create another chart for a different company/period. Limit: 20 definitions per operator.
 
-Private assistant preferences control concise/detailed explanation, default 1-12-month trend period, new-chart style and market topic. They affect future requests, preserving banking permissions, authorization, numerical checks and Singapore dates.
+Assistant answers use a single paragraph in plain language, normally at most three short sentences. The brief style is the default; more context remains within one paragraph, with at most five short sentences. Requested charts, source links, exact financial facts and download controls remain separate. Formatting preserves the complete safety-checked answer, including warnings and limitations. Private assistant preferences also control the default 1-12-month trend period, new-chart style and market topic. They affect future requests, preserving banking permissions, authorization, numerical checks and Singapore dates.
 
 ## Weekly refresh
 

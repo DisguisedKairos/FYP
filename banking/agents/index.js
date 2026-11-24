@@ -27,6 +27,11 @@ const { createOpenAIModel } = require('./openai');
 const { DRAFT_INTENT, references, narrativeIssue, relevanceIssue } = require('./evidence');
 const iso = value => new Date(value).toISOString();
 const object = value => value && typeof value==='object' && !Array.isArray(value);
+function assistantParagraph(text){
+  // Format only after validating the full narrative. Keep every warning and
+  // evidence reference; never shorten an answer by cutting off later content.
+  return text.replace(/^\s{0,3}(?:#{1,6}\s+|[-*+\u2022]\s+|\d+[.)]\s+)/gm,'').replace(/\s+/g,' ').trim();
+}
 function sameDashboardDefinition(left,right){
   if(!left || !right)return false;
   const name=value=>value.trim().replace(/\s+/g,' ').toLowerCase(),a=left.period,b=right.period;
@@ -169,7 +174,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       }
     }
     const preferences=await assistantPreferences.read(db,acting);
-    const activeSystem=SYSTEM+ASSISTANT_EXTENSION+' For reputation or financial/money risk from interacting with flagged companies, or requests to list/evaluate demo companies across sectors, call assess_counterparty_risk. Omit company to assess the owned portfolio, or supply an exact owned name from this question. Fictional names starting GLDB Demo and their flags are synthetic case inputs: never present them as real public news, real sanctions listings or misconduct. Never web-search fictional names. Reputation and financial interaction grades are qualitative, not payment authorization or a fraud score. The returned exposure amounts are historical flows and pending requests, not actual/predicted loss. Distinguish demo scenarios from recorded open payment reviews. Exact amounts and grades appear in the report cards.'+' For sanctions, compliance, regulator or recent-news checks about companies this account deals with, suppliers or business partners, use scan_counterparty_news. Omit company to retrieve authorized recent counterparties automatically; the optional company must be an exact recorded name in this question. It also researches public developments in the business industry. Public relationships and amounts must never be invented. Name-only research is not sanctions screening clearance. Highlight unavailable checks and human identity verification; never assert that counterparties are compliant, cleared or safe to pay.'+' For a general market-insights question, omit the topic argument so the server uses the operator preference: '+preferences.marketTopic+'. Select a topic only when the user asks for that subject.'+(preferences.responseStyle==='detailed'?' Give a fuller qualitative explanation of scope, observations and next steps; exact numbers stay in the application cards.':' Keep the qualitative explanation concise.');
+    const activeSystem=SYSTEM+ASSISTANT_EXTENSION+' For reputation or financial/money risk from interacting with flagged companies, or requests to list/evaluate demo companies across sectors, call assess_counterparty_risk. Omit company to assess the owned portfolio, or supply an exact owned name from this question. Fictional names starting GLDB Demo and their flags are synthetic case inputs: never present them as real public news, real sanctions listings or misconduct. Never web-search fictional names. Reputation and financial interaction grades are qualitative, not payment authorization or a fraud score. The returned exposure amounts are historical flows and pending requests, not actual/predicted loss. Distinguish demo scenarios from recorded open payment reviews. Exact amounts and grades appear in the report cards.'+' For sanctions, compliance, regulator or recent-news checks about companies this account deals with, suppliers or business partners, use scan_counterparty_news. Omit company to retrieve authorized recent counterparties automatically; the optional company must be an exact recorded name in this question. It also researches public developments in the business industry. Public relationships and amounts must never be invented. Name-only research is not sanctions screening clearance. Highlight unavailable checks and human identity verification; never assert that counterparties are compliant, cleared or safe to pay.'+' For a general market-insights question, omit the topic argument so the server uses the operator preference: '+preferences.marketTopic+'. Select a topic only when the user asks for that subject.'+' Write the final chat answer as a single paragraph in plain language. Lead with the direct answer, then the most useful next step or necessary limitation. Do not use headings, bullet points, numbered lists or repeated summaries. Keep any funding warning, uncertainty or human-review requirement clear. Charts, source links, exact figures and download controls are provided separately by the application; do not repeat their contents in prose.'+(preferences.responseStyle==='detailed'?' Keep the paragraph to at most five short sentences, adding only useful context.':' For most questions, use at most three short sentences; greetings and simple answers should be shorter.');
     const conversational=kind==='assistant' && CONVERSATIONAL.test(message.trim());
     const engine=body.engine===undefined?model.mode:body.engine;
     if(engine!=='openai' || model.mode!=='openai')throw new HttpError(400,'Use the configured AI provider. Offline workflows are not supported.');
@@ -351,7 +356,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
               reply=conversational?'GLDB Assistant is responding. Ask about account balances, transaction history, company dashboards, downloadable finance reports or scheduled payments, save a dashboard, or prepare a payment draft.':'That request is outside the scope of this banking app. What banking task can I help you with?';
               break;
             }
-            reply=response.content.slice(0,5000);break;
+            reply=response.content;break;
           }
           const normalized=[];
           for(const raw of response.tool_calls){
@@ -369,7 +374,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         if(!clarification && narrativeIssue(reply,report,{results,evidence:references(id,results),requireCitations:true}) && modelRequests<4 && deadline-Date.now()>1000){
           try{
             const revised=await trackedChat([...messages,{role:'assistant',content:reply},{role:'user',content:'Validation failure: '+narrativeIssue(reply,report,{results,evidence:references(id,results),requireCitations:true})+' Rewrite as a short qualitative paragraph. Cite supplied tool references such as [E1]. Apart from references, do not include ANY digits or numbers written as words, monetary amounts, scores, counts, dates, thresholds, account IDs or numbered lists. The banking screen displays exact facts. Never claim execution, certainty of fraud, guaranteed funding, or facts contradicted by tool results. Reconciliation does not assess fraud. Only describe the retrieved scope and what a human should verify.'}],[],{signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))},'narrative_repair');
-            if(!revised.tool_calls?.length && revised.content.trim())reply=revised.content.slice(0,5000);
+            if(!revised.tool_calls?.length && revised.content.trim())reply=revised.content;
           }catch{
             // An optional wording repair must not discard a valid evidence
             // report. The original unsafe narrative is withheld below.
@@ -379,6 +384,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       const narrativeProblem=!clarification?(kind==='assistant'?relevanceIssue(message,results):null) || narrativeIssue(reply || '',report,{results,evidence:references(id,results),requireCitations:true}):null;
       if(narrativeProblem)reply='The AI narrative failed a financial safety check and has been withheld. Use the authoritative tool evidence and ordinary banking review screens.';
       if(kind==='assistant'){
+        reply=assistantParagraph(reply);
         const actions=results.flatMap(r=>r.value.actions || []), items=results.filter(r=>!['get_company_activity','open_saved_dashboard','list_saved_dashboards'].includes(r.tool)).flatMap(r=>r.tool==='get_accounts'?r.value.accounts.map(a=>({title:a.name,amountCents:a.balanceCents})):r.tool==='project_liquidity'?r.value.accounts.map(a=>({title:a.name,amountCents:a.projectedCents,subtitle:'Scheduled-payment projection'})):r.tool==='get_schedules'?r.value.schedules.map(s=>({title:s.type+' schedule',amountCents:s.amountCents,status:s.status,date:s.nextRunAt})):r.tool==='search_transactions'?r.value.transactions.map(t=>({title:t.description,amountCents:t.amountCents,status:t.status,date:t.date})):r.tool==='prepare_payment_draft'?r.value.missing.map(m=>'Missing: '+m):r.value.items || r.value.findings || []);
         report={title:'AI banking enquiry',reply,fundingWarnings:funds.collect(results),items:items.slice(0,20),actions:actions.slice(0,8),requiresAuthorization:actions.some(a=>a.type.startsWith('draft_'))};
         if(clarification)report={...report,title:'Assistant help and clarification',clarification:true,suggestions:SUGGESTIONS};

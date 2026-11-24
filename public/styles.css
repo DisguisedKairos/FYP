@@ -323,6 +323,7 @@ dialog.wide-dialog { width:900px; }
 .assistant-message-author .icon { width:13px; height:13px; }
 .assistant-message.from-user .assistant-message-author { color:#c8dcf6; }
 .assistant-message-text { font-size:12px; line-height:1.9; white-space:pre-wrap; overflow-wrap:anywhere; }
+.from-assistant .assistant-message-text { margin:0; white-space:normal; }
 .assistant-items { list-style:none; padding:0; margin:15px 0 0; }
 .assistant-items>li { display:flex; justify-content:space-between; gap:16px; border-top:1px solid #e0e7f2; padding:13px 0; font-size:12px; }
 .assistant-items strong { display:block; font-size:11px; line-height:1.6; }
