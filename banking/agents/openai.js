@@ -72,7 +72,9 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
   async function research(publicRequest,{signal}={}){
     const publicResearch=require('../public-research');
     if(!publicRequest||!['company','market','counterparty_sanctions','counterparty_news'].includes(publicRequest.kind)||typeof publicRequest.query!=='string'||publicRequest.query.length>1800)throw new HttpError(400,'Choose a valid public research task.');
-    const data=await request('responses',{model,instructions:publicResearch.instructionsFor(publicRequest)+' Server check time: '+publicRequest.checkedAt,input:publicRequest.query,tools:[{type:'web_search',external_web_access:true,search_context_size:'low',...(publicRequest.kind==='counterparty_sanctions'?{filters:{allowed_domains:publicResearch.OFFICIAL_DOMAINS}}:{})}],tool_choice:'required',store:false,max_output_tokens:publicRequest.kind.startsWith('counterparty_')?2600:1800,...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{})},signal||AbortSignal.timeout(25000));
+    const domains=publicRequest.allowedDomains;
+    if(domains!==undefined&&(!Array.isArray(domains)||!domains.length||domains.length>12||domains.some(domain=>typeof domain!=='string'||domain.length>150||!/^[a-z0-9]+(?:[.-][a-z0-9]+)*\.[a-z]{2,}$/.test(domain))))throw new HttpError(400,'Choose a valid public source scope.');
+    const data=await request('responses',{model,instructions:publicResearch.instructionsFor(publicRequest)+' Server check time: '+publicRequest.checkedAt,input:publicRequest.query,tools:[{type:'web_search',external_web_access:true,search_context_size:'low',...(publicRequest.kind==='counterparty_sanctions'?{filters:{allowed_domains:publicResearch.OFFICIAL_DOMAINS}}:domains?{filters:{allowed_domains:domains}}:{})}],tool_choice:'required',store:false,max_output_tokens:publicRequest.kind.startsWith('counterparty_')?2600:1800,...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{})},signal||AbortSignal.timeout(25000));
     return publicResearch.parseResponse(data,model,publicRequest);
   }
   async function assessCounterparties(input,{signal}={}){
@@ -84,8 +86,20 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
   async function assessNews(input,{signal}={}){
     const news=require('../news-insights');
     if(!input||!Array.isArray(input.parts)||!input.parts.length||input.parts.length>8||Buffer.byteLength(JSON.stringify(input))>42000)throw new HttpError(400,'Choose bounded, sourced public news.');
-    const reply=await chat([{role:'system',content:news.SYSTEM},{role:'user',content:JSON.stringify(input)}],[news.TOOL],{signal,maxOutputTokens:3500,requireTool:true});
-    return news.validate(reply,input);
+    const tool=structuredClone(news.TOOL);
+    tool.function.parameters.properties.insights.items.properties.actions.items.enum=Object.keys(input.allowedActions);
+    let correction='';
+    for(let attempt=1;attempt<=2;attempt++){
+      const reply=await chat([{role:'system',content:news.SYSTEM+correction},{role:'user',content:JSON.stringify(input)}],[tool],{signal,maxOutputTokens:3500,requireTool:true});
+      try{
+        const result=news.validate(reply,input);
+        return {...result,modelResponse:{...result.modelResponse,validationAttempts:attempt}};
+      }catch(error){
+        error.validationAttempts=attempt;
+        if(attempt===2||error.code!=='NEWS_ADVISORY_INVALID')throw error;
+        correction=' A prior advisory failed application validation. Correct this specific issue: '+error.validationIssue+' Reuse only the unchanged supplied source summaries and business context. Do not perform another search or invent replacement evidence.';
+      }
+    }
   }
   return {mode:'openai',model,inspect,chat,research,assessCounterparties,assessNews};
 }

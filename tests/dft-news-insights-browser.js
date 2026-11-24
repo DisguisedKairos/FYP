@@ -24,3 +24,22 @@ test('News advice is cleared with the chat and cannot persist into another opera
  await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');await page.click('[data-action=assistant-toggle]');
  assert.equal(await page.evaluate('document.querySelectorAll(".news-insights").length'),0);assert.deepEqual(page.errors,[]);
 });
+
+
+test('Business news preferences save on mobile and the briefing button opens a company-specific chat',async t=>{
+ const {seedIndustryBusinesses,CASES,PASSWORD}=require('../scripts/seed-industry-businesses');
+ const f=await fixture(t,{now,agentModel:provider()});await seedIndustryBusinesses(f.db,{now});
+ const page=await launchChrome(t,{width:390,height:950,mobile:true});
+ await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
+ await page.fill('#email',CASES[0].email);await page.fill('#password',PASSWORD);await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
+ await page.navigate(f.baseUrl+'/business');await page.waitFor('!!document.querySelector("[data-action=business-advisory]")');await page.click('[data-action=business-advisory]');await page.waitFor('!!document.querySelector("#business-advisory-form")');
+ assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/Meridian Logistics/);
+ await page.evaluate('(()=>{const form=document.querySelector("#business-advisory-form");for(const input of form.querySelectorAll("input[type=checkbox]"))input.checked=input.name==="markets"?input.value==="MY":input.name==="operations"?input.value==="warehouse":input.value==="liquidity";})()');
+ await page.click('#business-advisory-form button[type=submit]');await page.waitFor('!document.querySelector("#modal").open');
+ const user=(await f.db.query('SELECT * FROM users WHERE email=$1',[CASES[0].email])).rows[0];
+ const saved=await require('../banking/business-advisory').read(f.db,user);assert.deepEqual(saved.settings,{markets:['MY'],operations:['warehouse'],priorities:['liquidity']});
+ await page.click('[data-action=business-news]');await page.waitFor('!!document.querySelector(".news-insights")&&!document.querySelector("#assistant-form button[type=submit]").disabled');
+ const text=await page.evaluate('document.querySelector(".news-insights").textContent');assert.match(text,/Meridian Logistics/);assert.match(text,/Malaysia/);assert.match(text,/Warehousing/);assert.doesNotMatch(text,/Nimbus Cloud/);
+ assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);assert.deepEqual(page.errors,[]);
+ await page.screenshot('test-results/industry-business-news-mobile.png');
+});

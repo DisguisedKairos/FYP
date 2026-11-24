@@ -109,3 +109,11 @@ Creation also accepts presentation/refreshCadence. Definitions support period ki
 The assistant also accepts ordinary counterparty-news/sanctions questions through POST /api/agents/assistant. scan_counterparty_news has only an optional exact company label from the message; the server validates it against owned recent completed receipts and otherwise selects at most five names. Its report returns counterpartyScan coverage/limits/status and publicResearch source cards. It is on-demand research, not a sanctions clearance or financial action. No new endpoint, migration or credential is required.
 
 For reputation/financial interaction risk, POST /api/agents/assistant may use assess_counterparty_risk with an optional exact owned company name from the question. counterpartyRisk contains current source scope, omitted-company count, separate qualitative model grades, supported explanations/checks and authoritative cash-flow exposure. Fictional inputs stay labelled, runtime cannot edit them, and no financial action is available. See [sector risk workflow](counterparty-risk.md).
+
+
+## Company industry news preferences
+
+- `GET /api/business/advisory-profile` returns the signed-in business name, registered industry, mapped planning profile, curated options, selected settings and version. A business without saved preferences receives labelled industry defaults; a staff login without a business receives `available: false`.
+- `POST /api/business/advisory-profile` accepts exactly `{profileKey, version, settings}`. Settings contain nonempty arrays `markets`, `operations` and `priorities` selected from the GET options. Session authentication and CSRF are required. The server derives business ownership; foreign IDs and arbitrary search text are rejected. A stale version or changed industry returns 409. Saving affects planning context, not legal identity, account balances or banking permissions.
+
+Industry research uses only curated topic labels, selected operating markets and activities. `analyze_news_insights` separately retrieves the current operator's company context, limits action codes to that industry's permitted checks, and returns the context with cited advisory cards. Private company names, account numbers, balances, identifiers and raw user instructions are excluded from the industry web-search query. News flags remain advisory in chat.

@@ -32,6 +32,16 @@ These are **advisory flags in chat only**. They create no staff review item, pay
 
 No database migration or additional API key is required. Existing OpenAI access must support web search. See [official OpenAI web search and citation requirements](https://developers.openai.com/api/docs/guides/tools-web-search) and [strict function tools](https://developers.openai.com/api/docs/guides/function-calling).
 
+## Company-specific industry briefings
+
+Open **Business profile > Customize industry news** to select the company's operating markets, activities and planning priorities. Settings belong to the registered business and persist across sign-ins. Industry defaults are explicitly labelled until confirmed. These preferences do not change the approved legal identity or permissions.
+
+Choose **Ask for an industry briefing**, or ask: **Show current news for my industry and explain what our company should do next based on our business activities and priorities.** The research query contains curated sector/market/activity labels, while the advisory step separately uses the signed-in company's planning context. A logistics company can receive carrier-route and customs checks; a technology company receives cloud-continuity and vendor-security checks. The card displays which company and settings were used. Industry web searches and returned citations are restricted to curated government, regulator and relevant company-source domains for the selected profile. Sector actions are bounded by that profile, and the model must cite retrieved summaries for its concerns.
+
+A rejected structured advisory can receive one bounded model correction using the unchanged retrieved sources; it never triggers another search or bypasses validation. The AI audit metadata records the number of validation attempts. These are conditional operating considerations, not proof that a company was directly affected. No current event, sanction, risk score or company verdict is seeded. Missing news remains a coverage gap; source links, dates and independent review remain necessary. Fictional business names are not submitted as real-company news queries.
+
+Eight separate customer logins with operating/reserve accounts and recorded fictional activity are available in the [Neon testing guide](../data/testing/neon/README.md#industry-business-demo-accounts). Setup is `npm run db:migrate` followed by `npm run demo:industries`, using matching private runtime/migration connections. Reruns preserve changed passwords, saved preferences and existing receipts/balances. A collision with an unrelated identity or conflicting receipt rolls back setup.
+
 ## Private and public company analysis
 
 Private analysis reads only the signed-in operator's submitted business name, industry, country, legal form, application status and owned completed activity. It excludes registered addresses, registration identifiers and other operators' profiles. Submitted details are not independently verified.

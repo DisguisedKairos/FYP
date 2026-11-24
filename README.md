@@ -1,6 +1,6 @@
 # Green Link Digital Bank - C300 FYP
 
-**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.11.4**
+**AI-Enabled Cloud-Native Digital Banking Platform - Version 2.12.0**
 
 Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **OpenAI API**. Sample funds, business checks and bill settlement are educational project flows.
 
@@ -58,6 +58,14 @@ All ten Neon test identities initially share the password in the Neon testing gu
 **Original native database only:** `data/testing/README.md`, `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md` contain the retained native database credentials. Their passwords do not work on Neon. The original `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` users are not present in the current Neon database; use the business tester for customer banking or the staff/reviewer tester for bank operations.
 
 For a new Neon development database, `npm run test:accounts:neon` prepares synthetic test identities with the app and configured AI/scoring services running. Use `npm run test:accounts` only when configured for native PostgreSQL. Rerunning either setup preserves changed passwords, MFA and existing banking records. Follow the [feature-testing walkthrough](docs/feature-testing.md) for each use case. Passwords cannot be recovered from PostgreSQL hashes; this documentation update does not reset any account.
+
+## Industry business demo accounts
+
+Eight fictional businesses have separate customer logins, operating/reserve accounts and monthly sample activity across logistics, technology, manufacturing, wholesale trade, hospitality, construction, healthcare and energy. See the [login table and walkthrough](data/testing/neon/README.md#industry-business-demo-accounts).
+
+In **Business profile > Customize industry news**, choose the company's operating markets, activities and priorities. Then click **Ask for an industry briefing**. The assistant retrieves real industry news, explains its conditional relevance to that business and offers sector-specific next checks with source links. Saved preferences are private to that business. Fictional company names are excluded from industry search queries, and news cannot authorize payments or create staff cases.
+
+Prepare these optional accounts with `npm run db:migrate` followed by `npm run demo:industries`. Reruns preserve changed passwords, preferences and banking records. Details: [company-specific briefings](docs/assistant-insights.md#company-specific-industry-briefings).
 
 ## AI evaluation audit
 
@@ -146,7 +154,7 @@ npm run package
 npm run package:verify
 ~~~
 
-The source archive is releases/greenlink-digital-bank-2.11.4.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
+The source archive is releases/greenlink-digital-bank-2.12.0.zip, with a SHA-256 companion and file manifest. It excludes secrets, local environments, database files, installed dependencies and model weights.
 
 See [banking requirements and security controls](docs/requirements.md), [banking agents and chat](docs/banking-agents.md), [fraud scoring contract](docs/fraud-model.md), [AI verification and limits](docs/ai-evaluation.md), [financial controls](docs/financial-controls.md), [APIs](docs/api.md) and [developer verification commands](tests/README.md).
 

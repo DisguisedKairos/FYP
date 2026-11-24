@@ -15,7 +15,7 @@ For the configured Neon environment, see [Neon PostgreSQL setup](neon.md). The o
 | Migration login | `greenlink_owner` |
 | Native server files | `.local/postgresql/` (ignored, not shipped) |
 | Persistent data / server log | `data/postgresql/` / `data/postgresql.log` (ignored) |
-| Schema | 31 tables, twelve checksum-verified migrations |
+| Schema | 32 tables, thirteen checksum-verified migrations |
 
 At verification on 25 October 2026, the existing 13 users, seven businesses, 13 accounts and 28 transactions were retained. Balances reconcile with stored opening balances and completed ledger entries. The retired non-PostgreSQL stores have been removed after verifying a PostgreSQL backup in `data/backups/`. The active cluster is `data/postgresql`. Existing business operators still need their own business profile and independent approval before financial writes.
 
@@ -115,6 +115,7 @@ erDiagram
 | `scheduled_payments`, `scheduled_payment_runs` | Recurrence, durable worker leases, retries and unique occurrence/receipt records |
 | `notification_outbox`, `notifications` | Atomic outgoing events and deduplicated in-app delivery/read status |
 | `audit_log` | Append-only application security/financial event records |
+| `business_advisory_profiles` | Owned industry planning preferences: selected operations, markets and priorities; versioned independently of registered identity |
 | `schema_migrations` | Installed migration names, normalized SQL checksums and timestamps |
 | `legacy_imports`, `legacy_service_records` | Import provenance and archived historical records, never current payment authorization |
 

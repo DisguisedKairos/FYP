@@ -58,8 +58,8 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   await f.owner.query('INSERT INTO schema_migrations(name,checksum,applied_at) VALUES($1,$2,$3)', [latest.name, latest.checksum, latest.applied_at]);
   let report = await inspectDatabase(f.app);
   assert.equal(report.ready, true);
-  assert.equal(report.tables, 31);
-  assert.equal(report.migrations.length, 12);
+  assert.equal(report.tables, 32);
+  assert.equal(report.migrations.length, 13);
   assert.deepEqual(report.discrepancies, []);
   const savedViews=require('../banking/dashboard-views'),operator=(await f.app.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
   const saved=await savedViews.save(f.app,operator,{definition:{scope:'all',company:'',period:{kind:'rolling',days:90}}});
@@ -67,6 +67,8 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   const configured=await savedViews.configure(f.app,operator,saved.view.id,{version:saved.view.version,refreshCadence:'weekly',presentation:{chartType:'line'}});assert.equal(configured.view.refreshCadence,'weekly');
   await savedViews.refresh(f.app,operator,saved.view.id);
   const prefs=require('../banking/assistant-preferences');assert.equal((await prefs.update(f.app,operator,{chartType:'table'})).chartType,'table');
+  const advice=require('../banking/business-advisory'),profile=await advice.read(f.app,operator);
+  const savedProfile=await advice.save(f.app,operator,{profileKey:profile.profileKey,version:profile.version,settings:profile.settings});assert.equal(savedProfile.version,1);
   await savedViews.remove(f.app,operator,saved.view.id);
 
   const denied = [

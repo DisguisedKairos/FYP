@@ -21,6 +21,7 @@ async function record(db,event){
     status:event.status,executed:event.executed!==false,startedAt:event.startedAt,durationMs:Math.max(0,Math.round(event.durationMs || 0)),
     toolNames:(event.toolNames || []).filter(v=>typeof v==='string' && /^[A-Za-z_][A-Za-z0-9_]{0,99}$/.test(v)).slice(0,4),
     errorCode:event.errorCode || null,detectorVersion:event.detectorVersion || null};
+  if(Number.isInteger(event.validationAttempts)&&event.validationAttempts>=1&&event.validationAttempts<=2)metadata.validationAttempts=event.validationAttempts;
   for(const field of ['modelIdentitySha256','promptSha256'])if(/^[a-f0-9]{64}$/.test(event[field] || ''))metadata[field]=event[field];
   for(const field of ['responseId','resolvedModel'])if(typeof event[field]==='string' && /^[A-Za-z0-9._-]{1,150}$/.test(event[field]))metadata[field]=event[field];
   await db.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata,created_at) VALUES($1,$2,'ai.model_call',$3,$4)",

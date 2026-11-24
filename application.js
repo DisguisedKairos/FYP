@@ -15,6 +15,7 @@ const dashboardViews = require('./banking/dashboard-views');
 const assistantPreferences=require('./banking/assistant-preferences');
 const workflows = require('./banking/workflows');
 const businesses = require('./banking/business');
+const businessAdvisory = require('./banking/business-advisory');
 const { createAgents } = require('./banking/agents');
 const { createRiskClient } = require('./banking/risk');
 const fraudCases = require('./banking/fraud-cases');
@@ -97,6 +98,8 @@ async function createApplication(options = {}) {
   const financialOptions = req => ({ riskClient, now, authorize: authorizeFor(req) });
   const validateSessionFor = req => executor => auth.validateSession(req,req.banking.user,executor);
   route('get','/api/business',async req=>({business:await businesses.own(db,req.banking.user)}));
+  route('get','/api/business/advisory-profile',async req=>businessAdvisory.read(db,req.banking.user));
+  route('post','/api/business/advisory-profile',async req=>businessAdvisory.save(db,req.banking.user,req.body,{now}));
   route('post','/api/business/profile',async req=>({business:await businesses.submit(db,req.banking.user,req.body,financialOptions(req))}));
   route('get','/api/business/applications',async req=>({applications:await businesses.applications(db,req.banking.user,{status:req.query.status})}));
   route('post','/api/business/applications/:id/review',async req=>({business:await businesses.review(db,req.banking.user,req.params.id,req.body,financialOptions(req))}));

@@ -1,3 +1,4 @@
+import {openBusinessAdvisory,submitBusinessAdvisory,cancelBusinessAdvisory} from './js/business-advisory.js';
 import {customDashboardPage,loadCustomDashboard,cancelCustomDashboard,customDashboardControl,submitCustomSettings,submitAssistantPreferences} from './js/custom-dashboard.js';
 import {loadFunding,cancelFunding} from './js/funding.js';
 import {financeReportControl} from './js/finance-reports.js';
@@ -16,7 +17,7 @@ import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview 
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
 import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,cancelBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
 
-Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelCustomDashboard(); cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelBusinessAdvisory(); cancelCustomDashboard(); cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
 Object.assign(extraViews,{ aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
 ui.loadAgents=loadAgents;
@@ -86,6 +87,7 @@ document.addEventListener('submit',async event => {
       case 'agent-fraud-form':
       case 'agent-simulation-form': await submitAgent(form); break;
       case 'business-profile-form': await submitBusiness(form); break;
+      case 'business-advisory-form': await submitBusinessAdvisory(form); break;
       case 'business-review-form': await submitBusinessReview(form); break;
       case 'close-account-form': await submitAccount(form,true); break;
       case 'money-form': reviewMoney(form); break;
@@ -148,6 +150,8 @@ document.addEventListener('click',async event => {
       case 'ai-audit-download': downloadAiAudit(); break;
       case 'auth-switch': switchAuth(); break;
       case 'refresh-business-applications': await loadBusinessApplications(); break;
+      case 'business-advisory': await openBusinessAdvisory(); break;
+      case 'business-news': if(!state.assistant?.open)toggleAssistant(); await sendAssistant('Show current news for my industry and explain what our company should do next based on our business activities and priorities.'); break;
       case 'assistant-toggle': toggleAssistant(); break;
       case 'assistant-close': closeAssistant(); break;
       case 'funding-open': if(!state.assistant?.open)toggleAssistant(); document.querySelector('#automatic-funding')?.focus(); break;
