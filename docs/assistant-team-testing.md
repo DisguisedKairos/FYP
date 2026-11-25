@@ -36,7 +36,9 @@ The fields support multiline text and pasted evidence. Longer responses can expa
 
 ## Book accounts and test slots
 
-Use the exact identities requested in each case. Business means business-tester@greenlink.demo, Recipient means recipient-tester@greenlink.demo, Staff means staff-tester@greenlink.demo, Maker means maker-tester@greenlink.demo and Reviewer means reviewer-tester@greenlink.demo. Sector means sector-tester@greenlink.demo. The login guide supplies the other restricted identities and current documented credentials. A demo role label does not grant additional permissions.
+For the current hosted roster, Business means business-tester@greenlink.demo, Recipient means recipient-tester@greenlink.demo, and both Staff and Reviewer mean reviewer-tester@greenlink.demo. Maker means maker-tester@greenlink.demo and Sector means sector-tester@greenlink.demo. Use separate Maker/Reviewer browser sessions and book Staff/Reviewer work sequentially because those labels now share one login. The [Neon login guide](../data/testing/neon/README.md) lists all **16 usable demo logins: seven feature testers, one sector tester and all eight industry businesses**. A demo role label does not grant additional permissions.
+
+The hosted staff, profile and empty tester logins are retired. Missing-profile and zero-balance edge fixtures are available only in isolated tests; record cases needing those fixtures as Blocked until the isolated setup is available. The three user-created logins are also retired. The question bank, historical packets and Word forms retain their original wording; apply this current identity mapping when running them. [Retirement instructions](feature-testing.md#retire-an-existing-login) explain how sign-in and sessions are disabled while banking and audit records remain.
 
 | Slot | Owner | Work and handoff |
 | --- | --- | --- |

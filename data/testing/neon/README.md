@@ -2,7 +2,7 @@
 
 Open **http://localhost:3000**. The running application uses Neon PostgreSQL (`neondb`). Use the full email as your username and copy the matching password below without Markdown backticks or extra spaces.
 
-Verified on 29 October 2026: every password matched the current Neon database and all ten accounts signed in successfully through the running login API, including the MFA account with an authenticator code.
+Current roster, **26 November 2026**: **16 usable demo logins** consisting of the seven feature testers below, one [sector-portfolio tester](../../../docs/counterparty-risk.md) and all eight industry businesses listed later in this guide. The initial ten-feature-login set was verified through the login API on 29 October 2026, including MFA; that historical check predates account retirement.
 
 | Login email | Password | Permission role | What to test |
 | --- | --- | --- | --- |
@@ -10,16 +10,15 @@ Verified on 29 October 2026: every password matched the current Neon database an
 | `recipient-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Receive transfers and verify business/account isolation |
 | `pending-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Pending onboarding and blocked financial actions |
 | `rejected-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Rejected application, review explanation and resubmission |
-| `profile-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Existing operator completing a missing registered-business profile |
-| `empty-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Zero balance, insufficient funds and failed scheduled instruction |
-| `staff-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Bank operations, business approvals, fraud rules and monitoring |
-| `reviewer-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Independent approve/reject decisions and fraud-rule audit |
+| `reviewer-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Bank operations, onboarding, independent decisions and fraud-rule audit |
 | `maker-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Administrator payment maker; own held payment cannot be self-approved |
 | `mfa-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Authenticator login, recovery codes and profile security |
 
 Only `mfa-tester@greenlink.demo` also requires an authenticator code. Run `npm run test:accounts:otp:neon` for a current code. A successful code cannot be reused; wait for the next 30-second code. Private authenticator setup and recovery details are in [FEATURE-TESTING.md](FEATURE-TESTING.md).
 
-The original native database has different passwords. Its `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` accounts are not in this Neon database. Use the business tester for customer banking or the staff/reviewer tester for bank operations.
+The original native database has different passwords. Its `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` accounts are not in this Neon database. Use the business tester for customer banking or the reviewer tester for bank operations.
+
+`staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired. Use the reviewer for staff workflows. Missing-profile and zero-balance edge fixtures are available only in isolated tests. The three user-created logins are also retired. Retirement disables sign-in and revokes sessions while retaining financial and audit records; [operator preview/apply instructions](../../../docs/feature-testing.md#retire-an-existing-login) explain the process.
 
 If your browser fills an older saved password, replace it with the password above. Changed passwords remain changed: this guide records the verified credentials at the time above and does not reset accounts. Repeated failed logins are limited for up to 15 minutes.
 
@@ -28,7 +27,7 @@ This file contains shared synthetic demo credentials for project testing. Rotate
 
 ## Industry business demo accounts
 
-These eight additional **customer** identities represent fictional Singapore businesses in real industries. They use real public industry research through the configured OpenAI provider; their names, banking activity and funds are educational fixtures. They are separate from the ten original feature-testing identities above.
+These eight additional **customer** identities represent fictional Singapore businesses in real industries. They use real public industry research through the configured OpenAI provider; their names, banking activity and funds are educational fixtures. They are separate from the seven active feature-testing identities above and the sector-portfolio tester. All eight industry logins remain active.
 
 Verified on **24 November 2026** through the Express login/profile/dashboard APIs using the restricted Neon runtime connection. All eight sign-ins succeeded, and each business has two owned savings accounts.
 

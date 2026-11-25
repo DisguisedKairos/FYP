@@ -34,11 +34,11 @@ There are two permission roles: customer (authorized business operator) and admi
 
 ## Test accounts and passwords
 
-For assistant testing, use the [28 use cases and 160 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases). Each case includes its role, setup and expected result. The [three-person assignment](docs/assistant-team-testing.md) provides shareable packets of 54, 55 and 55 cases, covering the full catalogue plus four recent regressions, with expected outcomes and blank result fields. Downloadable Word response/error forms are linked in each packet and the assignment table.
+For assistant testing, use the [28 use cases and 160 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases). Each case includes its role, setup and expected result. The [three-person assignment](docs/assistant-team-testing.md) provides shareable packets of 54, 55 and 55 cases, covering the full catalogue plus four recent regressions, with expected outcomes and blank result fields. Downloadable Word response/error forms are linked in each packet and the assignment table. Apply the [current hosted identity mapping](docs/assistant-team-testing.md#book-accounts-and-test-slots) when an older question bank or packet refers to Staff.
 
 Open **http://localhost:3000**. The current workspace uses **Neon PostgreSQL**, so use the verified email/password table in [the Neon testing guide](data/testing/neon/README.md). The detailed Neon walkthrough and MFA details are in `data/testing/neon/FEATURE-TESTING.md`; its JSON credential file is `data/testing/neon/feature-accounts.json` (the `password` field). These synthetic demo login files are included in Git for project testing and excluded from release packages. Anyone with repository access can use these demo credentials; rotate or remove the demo accounts before public deployment.
 
-Use the full email as the username. There are two permission roles: `customer` and `admin`. The separate staff, reviewer and maker identities exercise different workflows under the administrator role.
+Use the full email as the username. There are two permission roles: `customer` and `admin`. The reviewer covers bank operations and independent review; the maker demonstrates administrator payment ownership and self-approval denial.
 
 | Login email | Permission role | What to test |
 | --- | --- | --- |
@@ -46,18 +46,17 @@ Use the full email as the username. There are two permission roles: `customer` a
 | `recipient-tester@greenlink.demo` | `customer` | Receive transfers and verify business/account isolation |
 | `pending-tester@greenlink.demo` | `customer` | Pending onboarding and blocked financial actions |
 | `rejected-tester@greenlink.demo` | `customer` | Rejected application, review explanation and resubmission |
-| `profile-tester@greenlink.demo` | `customer` | Existing operator completing a missing registered-business profile |
-| `empty-tester@greenlink.demo` | `customer` | Zero balance, insufficient funds and failed scheduled instruction |
-| `staff-tester@greenlink.demo` | `admin` | Bank operations, business approvals, fraud rules and monitoring |
-| `reviewer-tester@greenlink.demo` | `admin` | Independent approve/reject decisions and fraud-rule audit |
+| `reviewer-tester@greenlink.demo` | `admin` | Bank operations, onboarding, independent decisions and fraud-rule audit |
 | `maker-tester@greenlink.demo` | `admin` | Administrator payment maker; own held payment cannot be self-approved |
 | `mfa-tester@greenlink.demo` | `customer` | Authenticator login, recovery codes and profile security |
 
-All ten Neon test identities initially share the password in the Neon testing guide. `mfa-tester@greenlink.demo` additionally requires an authenticator code or unused recovery code; run `npm run test:accounts:otp:neon` for a current code. Use separate browser profiles to test independent maker/reviewer decisions. Replace any older password saved by your browser.
+All seven active Neon feature identities initially share the password in the Neon testing guide. `mfa-tester@greenlink.demo` additionally requires an authenticator code or unused recovery code; run `npm run test:accounts:otp:neon` for a current code. Use separate browser profiles to test independent maker/reviewer decisions. Replace any older password saved by your browser.
 
-**Original native database only:** `data/testing/README.md`, `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md` contain the retained native database credentials. Their passwords do not work on Neon. The original `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` users are not present in the current Neon database; use the business tester for customer banking or the staff/reviewer tester for bank operations.
+**Original native database only:** `data/testing/README.md`, `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md` contain the retained native database credentials. Their passwords do not work on Neon. The original `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` users are not present in the current Neon database; use the business tester for customer banking or the reviewer tester for bank operations.
 
-For a new Neon development database, `npm run test:accounts:neon` prepares synthetic test identities with the app and configured AI/scoring services running. Use `npm run test:accounts` only when configured for native PostgreSQL. Rerunning either setup preserves changed passwords, MFA and existing banking records. Follow the [feature-testing walkthrough](docs/feature-testing.md) for each use case. Passwords cannot be recovered from PostgreSQL hashes; this documentation update does not reset any account.
+The current Neon roster has **16 usable demo logins: seven feature testers, one sector-portfolio tester and all eight industry businesses**. `staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired; their banking and audit records remain. Missing-profile and zero-balance edge fixtures remain available in isolated tests. The three user-created logins have also been retired. See [account retirement](docs/feature-testing.md#retire-an-existing-login) for the operator preview/apply command.
+
+For a new Neon development database, `npm run test:accounts:neon` prepares synthetic test identities with the app and configured AI/scoring services running. Use `npm run test:accounts` only when configured for native PostgreSQL. The full setup retains ten feature identities for fresh or isolated databases. Existing retired logins remain disabled on setup reruns; use the current Neon guide for the seven active feature logins. Setup preserves changed passwords, MFA and existing banking records. Follow the [feature-testing walkthrough](docs/feature-testing.md) for each use case. Passwords cannot be recovered from PostgreSQL hashes; this documentation update does not reset any account.
 
 ## Industry business demo accounts
 

@@ -15,6 +15,7 @@
     "package:verify": "node scripts/verify-package.js",
     "admin:grant": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/manage-admin.js",
     "admin:create": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/create-staff.js",
+    "accounts:retire": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/retire-accounts.js",
     "db:migrate": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin database/migrate.js",
     "demo:companies": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/seed-sector-companies.js",
     "db:seed": "node --env-file-if-exists=.env --env-file-if-exists=.env.database-admin scripts/seed-demo.js",

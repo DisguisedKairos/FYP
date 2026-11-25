@@ -1,10 +1,10 @@
 # Greenlink demo feature-testing logins
 
-Open http://localhost:3000. These are dedicated synthetic test identities. Original users, passwords, accounts and fraud settings are preserved.
+Open http://localhost:3000. These are the **seven active synthetic feature-testing identities** in the current Neon database. Together with the sector-portfolio tester and all eight industry businesses, there are **16 usable demo logins**. See the [current login guide](README.md) for the full roster. Banking records, audit history and retained credentials are preserved.
 
 Initial password for all ten new users: **GLTest-ljDD9JhfDfmi!a1**
 
-Changed passwords, approvals, review decisions and balances are retained when setup is repeated.
+Changed passwords, approvals, review decisions and balances are retained when setup is repeated. Retired credentials remain disabled. Full ten-login feature setup is intended for fresh or isolated databases; its verification includes identities retired from the current hosted roster.
 
 | Login email | Actual permission role | Business state | Operating account | Test purpose |
 | --- | --- | --- | --- | --- |
@@ -12,18 +12,17 @@ Changed passwords, approvals, review decisions and balances are retained when se
 | recipient-tester@greenlink.demo | customer | approved | 1088800201 | Receive transfers and verify business/account isolation |
 | pending-tester@greenlink.demo | customer | pending_review | 1088800301 | Pending onboarding and blocked financial actions |
 | rejected-tester@greenlink.demo | customer | rejected | 1088800401 | Rejected application, review explanation and resubmission |
-| profile-tester@greenlink.demo | customer | Missing profile | 1088800501 | Existing operator completing a missing registered-business profile |
-| empty-tester@greenlink.demo | customer | approved | 1088800601 | Zero balance, insufficient funds and failed scheduled instruction |
-| staff-tester@greenlink.demo | admin | Staff workspace | No deposit account | Bank operations, business approvals, fraud rules and monitoring |
-| reviewer-tester@greenlink.demo | admin | Staff workspace | No deposit account | Independent approve/reject decisions and fraud-rule audit |
+| reviewer-tester@greenlink.demo | admin | Staff workspace | No deposit account | Bank operations, onboarding, independent decisions and fraud-rule audit |
 | maker-tester@greenlink.demo | admin | approved | 1088800901 | Administrator payment maker; own held payment cannot be self-approved |
 | mfa-tester@greenlink.demo | customer | approved | 1088801001 | Authenticator login, recovery codes and profile security |
 
+`staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired. Use the reviewer for staff workflows. Missing-profile and zero-balance edge fixtures remain available only in isolated tests. The three user-created logins are also retired. Financial and audit records remain; retirement revokes sign-in and existing sessions.
+
 ## Feature walkthrough
 
-Follow docs/feature-testing.md for every screen and workflow. Use different browser profiles/private windows for maker and reviewer. Business operating account: 1088800101; reserve: 1088800102; recipient: 1088800201.
+Follow the [feature walkthrough](../../../docs/feature-testing.md) for every screen and workflow. Use different browser profiles/private windows for maker and reviewer. Business operating account: 1088800101; reserve: 1088800102; recipient: 1088800201.
 
-Prepared payment outcomes:
+Historical prepared payment outcomes (retained for reference):
 
 - supplier-payment: completed, AI score 20, combined score 20; receipt 3b60a73b-582a-5c41-a736-0fd5cddda9b5
 - utility-bill: completed, AI score 25, combined score 25; receipt d49279e6-8fa8-5501-ae28-7e2fcf27a9bb
@@ -34,7 +33,7 @@ Prepared payment outcomes:
 - daily-limit-blocked: rejected, AI score 68, combined score 95; receipt 69e8c950-b18e-5900-a3fb-87d3a06cc596
 - maker-awaiting-independent-review: pending_review, AI score 25, combined score 70; receipt fd4d227a-ff23-5276-a877-6ac74373a675
 
-Prepared schedules:
+Historical prepared schedules (retained for reference; the insufficient-funds fixture belongs to the retired empty tester):
 
 - once: active; instruction be90a96a-e204-4d54-b7ea-a9667f0b122d
 - weekly: active; instruction 576d5100-674f-40b7-a6ec-4dce48ef8082
@@ -65,6 +64,6 @@ Unused initial recovery codes (one use each):
 
 ## Verification
 
-10 sign-ins verified through real Express/PostgreSQL. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Sample financial writes were scored by the configured private Python service; original policy values were retained.
+Before retirement, 10 sign-ins were verified through real Express/PostgreSQL. The current hosted roster has seven active feature logins; this historical verification does not imply the three retired logins remain usable. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Sample financial writes were scored by the configured private Python service; original policy values were retained.
 
 This file and feature-accounts.json contain shared synthetic demo credentials. Rotate or remove demo accounts before public deployment.

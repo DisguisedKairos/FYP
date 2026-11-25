@@ -3,13 +3,11 @@
 For copy-and-paste assistant questions, use cases and expected outcomes, see [GLDB Assistant manual acceptance tests](assistant-testing.md).
 
 
-For the current Neon-backed app, open the verified demo login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The remaining walkthrough applies to both environments. See [Neon setup](neon.md).
+For the current Neon-backed app, open the verified demo login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The walkthrough uses active Neon identities; the separate native setup retains its original inventory. See [Neon setup](neon.md).
 
-## Original native setup
+## Current Neon logins
 
-Run `npm run test:accounts` explicitly with the native local PostgreSQL configuration and the Python scorer available (`npm start`). It adds ten dedicated test logins to the native app at `http://localhost:3000`. The Docker app on port 8080 and the isolated fraud demo on port 3001 have their own databases and logins.
-
-The command generates one random initial password, prints it once, and stores it in `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md`. The demo guide also contains the MFA account's authenticator secret and unused recovery codes. The selected synthetic demo login files are included in Git for project testing. Anyone with repository access can use their passwords and MFA material. Rotate or remove demo accounts before public deployment. Application secrets, PostgreSQL credentials and other runtime data remain excluded from Git; source archives and container images exclude the entire data directory.
+The current hosted roster has **16 usable demo logins: seven feature testers below, one sector-portfolio tester and all eight industry businesses**. See the [Neon login guide](../data/testing/neon/README.md) for the full roster. Use the reviewer for staff workflows.
 
 | Login email | Actual permission role | Starting use case |
 | --- | --- | --- |
@@ -17,14 +15,19 @@ The command generates one random initial password, prints it once, and stores it
 | `recipient-tester@greenlink.demo` | `customer` | Approved recipient business, incoming transfers and record isolation |
 | `pending-tester@greenlink.demo` | `customer` | Business application awaiting independent approval |
 | `rejected-tester@greenlink.demo` | `customer` | Rejected application with explanation; correction and resubmission |
-| `profile-tester@greenlink.demo` | `customer` | Existing operator without a business profile; complete its company details |
-| `empty-tester@greenlink.demo` | `customer` | Approved business with zero funds; insufficient-funds handling |
-| `staff-tester@greenlink.demo` | `admin` | Dedicated bank operations workspace, onboarding and fraud policies |
-| `reviewer-tester@greenlink.demo` | `admin` | Separate independent reviewer for held payments |
+| `reviewer-tester@greenlink.demo` | `admin` | Bank operations, business onboarding and independent payment review |
 | `maker-tester@greenlink.demo` | `admin` | Combined business/admin test identity to demonstrate self-approval denial |
 | `mfa-tester@greenlink.demo` | `customer` | Approved business with enrolled authenticator and recovery login |
 
-There are **two permission roles**, customer and administrator. Staff, reviewer and maker are separate test identities with the existing administrator permissions; they are not invented extra roles. The maker is an explicit combined-access test case. All customer accounts represent registered businesses or the existing-operator business-onboarding flow.
+There are **two permission roles**, customer and administrator. Reviewer and maker are separate administrator identities; the maker is an explicit combined-access test case. `staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired from the current Neon roster. Missing-profile and zero-balance edge fixtures remain available only in isolated tests. The three user-created logins are also retired. Banking and audit records remain.
+
+## Original native setup
+
+Run `npm run test:accounts` explicitly with the native local PostgreSQL configuration and the Python scorer available (`npm start`). It adds ten dedicated test logins to the native app at `http://localhost:3000`. The Docker app on port 8080 and the isolated fraud demo on port 3001 have their own databases and logins.
+
+The command generates one random initial password, prints it once, and stores it in `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md`. The demo guide also contains the MFA account's authenticator secret and unused recovery codes. The selected synthetic demo login files are included in Git for project testing. Anyone with repository access can use their passwords and MFA material. Rotate or remove demo accounts before public deployment. Application secrets, PostgreSQL credentials and other runtime data remain excluded from Git; source archives and container images exclude the entire data directory.
+
+The native database remains separate from the current Neon roster; retain its original credentials and login inventory. The full ten-feature-login fixture also remains available for fresh or isolated test databases.
 
 ## Business banking and customer experience
 
@@ -33,17 +36,17 @@ There are **two permission roles**, customer and administrator. Staff, reviewer 
 3. Transfer SGD 10 to recipient account **1088800201**. Move SGD 5 to your own reserve **1088800102**. Review the details and authorize with the current test password. Sign in as the recipient in another browser profile to see the matching incoming receipt.
 4. Pay a small PUB, SP Services or Singtel bill with a sample reference. Billers simulate settlement; the local payment and notification workflows are implemented.
 5. Open Activity and inspect the prepared completed, held and rejected transactions. Search **Feature tour**, filter by status/account/date, export filtered CSV and print/save an account statement as PDF. Statements reconcile opening funds and completed ledger entries; pending/rejected rows never reduce the settled balance.
-6. Open Scheduled payments. Examples include active one-time, weekly and monthly instructions, a cancelled instruction, an executed once-only bill and a failed zero-balance bill. Future sample instructions are initially seven or more days away. Create your own instruction a few minutes ahead to watch the normal server worker execute it, or cancel an active sample.
+6. Open Scheduled payments. Business examples include active one-time, weekly and monthly instructions, a cancelled instruction and an executed once-only bill. Future sample instructions are initially seven or more days away. Create your own instruction a few minutes ahead to watch the normal server worker execute it, or cancel an active sample. The failed zero-balance fixture belongs to the retired empty tester and is exercised only in isolated tests.
 7. Open Notifications. Onboarding, payment, review and schedule examples generate real persisted in-app alerts. Mark one or all read and follow a receipt link.
 8. Ask the private assistant for balances, recent transactions, scheduled payments or an explanation of a flagged payment. Request a small transfer/payment draft and finish through the ordinary review form. Chat never executes the financial action. Keep passwords and authenticator codes out of chat.
 
 ## Onboarding and staff workflows
 
-1. The pending tester can view its pending application but cannot move funds or change savings accounts. Use a different browser profile to sign in as the staff tester. Open business applications, inspect the sample company, confirm sample verification and approve with a reason and current password. Refresh the pending user's application to see approval.
+1. The pending tester can view its pending application but cannot move funds or change savings accounts. Use a different browser profile to sign in as the reviewer tester. Open business applications, inspect the sample company, confirm sample verification and approve with a reason and current password. Refresh the pending user's application to see approval.
 2. The rejected tester sees the saved rejection reason. Correct its details and resubmit. It returns to pending review and requires another independent staff decision.
-3. The profile tester starts without company details. Submit a registered-business profile, then approve it independently. It starts with zero sample funds.
-4. The empty tester can see its approved business and zero balance. A payment above its available funds is refused; the prepared failed schedule records the insufficient-funds reason.
-5. Dedicated staff/reviewer users have no fabricated businesses or deposit accounts. Their interface opens the bank operations workspace.
+3. The reviewer has no fabricated business or deposit accounts. Its interface opens the bank operations workspace.
+
+Missing-profile registration and the approved zero-balance/failed-schedule cases remain covered by the full isolated feature fixture. The retired hosted profile and empty testers cannot sign in.
 
 ## Fraud rules, AI scores and independent authorization
 
@@ -51,7 +54,7 @@ The feature setup uses the real configured Python scorer and the existing rule p
 
 1. Sign in as the reviewer tester. In Fraud monitoring, open **high-value-awaiting-review** or **maker-awaiting-independent-review**. Inspect AI score, combined score, model explanation, matched controls and recorded authorization. Approve one with a verified sample reason; reject another. Refresh the business sender to see the final receipt and balance.
 2. The maker tester can see its held payment in Activity. Its own transaction is excluded from its review queue, and a direct self-approval request returns 403. The fixture has verified this guard. A different administrator can review it.
-3. As staff/reviewer, open Fraud rules. For a small rule-management demonstration, record the initial threshold, change the high-value threshold from SGD 10,000 to SGD 9,500, authorize and inspect the audit entry. Restore the original threshold afterward and inspect the second audit event. Rule edits affect the shared local policy; the fixture itself does not edit it. Ordinary customer accounts cannot use these administrator APIs.
+3. As the reviewer, open Fraud rules. For a small rule-management demonstration, record the initial threshold, change the high-value threshold from SGD 10,000 to SGD 9,500, authorize and inspect the audit entry. Restore the original threshold afterward and inspect the second audit event. Rule edits affect the shared local policy; the fixture itself does not edit it. Ordinary customer accounts cannot use these administrator APIs.
 4. Use npm run demo:agents for actual configured AI scoring and all five analysis features in a disposable schema. Old preset fraud simulations have been removed.
 
 ## Login security, MFA and sessions
@@ -65,8 +68,24 @@ The feature setup uses the real configured Python scorer and the existing rule p
 
 ## Repeatability and evidence
 
-Run `npm run test:accounts` again to locate the private guide. It recognizes its own audited fixture, checks identity ownership and leaves modified passwords, balances, approvals, reviews and MFA settings intact. It refuses a reserved email, registration or account-number collision instead of adopting an existing customer. A failed partial run can resume the idempotent examples. Financial writes retain fixed request IDs and actual password authorization.
+Use the current Neon guide for the hosted roster. Run `npm run test:accounts` only with the original native configuration, or `npm run test:accounts:neon` for a fresh or isolated Neon fixture. The full verification still expects all ten feature logins and is not a check of the retired hosted roster. It recognizes its own audited fixture, checks identity ownership and leaves modified passwords, balances, approvals, reviews and MFA settings intact. It refuses a reserved email, registration or account-number collision instead of adopting an existing customer. A failed partial run can resume the idempotent examples. Financial writes retain fixed request IDs and actual password authorization.
 
 Initial deposits are explicitly labelled synthetic fixture credits. New payment examples pass through current financial rules and real configured scoring; MFA is enrolled through Express, with encrypted secrets and hashed recovery codes in PostgreSQL. The script verifies original users, passwords, roles, MFA records, accounts, transactions, businesses and fraud settings match their pre-run snapshot, and checks that every account balance reconciles. Existing sessions are allowed to refresh normally.
 
 The command is explicit local-development tooling, never called by `npm start`, database migrations, normal seeding, or CI/container startup. `tests/dft-feature-accounts.test.js` checks collision refusal, preservation, replay, onboarding, schedules, maker/checker controls, MFA and ownership against isolated PostgreSQL fixtures; those unit/integration fixtures use a controlled model, while the live setup uses the configured Python service.
+
+## Retire an existing login
+
+Run the operator command against the intended database with explicit user IDs. Without `--apply`, it previews the selected identities and changes no records:
+
+```sh
+npm run accounts:retire -- --ids <explicit IDs>
+```
+
+After reviewing that preview, append `--apply` to disable those logins:
+
+```sh
+npm run accounts:retire -- --ids <explicit IDs> --apply
+```
+
+Retirement prefixes the stored password hash with `!retired!`, which the existing password verifier rejects, increments the authentication version and revokes existing sessions in one operator transaction. It preserves businesses, accounts, balances, transactions and audit history. It requires no schema, authentication-code or HTTP changes. Existing fixture markers prevent setup reruns from recreating identities or resetting retired credentials; full edge-case coverage remains in isolated test fixtures.
