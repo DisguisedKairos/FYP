@@ -18,6 +18,34 @@ async function visit(page,base,route){
   }
   await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');
 }
+test('Popup accepts value-free security help, blocks appended credentials and opens permitted guidance screens',async t=>{
+  const {f,page}=await open(t,390,'jamie@greenlink.demo');
+  await visit(page,f.baseUrl,'/assistant');
+  await page.evaluate(`window.guidanceRequests=0;const original=window.fetch;window.fetch=(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))window.guidanceRequests++;return original(...args);};`);
+  async function ask(message){
+    const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');
+    await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');
+    await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+' && document.querySelector("#assistant-form").getAttribute("aria-busy")==="false"');
+    return page.evaluate('document.querySelector(".from-assistant:last-child").textContent');
+  }
+  assert.match(await ask('How do I change my password?'),/Profile & security/);
+  assert.equal(await page.evaluate('window.guidanceRequests'),1);
+  await page.fill('#assistant-message','How do I change my password? My OTP is 123456');
+  await page.click('#assistant-form button[type=submit]');
+  await page.waitFor('document.querySelector("#assistant-error").textContent.length>0');
+  assert.equal(await page.evaluate('window.guidanceRequests'),1,'Credential values must never reach the assistant endpoint');
+  assert.match(await ask('Open Notifications, follow owned receipt, mark read and refresh.'),/Open Notifications/);
+  assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),1);
+  await page.click('.from-assistant:last-child [data-assistant-action]');
+  await page.waitFor('location.pathname==="/notifications"');
+  await visit(page,f.baseUrl,'/assistant');
+  assert.match(await ask('How do I approve a held payment?'),/independent bank reviewer/);
+  await page.click('.from-assistant:last-child [data-assistant-action]');
+  await page.waitFor('location.pathname==="/activity"');
+  assert.equal(await page.evaluate('!!document.querySelector("[data-nav=fraud],[data-nav=rules],[data-nav=aiAudit]")'),false);
+  assert.deepEqual(page.errors,[]);
+});
+
 test('Business users project liquidity, inspect reconciliation and build a multi-turn draft on mobile',async t=>{
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
   await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');

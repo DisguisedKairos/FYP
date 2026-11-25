@@ -36,6 +36,18 @@ const cases = [
   ['incomplete draft claimed ready', 'The draft is ready [E1].', context(null, [{ tool: 'prepare_payment_draft', value: { complete: false } }]), true],
 ];
 for (const [name, reply, c, blocked] of cases) test('Assistant evaluation: ' + name, () => assert.equal(Boolean(narrativeIssue(reply, c.report, c.options)), blocked));
+
+test('Explicit no-execution clauses are accepted without masking actual or qualified execution claims',()=>{
+ const options={evidence,requireCitations:true};
+ for(const reply of ['The draft awaits authorization; no payment was sent. Verify its recipient [E1].','No transfer has been completed [E1].','No payment was sent, and the form remains a draft [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['The payment was sent [E1].','I have approved the transfer [E1].','No payment was sent, but I approved the transfer [E1].','No transfer has been completed; the bill was paid [E1].','No payment was sent until yesterday [E1].'])assert.match(narrativeIssue(reply,null,options),/outside its authority/,reply);
+});
+
+test('Funding uncertainty accepts explicit negation while actual guarantees remain blocked',()=>{
+ const options={evidence,requireCitations:true};
+ for(const reply of ['This is not authorization or a guarantee [E1].','This is neither payment authorization nor a guarantee [E1].','There is no guarantee of funding [E1].','A projection comes without any guarantee [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['This guarantees funding [E1].','There is no guarantee, but I guarantee the payment will succeed [E1].','This is not authorization or a guarantee; your payment is guaranteed [E1].'])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
+});
 test('Assistant evaluation requires relevant tools for combined banking questions', () => {
   assert.ok(relevanceIssue('Check balances and cover upcoming payments', [{ tool: 'get_accounts' }]));
   assert.equal(relevanceIssue('Check balances and cover upcoming payments', [{ tool: 'project_liquidity' }]), null);

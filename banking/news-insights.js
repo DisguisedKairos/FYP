@@ -32,6 +32,27 @@ function prepare(reports,{now=Date.now,gaps=[],businessContext=null}={}){
  if(!parts.length)throw new HttpError(409,'No cited public news is available to analyze. Retrieve news first; unavailable searches cannot be replaced with invented advice.');
  return {checkedAt:new Date(now()).toISOString(),parts,omittedParts,coverageGaps:gaps.filter(g=>['counterparty_sanctions','counterparty_news'].includes(g)).slice(0,2),allowedActions:{...BASE_ACTIONS,...(actionOptions||{})},businessContext:businessContext?companyContext:null,scope:'Interpretation of retrieved public summaries only. Source dates and legal-entity identity need independent checks. Advisory flags appear only in chat; no payment, fraud score or staff case changes.'};
 }
+function evidenceChoices(input){
+ return input.parts.flatMap(part=>{
+  if(typeof part?.text!=='string'||typeof part.partId!=='string')return [];
+  const chunks=[];
+  // Strict function-schema enum literals cannot contain quotes or newlines.
+  // Split on those boundaries without rewriting any selected source excerpt.
+  for(const text of part.text.split(/["'\\\x00-\x1f\x7f\u2028\u2029]/))for(let start=0;start<text.length;){
+   let end=Math.min(start+220,text.length);
+   if(end<text.length){
+    const space=text.lastIndexOf(' ',end);if(space>start+100)end=space;
+    const last=text.charCodeAt(end-1);if(last>=0xd800&&last<=0xdbff)end--;
+   }
+   const quote=text.slice(start,end).trim();
+   if(Array.from(normalize(quote)).length>=12)chunks.push({partId:part.partId,quote});
+   start=end;
+  }
+  const indexes=chunks.length<=4?chunks.map((_,i)=>i):[0,Math.floor(chunks.length/3),Math.floor(2*chunks.length/3),chunks.length-1];
+  return [...new Set(indexes)].map(i=>chunks[i]);
+ });
+}
+
 function validate(reply,input){
  let issueDetail='Use the exact response schema, permitted action codes and exact evidence quotes from their selected source parts.';
  const invalid=detail=>Object.assign(new HttpError(503,'The news advice could not be verified. Retry with fresh sourced news; no banking action was taken.'),{code:'NEWS_ADVISORY_INVALID',validationIssue:detail||issueDetail});
@@ -55,4 +76,4 @@ function validate(reply,input){
  });
  return {status:'completed',checkedAt:input.checkedAt,businessContext:input.businessContext,summary:body.summary.trim(),insights,omittedParts:input.omittedParts,coverageGaps:input.coverageGaps,scope:input.scope,modelResponse:reply.modelResponse,actions:[],items:[]};
 }
-module.exports={requested,industryRequest,prepare,validate,SYSTEM,TOOL,ACTIONS};
+module.exports={requested,industryRequest,prepare,evidenceChoices,validate,SYSTEM,TOOL,ACTIONS};

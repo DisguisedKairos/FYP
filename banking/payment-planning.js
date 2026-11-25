@@ -15,7 +15,7 @@ const DEADLINE_PATTERN='(?:\\d{4}-\\d{2}(?:-\\d{2})?|(?:\\d{1,2}\\s+)?(?:'+MONTH
 const ALTERNATIVE_DEADLINES=new RegExp('(?:^|\\b(?:by|before|until|on|in|at)\\s+)'+DEADLINE_PATTERN+'\\b\\s*,?\\s*(?:or|and)\\s+(?:(?:by|before|until|on|in|at)\\s+)?'+DEADLINE_PATTERN+'\\b','i');
 function requested(message){
   const proposed=/\bSGD\s*\S|S\$|\$|\b(?:pay|payment to|transfer to|company|supplier|vendor)\b/i.test(message);
-  return proposed && /\b(?:afford|enough|sufficient|funding|cover|can (?:i|we|my business|the business) pay)\b/i.test(message)
+  return proposed && /\b(?:afford|enough|sufficient|funding|cover|can (?:i|we|my business|the business) pay|(?:i|we|my business|the business) can pay|able to pay)\b/i.test(message)
     && (/\b(?:inflow|outflow|cash.?flow|received|paid|by|before|until|this month|current month|next month|today|tomorrow|end of|month.end)\b|\b\d{4}-\d{2}/i.test(message) || new RegExp('\\b('+MONTH_PATTERN+')\\s+\\d{4}\\b','i').test(message));
 }
 function endOfMonth(year,month){return new Date(Date.UTC(year,month,0)).toISOString().slice(0,10);}

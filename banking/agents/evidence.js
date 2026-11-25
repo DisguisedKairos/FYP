@@ -7,7 +7,8 @@ function references(runId, results) {
 }
 function narrativeIssue(reply, report, { results = [], evidence = [], requireCitations = false } = {}) {
   const plain = reply.replace(/[*_`]/g, '');
-  if (/\b(?:I|we)\s+(?:have\s+)?(?:sent|executed|approved|rejected|cancelled|canceled|settled|debited|credited|changed the rule)\b|\b(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b/i.test(plain)) return 'An agent claimed an action outside its authority.';
+  const executionClaims=plain.replace(/\bno\s+(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[no execution]');
+  if (/\b(?:I|we)\s+(?:have\s+)?(?:sent|executed|approved|rejected|cancelled|canceled|settled|debited|credited|changed the rule)\b|\b(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b/i.test(executionClaims)) return 'An agent claimed an action outside its authority.';
   if (/\b(?:risk\s+|model\s+|combined\s+)?score\s*:?\s*\d+\s*(?:\/|out of)\s*(?!100\b)\d+/i.test(plain)) return 'Invalid risk-score scale.';
   const cited = [...plain.matchAll(/\[(E\d+)\]/g)].map(match => match[1]), valid = new Set(evidence.map(e => e.id));
   if (requireCitations && (!cited.length || cited.some(id => !valid.has(id)))) return 'The interpretation must cite evidence retrieved in this run.';
@@ -18,7 +19,9 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   if (/\b(?:password|passcode|otp|pin|recovery code|api key|access token)\b/i.test(plain)) return 'Security credentials do not belong in agent interpretations.';
   if(results.some(r=>['scan_counterparty_news','assess_counterparty_risk'].includes(r.tool))&&/\b(?:sanctions[- ]free|(?:is|are) (?:fully compliant|not sanctioned|cleared)|no (?:sanctions|compliance) issues|safe to (?:pay|deal|transact))\b/i.test(plain))return 'Name-based public research cannot establish sanctions clearance or permission to pay.';
   if (/https?:\/\/|www\./i.test(plain)) return 'External destinations are not banking evidence.';
-  const claims = plain.replace(/\b(?:does not|do not|cannot|can't|not a)\s+guarantee\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
+  const claims = plain
+    .replace(/\b(?:not|neither)\s+(?:payment\s+)?authorization\s+(?:or|nor)\s+(?:a\s+)?guarantee\b/gi,'[qualified uncertainty]')
+    .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment)\s+)?guarantee\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
   if (/\b(?:definitely|certainly|proven|confirmed)\s+(?:fraud|fraudulent|safe|legitimate)|\b(?:no|zero)\s+(?:fraud|risk)\b|\bfraud[ -]free\b|\bguarantee(?:d|s)?\b/i.test(claims)) return 'The interpretation overstates what the evidence establishes.';
   if (/\bno evidence of (?:fraud|anomalies)|\bany potential (?:obligations|payments|bills)\b/i.test(plain)) return 'The interpretation exceeds the scope of the retrieved banking checks.';
   if (/\b(?:allowed|approved|cleared)\b.{0,80}\bbecause\b.{0,100}\b(?:no prior|no completed|lack of|limited|new recipient|new payee)\b/i.test(plain)) return 'Missing payment history is a limitation, not a reason for authorizing a payment.';

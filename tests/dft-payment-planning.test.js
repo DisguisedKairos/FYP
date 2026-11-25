@@ -39,6 +39,16 @@ test('Amounts and owned sources are derived from user text, and malformed or amb
   const named=message(own[0],{date:'November 2026'}).replace(' by ',' in ');assert.equal(planning.requested(named),true);assert.deepEqual(planning.details(named,own,NOW).missing,[]);
   assert.equal(planning.requested('Can I cover upcoming scheduled payments this month?'),false);
 });
+
+test('Combined cash-flow questions recognize whether a business can pay without misreading the deadline as part of the source',()=>{
+  const own=[{id:'1',name:'Operating savings',number:'1020001001'}];
+  for(const prefix of ['whether I can pay','whether we can pay','whether my business can pay','whether I am able to pay']){
+    const text='Summarize inflow and outflow and '+prefix+' SGD 10 to PUB from Operating savings by this month';
+    assert.equal(planning.requested(text),true,text);
+    const input=planning.details(text,own,NOW);
+    assert.deepEqual(input.missing,[]);assert.equal(input.source.id,'1');assert.equal(input.deadline.date,'2026-11-30');assert.equal(input.amountCents,1000);
+  }
+});
 pg('A dated company check counts only schedules through the Singapore cutoff and never counts historical flow or future credits as new cash',async t=>{
   const f=await fixture(t,{now,poolMax:1}),client=f.client();await client.login();const user=await actor(f.db),own=await accounts(f.db),source=own[0];
   await schedule(client,source);await schedule(client,source,{amount:'40.00',at:'2026-11-20T16:00:00Z'});

@@ -88,9 +88,16 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
     if(!input||!Array.isArray(input.parts)||!input.parts.length||input.parts.length>8||Buffer.byteLength(JSON.stringify(input))>42000)throw new HttpError(400,'Choose bounded, sourced public news.');
     const tool=structuredClone(news.TOOL);
     tool.function.parameters.properties.insights.items.properties.actions.items.enum=Object.keys(input.allowedActions);
+    const choices=news.evidenceChoices(input);
+    if(!choices.length)throw new HttpError(409,'The sourced summaries need a longer verifiable excerpt before news advice can be generated.');
+    const evidence=tool.function.parameters.properties.insights.items.properties.evidence.items.properties;
+    evidence.partId.enum=[...new Set(choices.map(c=>c.partId))];
+    evidence.quote.enum=[...new Set(choices.map(c=>c.quote))];
+    const supplied=JSON.stringify({...input,evidenceChoices:choices});
+    if(Buffer.byteLength(supplied)>42000)throw new HttpError(400,'Choose bounded, sourced public news.');
     let correction='';
     for(let attempt=1;attempt<=2;attempt++){
-      const reply=await chat([{role:'system',content:news.SYSTEM+correction},{role:'user',content:JSON.stringify(input)}],[tool],{signal,maxOutputTokens:3500,requireTool:true});
+      const reply=await chat([{role:'system',content:news.SYSTEM+' Select every evidence quote unchanged from evidenceChoices and use its matching partId. Do not paraphrase, join excerpts or invent a quotation.'+correction},{role:'user',content:supplied}],[tool],{signal,maxOutputTokens:3500,requireTool:true});
       try{
         const result=news.validate(reply,input);
         return {...result,modelResponse:{...result.modelResponse,validationAttempts:attempt}};

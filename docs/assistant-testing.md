@@ -30,9 +30,9 @@ The same email can have different credentials between databases. Ask the owner i
 | --- | --- |
 | Business | `business-tester@greenlink.demo`: approved business operator, normally two active owned accounts |
 | Recipient | `recipient-tester@greenlink.demo`: another business for ownership/privacy checks |
-| Empty | `empty-tester@greenlink.demo`: approved operator with zero funds |
-| Pending / Rejected / Profile | `pending-tester@greenlink.demo`, `rejected-tester@greenlink.demo`, `profile-tester@greenlink.demo`: restricted business states |
-| Staff | `staff-tester@greenlink.demo`: administrator, no deposit account |
+| Empty | Owner-prepared isolated zero-funds fixture; the former hosted `empty-tester` login is retired |
+| Pending / Rejected / Profile | `pending-tester@greenlink.demo`, `rejected-tester@greenlink.demo`; prepare profile-state changes in an isolated fixture, since the former hosted `profile-tester` login is retired |
+| Staff | `reviewer-tester@greenlink.demo`: bank administrator; the former redundant `staff-tester` login is retired |
 | Reviewer | `reviewer-tester@greenlink.demo`: separate administrator for independent decisions |
 | Maker | `maker-tester@greenlink.demo`: administrator with an approved owned business/account |
 | MFA | `mfa-tester@greenlink.demo`, or preferably a disposable identity for changes |
@@ -40,6 +40,8 @@ The same email can have different credentials between databases. Ask the owner i
 | New operator | Fresh owner-approved synthetic registration |
 
 Customer and admin are the two permission roles. Labels above describe test identities/use cases, not extra roles. Use separate browser profiles for maker/reviewer and cross-business comparisons. Staff does not automatically own customer accounts.
+
+Use the Sector customer for SECTOR questions and a relevant industry customer for company-specific INDUSTRY questions. A staff login cannot substitute for the customer's portfolio. Do not recreate retired shared logins or change shared balances to satisfy setup requirements; record the affected cases as Blocked until the owner provides an isolated fixture.
 
 ### Result and effect labels
 

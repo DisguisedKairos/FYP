@@ -57,6 +57,22 @@ test('The actual OpenAI adapter requests a strict isolated advisory schema with 
  const input=news.prepare([report()],{now});let captured;
  const model=createOpenAIModel({model:modelName,apiKey:'test-only-news-key-not-a-real-secret',fetchImpl:async(_url,options)=>{captured=JSON.parse(options.body);return new Response(JSON.stringify({status:'completed',model:modelName,id:'resp_news_advice',output:[{type:'function_call',call_id:'call_news',name:'submit_news_advisory',arguments:JSON.stringify(reply(input).tool_calls[0].function.arguments)}]}));}});
  const output=await model.assessNews(input);assert.equal(output.insights.length,1);assert.equal(captured.store,false);assert.equal(captured.tool_choice,'required');assert.equal(captured.tools[0].name,'submit_news_advisory');assert.equal(captured.tools[0].strict,true);assert.equal(captured.previous_response_id,undefined);assert.ok(captured.tools.every(t=>t.type==='function'));assert.equal(captured.tools[0].parameters.additionalProperties,false);
+ const choices=JSON.parse(captured.input.find(m=>m.role==='user').content).evidenceChoices;
+ const schema=captured.tools[0].parameters.properties.insights.items.properties.evidence.items.properties;
+ assert.deepEqual(schema.quote.enum,[...new Set(choices.map(c=>c.quote))]);assert.deepEqual(schema.partId.enum,['R1P1']);
+ assert.ok(choices.every(c=>input.parts.find(p=>p.partId===c.partId).text.includes(c.quote)));
+ assert.ok(schema.quote.enum.every(q=>!/["'\\\x00-\x1f\x7f\u2028\u2029]/.test(q)));
+});
+
+test('News quote choices are bounded exact source excerpts, including later text and intact Unicode',()=>{
+ const text=('A sourced shipping advisory discusses carrier operations and customs checks. ').repeat(35)+'A later official notice discusses route disruption and human verification. 🌏';
+ const input={parts:[{partId:'R1P1',text},{partId:'R2P1',text:'An independent public source describes supply-chain uncertainty.'}]};
+ const choices=news.evidenceChoices(input);assert.equal(choices.length,5);
+ for(const c of choices){assert.ok(c.quote.length>=12&&c.quote.length<=240);assert.ok(input.parts.find(p=>p.partId===c.partId).text.includes(c.quote));assert.equal(c.quote.isWellFormed(),true);}
+ assert.ok(choices.some(c=>c.quote.includes('later official notice')));
+ assert.deepEqual(news.evidenceChoices({parts:[{partId:'SHORT',text:'Too short'}]}),[]);
+ const quoted=news.evidenceChoices({parts:[{partId:'QUOTED',text:'An official statement says "Review the affected shipping route independently."\r\nThe next source paragraph discusses customs checks.'}]});
+ assert.ok(quoted.length);assert.ok(quoted.every(c=>!/["'\\\x00-\x1f\x7f\u2028\u2029]/.test(c.quote)));
 });
 pg('Industry news maps only the signed-in profile to a generic sector without disclosing private details',async t=>{
  const f=await fixture(t,{http:false,now}),user=await actor(f.db);

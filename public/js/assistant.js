@@ -11,6 +11,7 @@ import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
 const dashboardFollowup=/^\s*(?:(?:please|can you|could you|yes)[,\s]+)*(?:save|bookmark|keep|add|pin)\s+(?:(?:it|this|that)(?:\s+(?:dashboard|view|chart))?|(?:the|my)\s+(?:dashboard|view|chart)|chart)(?=\s|[.!?]|$)/i;
+const SAFE_SECURITY_HELP = /^(?:(?:how (?:do|can) i|where can i) (?:change|reset) my password|how (?:do|can) i (?:enable|disable) (?:mfa|two-factor authentication)|how (?:do|can) i use recovery codes|test mfa\/recovery and password change\/session revocation through profile & security)[.!?]*$/i;
 const starters=['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Generate a downloadable finance report'];
 function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,open:false,unread:false}); }
 function itemContent(item) {
@@ -119,7 +120,7 @@ export async function sendAssistant(message,{retry=false}={}) {
   if(!text)return;
   if(text.length>1000){t.error='Keep your message to 1,000 characters or fewer.';renderThread();return;}
   // Never collect a current password or an authorization field through chat.
-  if(/\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i.test(text)) {
+  if(/\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i.test(text) && !SAFE_SECURITY_HELP.test(text)) {
     t.input='';const input=document.querySelector('#assistant-message');if(input)input.value='';
     t.error='Please keep passwords and security codes out of chat. Enter your password only in the payment review form.';renderThread();return;
   }

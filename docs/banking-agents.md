@@ -50,7 +50,17 @@ Use the ten synthetic identities and shared initial password in `data/testing/FE
 5. Preview a high-value threshold change, for example from SGD 10,000 to SGD 9,500. Compare current/proposed allow, review and block counts. Both policies use the same recorded input snapshots and original model scores. Only the latest 1,000 assessments in the chosen window are sampled. Only OpenAI results with valid model provenance and an integer score from 0 to 94 are included. Missing, invalid and retired-provider results are counted and skipped; archived evidence is preserved. No live policy is changed. Without labeled fraud outcomes, the report cannot measure precision, false positives or accuracy.
 6. Run reconciliation as a business operator and then as staff. Customer reports include only owned accounts and exceptions. Staff can inspect bank-wide discrepancies, failed/retrying/overdue schedules and stuck notifications. Reports identify exceptions and suggest follow-up; they cannot repair balances or ledger entries.
 
+## Guidance and missing details
+
+Common screen instructions, literal test placeholders and incomplete public-company requests return application guidance or a specific clarification without inventing account facts. Value-free security how-to questions point to Profile & security; appended credentials remain blocked before inference. These help replies still require the configured OpenAI service and a current authorized session.
+
+When the model skips tools for a supported banking enquiry, its recovery request requires a permitted tool call. A request that still retrieves no evidence is described as an incomplete banking lookup, rather than incorrectly being called outside scope. Actual balances, reports, payments, research and risk analysis continue to use their evidence tools and existing limits. Refusals for unauthorized records or actions remain expected negative-test outcomes.
+
+For payment drafts, the model selects only the draft type. The server derives amounts, owned sources, recipients and schedule times from the operator's wording or current draft context, preserving Singapore time conversion and the ordinary authorization workflow. Narrative checks distinguish explicit statements such as "no payment was sent" and "not authorization or a guarantee" from claims of execution or guaranteed funding; mixed statements that still claim an unauthorized action remain blocked.
+
 ## Evidence, privacy and boundaries
+
+News advice selects unchanged source excerpts from the current retrieved summaries. The function schema constrains the choices, and the application still verifies their source-part pairing. Freshness limits, the bounded correction attempt and the prohibition on invented replacement evidence remain enforced.
 
 Migration `007_banking_agents.sql` adds `agent_runs` and append-only `agent_tool_calls`. Version 2.9.0 also adds three [transaction-monitoring and human-review tables](fraud-monitoring.md), bringing the schema to 28 tables at that release. Migration `009_openai_provider.sql` preserves historical evidence while permitting OpenAI agent runs. Migration `010_saved_dashboard_views.sql` adds private reusable company dashboards, bringing that release to **29 tables and ten migrations**. Migration 011_assistant_customization.sql adds private preferences and chart refresh metadata; that release has **30 tables and eleven migrations**. Existing identity, balance and transaction records are preserved.
 
