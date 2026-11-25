@@ -33,6 +33,9 @@ Every case input is fictional. No company in this table is claimed to appear in 
 - "Compare reputation and financial risk for my flagged companies."
 - "Evaluate reputation and financial risk for GLDB Demo Aurora Energy Pte. Ltd."
 - "How much have I paid and received when interacting with the flagged companies?"
+- "Explain whether the company concerns are hypothetical scenario flags or recorded open payment reviews."
+
+A company name can include or omit its final full stop. The lookup stays limited to your owned records; ambiguous names require clarification and are never merged. These portfolio examples require the sector demonstration customer login. Staff accounts do not inherit that customer's portfolio.
 
 The assistant retrieves up to eight owned counterparties, then calls the configured OpenAI model through a separate private, strict assessment schema. It generates reputation and financial interaction grades separately, explains the cited case inputs, and recommends independent checks. Without a working configured model or a valid response, it does not substitute fixed grades.
 

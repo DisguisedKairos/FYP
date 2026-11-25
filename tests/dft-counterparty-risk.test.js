@@ -36,6 +36,12 @@ test('AI company assessments reject invented identities, foreign evidence, unsup
  ];
  for(const change of changes){const r=reply(input);change(r);assert.throws(()=>risk.validateEvaluation(r,input),e=>e.status===503);}
 });
+
+test('Company scenario provenance is a supported enquiry without reputation-risk keywords',()=>{
+ assert.equal(risk.requested('Explain whether the company concerns are hypothetical scenario flags or recorded open payment reviews.'),true);
+ assert.equal(risk.requested('Distinguish hypothetical flags from recorded payment reviews for these companies.'),true);
+ for(const text of ['Explain my payment review.','Explain hypothetical flags.','What is my balance?'])assert.equal(risk.requested(text),false);
+});
 test('Configured OpenAI risk evaluation uses only a strict private function schema and never web search',async()=>{
  const input=simpleInput();let captured;
  const model=createOpenAIModel({model:MODEL,apiKey:'test-only-sector-provider-fixture-credential',fetchImpl:async(_url,options)=>{
@@ -71,6 +77,28 @@ pg('Fictional companies are never included in live sanctions/news requests',asyn
  const f=await fixture(t,{http:false});await seedSectorCompanies(f.db);const owner=await actor(f.db),scan=await news.prepare(f.db,owner,{},'Scan my counterparties for sanctions and news');
  assert.equal(scan.companies.length,0);assert.equal(scan.fictionalCompaniesExcluded,8);assert.deepEqual(news.requestsFor(scan),[]);
  assert.throws(()=>publicResearch.requestFor('company',{companyName:cases[0].name},'Research '+cases[0].name),e=>e.status===400);
+});
+
+pg('Company full-stop variants resolve one owned company and cannot broaden a name or merge ambiguous records',async t=>{
+ const f=await fixture(t,{http:false});await seedSectorCompanies(f.db);const owner=await actor(f.db),other=(await f.db.query("SELECT * FROM users WHERE email='jamie@greenlink.demo'")).rows[0];
+ const full='GLDB Demo Aurora Energy Pte. Ltd.',short=full.slice(0,-1),before=await financial(f.db);
+ for(const supplied of [full,short])for(const written of [full,short]){
+  const result=await risk.prepare(f.db,owner,{company:supplied},'Evaluate reputation and financial risk for '+written);
+  assert.equal(result.companies.length,1);assert.equal(result.companies[0].company,full);
+ }
+ await assert.rejects(risk.prepare(f.db,other,{company:short},'Evaluate reputation and financial risk for '+short),e=>e.status===404);
+ for(const written of ['Other GLDB Company',short+'X',short+'.Exchange'])await assert.rejects(risk.prepare(f.db,owner,{company:full},'Evaluate reputation and financial risk for '+written),e=>e.status===400);
+ await f.db.query("INSERT INTO demo_counterparties(id,user_id,company,company_key,sector,flags_json,receipt_ids_json,fixture_key) SELECT id||'-period',user_id,rtrim(company,'.'),rtrim(company_key,'.'),sector,flags_json,receipt_ids_json,fixture_key||'-period' FROM demo_counterparties WHERE user_id=$1 AND company=$2",[owner.id,full]);
+ await assert.rejects(risk.prepare(f.db,owner,{company:short},'Evaluate reputation and financial risk for '+short),e=>e.status===400&&/More than one owned record/.test(e.message));
+ assert.deepEqual(await financial(f.db),before);
+});
+
+pg('Tester scenario-versus-recorded-review question returns a private advisory without changing payments',async t=>{
+ const f=await fixture(t,{agentModel:controlled()});await seedSectorCompanies(f.db);const client=f.client();await client.login(EMAIL,PASSWORD);const before=await financial(f.db);
+ const result=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Explain whether the company concerns are hypothetical scenario flags or recorded open payment reviews.'}});
+ assert.equal(result.status,200);assert.equal(result.data.narrativeWithheld,undefined);assert.equal(result.data.counterpartyRisk.assessments.length,8);
+ assert.ok(result.data.counterpartyRisk.assessments.every(c=>c.demo&&c.reputation.reasons.some(f=>f.source==='fictional_scenario')));
+ assert.deepEqual(await financial(f.db),before);
 });
 pg('Assistant evaluates both risk dimensions with current ownership, CSRF and audit while leaving money and cases untouched',async t=>{
  const f=await fixture(t,{agentModel:controlled()});await seedSectorCompanies(f.db);const client=f.client();await client.login(EMAIL,PASSWORD);const before=await financial(f.db);
