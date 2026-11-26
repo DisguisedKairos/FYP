@@ -5,6 +5,7 @@ import {financeReportControl} from './js/finance-reports.js';
 import {dashboardControl} from './js/assistant-dashboards.js';
 import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
 import { renderAssistant, toggleAssistant, closeAssistant, resetAssistant, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
+import {toggleAssistantSize} from './js/assistant-window.js';
 import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 import { loadFraudCases, runFraudScan, openFraudCase, claimFraudCase, submitFraudCaseReview, cancelFraudCases, cancelFraudCaseDetail } from './js/fraud-cases.js';
@@ -154,6 +155,7 @@ document.addEventListener('click',async event => {
       case 'business-news': if(!state.assistant?.open)toggleAssistant(); await sendAssistant('Show current news for my industry and explain what our company should do next based on our business activities and priorities.'); break;
       case 'assistant-toggle': toggleAssistant(); break;
       case 'assistant-close': closeAssistant(); break;
+      case 'assistant-expand': toggleAssistantSize(); break;
       case 'funding-open': if(!state.assistant?.open)toggleAssistant(); document.querySelector('#automatic-funding')?.focus(); break;
       case 'funding-refresh': await loadFunding({force:true}); break;
       case 'assistant-settings': closeAssistant({focus:false});navigate('customDashboard');break;

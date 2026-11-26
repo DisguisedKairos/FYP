@@ -239,6 +239,90 @@ test('Assistant timestamps use Singapore time and survive retries, reopening and
  assert.deepEqual(page.errors,[]);
 });
 
+async function popupSize(page){
+ return page.evaluate('({width:document.querySelector("#assistant-popup").getBoundingClientRect().width,height:document.querySelector("#assistant-popup").getBoundingClientRect().height})');
+}
+async function resizePopup(page,dx,dy){
+ const point=await page.evaluate('(()=>{const r=document.querySelector(".assistant-resize-handle").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
+ await page.send('Input.dispatchMouseEvent',{type:'mousePressed',button:'left',buttons:1,clickCount:1,...point});
+ await page.send('Input.dispatchMouseEvent',{type:'mouseMoved',button:'left',buttons:1,x:point.x+dx,y:point.y+dy});
+ await page.send('Input.dispatchMouseEvent',{type:'mouseReleased',button:'left',buttons:0,clickCount:1,x:point.x+dx,y:point.y+dy});
+}
+test('Assistant expands, restores and resizes without losing drafts, replies or the chosen size',async t=>{
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo');
+ const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+ await page.click('[data-action="assistant-toggle"]');
+ const initial=await popupSize(page);
+ await page.evaluate('window.originalPopup=document.querySelector("#assistant-popup")');
+ await page.fill('#assistant-message','Keep my working note');
+ await resizePopup(page,-160,-80);
+ const resized=await popupSize(page);
+ assert.deepEqual(resized,{width:initial.width+160,height:initial.height+80});
+ assert.equal(await page.evaluate('document.querySelector("#assistant-popup").classList.contains("assistant-resizing")'),false);
+ await page.press('ArrowLeft');assert.equal((await popupSize(page)).width,resized.width+20);
+ await page.press('ArrowRight');await page.press('ArrowDown');await page.press('ArrowUp');
+ assert.deepEqual(await popupSize(page),resized);
+ assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),'Keep my working note');
+ await pausePopupReply(page);await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('typeof window.releasePopupReply==="function"');
+ await page.fill('#assistant-message','My next unsent question');
+ const sentAt=await page.evaluate('document.querySelector(".from-user time").dateTime');
+ await page.click('[data-action="assistant-expand"]');
+ assert.equal(await page.evaluate('document.querySelector("[data-action=assistant-expand]").getAttribute("aria-pressed")'),'true');
+ assert.equal(await page.evaluate('document.querySelector("[data-action=assistant-expand]").getAttribute("aria-label")'),'Restore assistant size');
+ assert.equal(await page.evaluate('document.querySelector(".assistant-resize-handle").hidden'),true);
+ const expanded=await popupSize(page);assert.ok(expanded.width>resized.width && expanded.height>resized.height);
+ assert.equal(await page.evaluate('document.activeElement.dataset.action'),'assistant-expand');
+ await page.screenshot(path.resolve('test-results','assistant-expanded.png'));
+ await page.click('[data-action="assistant-expand"]');assert.deepEqual(await popupSize(page),resized);
+ await page.evaluate('window.releasePopupReply()');await page.waitFor('!!document.querySelector(".from-assistant time")');
+ assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),'My next unsent question');
+ assert.equal(await page.evaluate('document.querySelector(".from-user time").dateTime'),sentAt);
+ assert.equal(await page.evaluate('window.originalPopup===document.querySelector("#assistant-popup")'),true);
+ await page.click('[data-action="assistant-close"]');await page.click('[data-action="assistant-toggle"]');
+ assert.deepEqual(await popupSize(page),resized);
+ await page.click('.nav-items [data-nav="accounts"]');await page.waitFor('location.pathname==="/accounts"');
+ assert.deepEqual(await popupSize(page),resized);
+ assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),'My next unsent question');
+ await page.screenshot(path.resolve('test-results','assistant-resized-desktop.png'));
+ await page.send('Emulation.setDeviceMetricsOverride',{width:360,height:640,deviceScaleFactor:1,mobile:true});
+ await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().width<=336');
+ assert.equal(await page.evaluate('(()=>{const p=document.querySelector("#assistant-popup").getBoundingClientRect();return p.left>=0 && p.top>=0 && p.right<=innerWidth && p.bottom<=innerHeight;})()'),true);
+ await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
+ await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().width==='+resized.width);
+ assert.deepEqual(await popupSize(page),resized);
+ await page.click('[data-action="assistant-clear"]');assert.deepEqual(await popupSize(page),resized);
+ await resizePopup(page,-3000,-3000);
+ assert.equal(await page.evaluate('(()=>{const p=document.querySelector("#assistant-popup").getBoundingClientRect();return p.left>=11 && p.top>=11 && p.right<=innerWidth && p.bottom<=innerHeight;})()'),true);
+ await resizePopup(page,3000,3000);assert.deepEqual(await popupSize(page),{width:340,height:420});
+ assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+ assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
+ assert.deepEqual(page.errors,[]);
+});
+
+test('Assistant touch resizing keeps mobile controls reachable and cancels cleanly',async t=>{
+ const {page}=await open(t,390,'jamie@greenlink.demo');await page.click('[data-action="assistant-toggle"]');
+ const initial=await popupSize(page),point=await page.evaluate('(()=>{const p=document.querySelector(".assistant-resize-handle").getBoundingClientRect();return {x:p.x+13,y:p.y+13};})()');
+ await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:1}]});
+ await page.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x+20,y:point.y+80,id:1}]});
+ await page.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
+ assert.deepEqual(await popupSize(page),{width:initial.width-20,height:initial.height-80});
+ assert.equal(await page.evaluate('document.querySelector("#assistant-popup").classList.contains("assistant-resizing")'),false);
+ await page.click('[data-action="assistant-expand"]');
+ for(const height of [640,420]){
+  await page.send('Emulation.setDeviceMetricsOverride',{width:360,height,deviceScaleFactor:1,mobile:true});
+  await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().bottom<=innerHeight');
+  assert.equal(await page.evaluate('(()=>{const p=document.querySelector("#assistant-popup").getBoundingClientRect();return p.left>=0 && p.top>=0 && p.right<=innerWidth;})()'),true);
+  assert.equal(await page.evaluate('Array.from(document.querySelectorAll(".assistant-window-actions button,#assistant-form button[type=submit]")).every(e=>{const r=e.getBoundingClientRect(),p=document.querySelector("#assistant-popup").getBoundingClientRect();return r.left>=p.left && r.right<=p.right && r.top>=p.top && r.bottom<=p.bottom;})'),true);
+ }
+ await page.screenshot(path.resolve('test-results','assistant-expanded-mobile.png'));
+ await page.click('[data-action="assistant-expand"]');
+ await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:900,deviceScaleFactor:1,mobile:true});
+ await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().height==='+ (initial.height-80));
+ await page.press('Escape');assert.equal(await page.evaluate('document.activeElement.classList.contains("assistant-launcher")'),true);
+ assert.deepEqual(page.errors,[]);
+});
+
 test('Assistant popup preserves drafts across banking navigation and receives replies while minimized',async t=>{
  const {f,page}=await open(t,1280,'jamie@greenlink.demo');
  const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
@@ -275,11 +359,13 @@ test('Mobile popup clears session data and rejects a delayed reply after another
  const {f,page}=await open(t,390,'jamie@greenlink.demo');
  await page.click('[data-action="assistant-toggle"]');await pausePopupReply(page);
  await page.evaluate('import("/js/assistant.js").then(m=>{window.pendingPopupSend=m.sendAssistant("What is my balance?");return true;})');
- await page.waitFor('typeof window.releasePopupReply==="function"');await page.click('[data-action="assistant-close"]');
+ await page.waitFor('typeof window.releasePopupReply==="function"');await page.click('[data-action="assistant-expand"]');await page.click('[data-action="assistant-close"]');
  await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');
  assert.equal(await page.evaluate('document.querySelector("#assistant-root").childElementCount'),0);
  await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
  await page.click('[data-action="assistant-toggle"]');await page.evaluate('window.releasePopupReply();window.pendingPopupSend');
+ assert.equal(await page.evaluate('document.querySelector("[data-action=assistant-expand]").getAttribute("aria-pressed")'),'false');
+ assert.equal(await page.evaluate('document.querySelector("#assistant-popup").classList.contains("assistant-sized")'),false);
  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message").length'),0);
  assert.equal(await page.evaluate('document.querySelector("#assistant-form").getAttribute("aria-busy")'),'false');
  for(const height of [640,420]){

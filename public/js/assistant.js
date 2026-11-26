@@ -4,6 +4,7 @@ import {paymentReadinessHtml} from './payment-planning.js';
 import {fundingWarningsHtml,renderAutomaticFunding} from './funding.js';
 import {financeReportHtml,cancelFinanceReports} from './finance-reports.js';
 import {dashboardHtml,savedDashboardsHtml,hydrateDashboardCharts,cancelAssistantDashboards} from './assistant-dashboards.js';
+import {bindAssistantWindow,renderAssistantWindow,stopAssistantResize} from './assistant-window.js';
 // Raw messages stay in browser memory. Reports, tool evidence and draft context
 // are retained privately; financial actions only open the ordinary banking forms.
 import { state, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
@@ -45,23 +46,27 @@ function welcomeHtml() {
 }
 function popupContent() {
   const t=thread();
-  return '<header class="assistant-panel-heading"><span class="quick-action-icon">'+icon('chat')+'</span><div><h2 id="assistant-title">GLDB Assistant</h2><p>Your business banking assistant</p></div><div class="assistant-window-actions"><button type="button" class="text-button" data-action="assistant-settings">Settings</button><button type="button" class="text-button" data-action="assistant-clear" aria-label="Clear conversation">Clear</button><button type="button" class="icon-button" data-action="assistant-close" aria-label="Minimize GLDB Assistant">'+icon('close')+'</button></div></header><p class="assistant-disclosure">Uses OpenAI. Your message and permitted banking evidence are sent for analysis. Never share passwords or security codes.</p><div id="assistant-thread" class="assistant-thread" role="log" aria-label="Conversation with GLDB Assistant" aria-live="polite" aria-relevant="additions text">'+(t.messages.length?t.messages.map(messageHtml).join(''):welcomeHtml())+'</div><div id="assistant-response-status" class="assistant-response-status" role="status"></div><div id="assistant-error" class="error-message assistant-error" role="alert"></div><div id="assistant-suggestions" class="assistant-suggestions">'+suggestionHtml()+'</div><form id="assistant-form" class="assistant-form" aria-busy="'+t.busy+'"><label for="assistant-message">Your message</label><div class="assistant-composer"><textarea id="assistant-message" name="message" rows="2" maxlength="1000" required placeholder="How can I help?" aria-describedby="assistant-privacy">'+esc(t.input)+'</textarea><button type="submit" class="button" aria-label="Send message" '+(t.busy?'disabled':'')+'>Send '+icon('arrow')+'</button></div><small id="assistant-privacy">Drafts need your review and password in the banking form. Chat never sends money.</small></form>';
+  return '<button type="button" class="assistant-resize-handle" aria-label="Resize GLDB Assistant" aria-describedby="assistant-resize-help" title="Drag to resize"><span aria-hidden="true"></span></button><span id="assistant-resize-help" class="sr-only">Drag this corner to resize. Or use arrow keys: left to widen, right to narrow, up to increase height, down to decrease height. Hold Shift for larger steps.</span><header class="assistant-panel-heading"><div><h2 id="assistant-title">GLDB Assistant</h2><p>Your business banking assistant</p></div><div class="assistant-window-actions"><button type="button" class="text-button" data-action="assistant-settings">Settings</button><button type="button" class="text-button" data-action="assistant-clear" aria-label="Clear conversation">Clear</button><button type="button" class="icon-button" data-action="assistant-expand" aria-label="Expand GLDB Assistant" aria-pressed="false">'+icon('expand')+'</button><button type="button" class="icon-button" data-action="assistant-close" aria-label="Minimize GLDB Assistant">'+icon('close')+'</button></div></header><p class="assistant-disclosure">Uses OpenAI. Your message and permitted banking evidence are sent for analysis. Never share passwords or security codes.</p><div id="assistant-thread" class="assistant-thread" role="log" aria-label="Conversation with GLDB Assistant" aria-live="polite" aria-relevant="additions text">'+(t.messages.length?t.messages.map(messageHtml).join(''):welcomeHtml())+'</div><div id="assistant-response-status" class="assistant-response-status" role="status"></div><div id="assistant-error" class="error-message assistant-error" role="alert"></div><div id="assistant-suggestions" class="assistant-suggestions">'+suggestionHtml()+'</div><form id="assistant-form" class="assistant-form" aria-busy="'+t.busy+'"><label for="assistant-message">Your message</label><div class="assistant-composer"><textarea id="assistant-message" name="message" rows="2" maxlength="1000" required placeholder="How can I help?" aria-describedby="assistant-privacy">'+esc(t.input)+'</textarea><button type="submit" class="button" aria-label="Send message" '+(t.busy?'disabled':'')+'>Send '+icon('arrow')+'</button></div><small id="assistant-privacy">Drafts need your review and password in the banking form. Chat never sends money.</small></form>';
 }
 export function renderAssistant() {
   const root=document.querySelector('#assistant-root');
   if(!root)return;
-  if(!state.user || !state.data || state.signingOut){root.replaceChildren();return;}
+  if(!state.user || !state.data || state.signingOut){stopAssistantResize();root.replaceChildren();return;}
   const t=thread();
   if(requestedOpen){
     t.open=true;requestedOpen=false;
     const url=new URL(location.href);url.searchParams.delete('chat');history.replaceState({},'',url.pathname+url.search+url.hash);
   }
-  if(!root.querySelector('#assistant-popup'))root.innerHTML='<div id="funding-announcement" class="sr-only" role="status" aria-live="polite"></div><div class="assistant-funding-preview" hidden></div><button type="button" class="assistant-launcher" data-action="assistant-toggle" aria-label="Open GLDB Assistant" aria-controls="assistant-popup" aria-expanded="false">'+icon('chat')+'<span>Ask GLDB</span><span class="assistant-unread" hidden>New reply</span></button><section id="assistant-popup" class="assistant-popup" role="dialog" aria-modal="false" aria-labelledby="assistant-title" hidden></section>';
+  if(!root.querySelector('#assistant-popup')){
+    root.innerHTML='<div id="funding-announcement" class="sr-only" role="status" aria-live="polite"></div><div class="assistant-funding-preview" hidden></div><button type="button" class="assistant-launcher" data-action="assistant-toggle" aria-label="Open GLDB Assistant" aria-controls="assistant-popup" aria-expanded="false">'+icon('chat')+'<span>Ask GLDB</span><span class="assistant-unread" hidden>New reply</span></button><section id="assistant-popup" class="assistant-popup" role="dialog" aria-modal="false" aria-labelledby="assistant-title" hidden></section>';
+    bindAssistantWindow(root.querySelector('#assistant-popup'));
+  }
   root.classList.toggle('assistant-open',t.open);
   root.classList.toggle('assistant-has-dashboard',t.messages.some(message=>message.dashboard));
   const popup=root.querySelector('#assistant-popup');popup.hidden=!t.open;
   if(t.open && !popup.querySelector('#assistant-form'))popup.innerHTML=popupContent();
   else if(!t.open)popup.replaceChildren();
+  renderAssistantWindow(popup);
   const launcher=root.querySelector('.assistant-launcher');
   launcher.setAttribute('aria-expanded',String(t.open));
   launcher.setAttribute('aria-label',t.open?'Minimize GLDB Assistant':'Open GLDB Assistant'+(t.unread?', new reply':''));
@@ -80,7 +85,7 @@ export function toggleAssistant() {
 export function closeAssistant({focus=true}={}) {
   if(!state.assistant?.open)return;
   const hadFocus=Boolean(document.activeElement?.closest('#assistant-root'));
-  state.assistant.open=false;renderAssistant();
+  stopAssistantResize();state.assistant.open=false;renderAssistant();
   if(focus)document.querySelector('.assistant-launcher')?.focus();
   else if(hadFocus)document.querySelector('#main-content')?.focus();
 }
@@ -115,9 +120,9 @@ function renderThread() {
     else target.scrollTop=target.scrollHeight;
   }
 }
-export function cancelAssistant() { cancelFinanceReports(); cancelAssistantDashboards(); generation++; controller?.abort(); if(state.assistant)state.assistant.busy=false; }
+export function cancelAssistant() { stopAssistantResize(); cancelFinanceReports(); cancelAssistantDashboards(); generation++; controller?.abort(); if(state.assistant)state.assistant.busy=false; }
 export function clearAssistant() {
-  const open=Boolean(state.assistant?.open);cancelAssistant();state.assistant=null;thread().open=open;
+  const {open=false,windowSize,expanded}=state.assistant||{};cancelAssistant();state.assistant=null;Object.assign(thread(),{open,windowSize,expanded});
   const input=document.querySelector('#assistant-message');if(input)input.value='';
   renderAssistant();if(open)input?.focus();
 }
