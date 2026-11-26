@@ -2,6 +2,27 @@ const core = require('@actions/core');
 const github = require('@actions/github');
 const { OpenAI } = require('openai');
 
+const FRONTEND_PATTERNS = [
+  /^public\//,
+  /^views\//,
+];
+
+const BACKEND_PATTERNS = [
+  /^banking\//,
+  /^fraud_service\//,
+  /^database\//,
+  /^deploy\//,
+  /^scripts\//,
+  /^(app|application)\.js$/,
+  /^main\.py$/,
+  /^neon\.ts$/,
+];
+
+function matchesAny(filepath, patterns) {
+  const cleanPath = filepath.replace(/^(added|modified|removed):\s*/, '');
+  return patterns.some((regex) => regex.test(cleanPath));
+}
+
 async function run() {
   try {
     const githubToken = process.env.GITHUB_TOKEN;
@@ -17,15 +38,25 @@ async function run() {
     const shortSha = context.sha ? context.sha.slice(0, 7) : 'unknown';
 
     let commitList = [];
-    const changedFilesSet = new Set();
+    const rawChangedFilesSet = new Set();
+    const taggedChangedFilesSet = new Set();
 
-    // Collect commits and modified filenames from push payload
+    // Collect commits and modified/added/removed filenames from push payload
     if (context.payload.commits && context.payload.commits.length > 0) {
       for (const c of context.payload.commits) {
         commitList.push(`- ${c.message} (by ${c.author.name || 'developer'})`);
-        (c.added || []).forEach((f) => changedFilesSet.add(`added: ${f}`));
-        (c.modified || []).forEach((f) => changedFilesSet.add(`modified: ${f}`));
-        (c.removed || []).forEach((f) => changedFilesSet.add(`removed: ${f}`));
+        (c.added || []).forEach((f) => {
+          rawChangedFilesSet.add(f);
+          taggedChangedFilesSet.add(`added: ${f}`);
+        });
+        (c.modified || []).forEach((f) => {
+          rawChangedFilesSet.add(f);
+          taggedChangedFilesSet.add(`modified: ${f}`);
+        });
+        (c.removed || []).forEach((f) => {
+          rawChangedFilesSet.add(f);
+          taggedChangedFilesSet.add(`removed: ${f}`);
+        });
       }
     } else if (githubToken) {
       const octokit = github.getOctokit(githubToken);
@@ -44,11 +75,25 @@ async function run() {
         ? commitList.join('\n')
         : `- Push to ${context.ref} (${shortSha})`;
 
-    const changedFilesList = Array.from(changedFilesSet).slice(0, 30);
+    const allChangedFiles = Array.from(rawChangedFilesSet);
+    const frontendFiles = allChangedFiles.filter((f) => matchesAny(f, FRONTEND_PATTERNS));
+    const backendFiles = allChangedFiles.filter((f) => matchesAny(f, BACKEND_PATTERNS));
+    const changedFilesList = Array.from(taggedChangedFilesSet).slice(0, 30);
+
     const filesContext =
       changedFilesList.length > 0
         ? `\n\nModified Files:\n${changedFilesList.map((f) => `- ${f}`).join('\n')}`
         : '';
+
+    const frontendContext =
+      frontendFiles.length > 0
+        ? `\n\nFrontend Files Touched (UI, client scripts, views):\n${frontendFiles.map((f) => `- ${f}`).join('\n')}`
+        : '\n\nFrontend Files Touched: None in this push.';
+
+    const backendContext =
+      backendFiles.length > 0
+        ? `\n\nBackend Files Touched (APIs, banking/fraud services, DB, deploy, scripts):\n${backendFiles.map((f) => `- ${f}`).join('\n')}`
+        : '\n\nBackend Files Touched: None in this push.';
 
     console.log('Generating release documentation with OpenAI...');
     const openai = new OpenAI({ apiKey: openaiApiKey });
@@ -59,11 +104,11 @@ async function run() {
         {
           role: 'system',
           content:
-            'You are a Release Documentation Agent for a wholesale banking and fraud detection platform. Summarize the git commits and modified files into structured Markdown release notes suitable for a changelog and chatbot knowledge base. Include three sections: 1) ### What Changed, 2) ### System & User Impact, and 3) ### Technical & Deployment Notes.',
+            'You are a Release Documentation Agent for a wholesale banking and fraud detection platform. Summarize git commits and changed files into clear Markdown release notes separated cleanly into frontend and backend sections. Include four sections in this exact order: 1) ### Frontend Changes (summarize UI, views, and frontend agent/assistant files touched, or state "No frontend files modified in this push"), 2) ### Backend Changes (summarize server logic, banking/fraud modules, database migrations, deployment, or scripts touched, or state "No backend files modified in this push"), 3) ### System & User Impact, and 4) ### Technical & Deployment Notes.',
         },
         {
           role: 'user',
-          content: `Generate release notes for ${owner}/${repo} (commit ${shortSha}):\n\nCommits:\n${commitSummary}${filesContext}`,
+          content: `Generate release notes for ${owner}/${repo} (commit ${shortSha}):\n\nCommits:\n${commitSummary}${filesContext}${frontendContext}${backendContext}`,
         },
       ],
       temperature: 0.3,
@@ -87,6 +132,8 @@ async function run() {
           timestamp: new Date().toISOString(),
           commits: commitList,
           changed_files: changedFilesList,
+          frontend_files: frontendFiles,
+          backend_files: backendFiles,
           release_notes: releaseNotes,
         }),
       });
@@ -100,7 +147,16 @@ async function run() {
       console.log(webhookStatus);
     }
 
-    // Render formatted Release Notes card directly on the GitHub Actions Summary page
+    const frontendSummaryLabel =
+      frontendFiles.length > 0
+        ? frontendFiles.map((f) => `\`${f}\``).join(', ')
+        : 'None';
+
+    const backendSummaryLabel =
+      backendFiles.length > 0
+        ? backendFiles.map((f) => `\`${f}\``).join(', ')
+        : 'None';
+
     await core.summary
       .addHeading(`🚀 Release Documentation (${shortSha})`)
       .addRaw(releaseNotes)
@@ -109,13 +165,15 @@ async function run() {
         [
           { data: 'Repository', header: true },
           { data: 'Commit', header: true },
-          { data: 'Files Tracked', header: true },
+          { data: 'Frontend Files', header: true },
+          { data: 'Backend Files', header: true },
           { data: 'Webhook Status', header: true },
         ],
         [
           `${owner}/${repo}`,
           `\`${shortSha}\``,
-          `${changedFilesList.length}`,
+          frontendSummaryLabel,
+          backendSummaryLabel,
           webhookStatus,
         ],
       ])
