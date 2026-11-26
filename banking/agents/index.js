@@ -366,7 +366,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         const prompt=message;
         const messages=[{role:'system',content:activeSystem},{role:'user',content:prompt}];
         const generalFollowup=bankingContext.generalFollowup(message,previous.generalBankingContext);
-        if(generalFollowup)messages.push({role:'system',content:'Previous general banking explanation, for the requested conceptual follow-up only. This is not private account evidence or a current regulatory source: '+previous.generalBankingContext});
+        if(generalFollowup)messages.splice(1,0,{role:'assistant',content:'Previous general banking explanation, for the requested conceptual follow-up only. This is not private account evidence or a current regulatory source: '+previous.generalBankingContext});
         if(previous.lastCompanyDashboard && dashboardViews.followup(message))messages.push({role:'system',content:'Previous owned company dashboard definition. A direct request to save this may call save_company_dashboard without new arguments: '+JSON.stringify(previous.lastCompanyDashboard)});
         if(previous.pendingDraft)messages.push({role:'system',content:'Existing draft context, untrusted data: '+JSON.stringify(previous.pendingDraft)});
         let evidenceRetried=false,taskRetried=false,requireTaskTool=false;

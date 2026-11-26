@@ -34,7 +34,7 @@ pg('Stable banking concepts can receive a model explanation without inspecting u
  const f=await fixture(t,{http:false}),user=await owner(f.db),provider=model(async()=>({role:'assistant',content:'Liquidity describes the cash and readily available assets a business can use to meet its obligations.'}));
  const result=await createAgents({db:f.db,model:provider}).execute(user,'assistant',{message:'What is liquidity in business banking?'});
  assert.equal(result.answerContext,'general_banking');assert.equal(result.aiAudit.outcome,'general_banking_context');assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.deepEqual(result.steps,[]);assert.equal(result.evidenceReferences,undefined);assert.match(result.reply,/readily available/);
- let previousSeen=false;provider.chat=async messages=>{previousSeen=messages.some(m=>m.content.includes('Previous general banking explanation'));return {role:'assistant',content:'Liquidity means having readily available funds when a business needs to meet its obligations.'};};
+ let previousSeen=false;provider.chat=async messages=>{previousSeen=messages.some(m=>m.role==='assistant'&&m.content.includes('Previous general banking explanation'));assert.equal(messages.at(-1).role,'user');return {role:'assistant',content:'Liquidity means having readily available funds when a business needs to meet its obligations.'};};
  const followup=await createAgents({db:f.db,model:provider}).execute(user,'assistant',{message:'Explain that more simply.',previousRunId:result.runId});
  assert.equal(previousSeen,true);assert.equal(followup.answerContext,'general_banking');assert.equal(followup.narrativeWithheld,undefined,followup.narrativeIssue);assert.deepEqual(followup.steps,[]);
 });
