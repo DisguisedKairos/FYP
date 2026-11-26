@@ -66,19 +66,27 @@ export async function loadExtras(page, { force = false } = {}) {
     if (state.route.page === page) ui.render();
   }
   const pending = (async () => {
+    if (page === 'fraud') {
+      // Each panel remains usable if a different fraud dependency is slow or unavailable.
+      const read = async (key, path, select = value => value) => {
+        try { const result = await backgroundGet(path); if (active()) state.remote[key] = { data:select(result) }; }
+        catch (error) {
+          if (error.status === -1 || !active() || await recoverSession(error) || !active()) return;
+          state.remote[key] = { error:error.message };
+        }
+        if (active() && state.route.page === page && !modal.open) ui.render();
+      };
+      try {
+        await Promise.all([read('fraud','/fraud/reviews'), ui.loadFraudCases?.(),
+          read('model','/fraud/model', result => result.model || result),
+          read('modelActivity','/fraud/model-activity', result => result.activity)]);
+      } finally { if(inflight.get(requestKey)===pending)inflight.delete(requestKey); }
+      return;
+    }
     try {
       const result = await backgroundGet(endpoints[page]);
       if (!active()) return;
       state.remote[page] = { data: result };
-      if (page === 'fraud') {
-        await ui.loadFraudCases?.({render:false});
-        if(!active())return;
-        try { const result = await backgroundGet('/fraud/model'); if (!active()) return; state.remote.model = { data: result.model || result }; }
-        catch (error) { if (!active()) return; state.remote.model = { error: error.message }; }
-        if (!active()) return;
-        try { const result = await backgroundGet('/fraud/model-activity'); if (!active()) return; state.remote.modelActivity = { data: result.activity }; }
-        catch (error) { if (!active()) return; state.remote.modelActivity = { error: error.message }; }
-      }
       if (state.route.page === page && !modal.open) ui.render();
     } catch (error) {
       if (error.status === -1 || !active()) return;

@@ -64,7 +64,28 @@ pg('Legacy payments without bound context are explicitly routed for manual revie
   const before = await money(f.db), result = await scan(f); assert.equal(result.modelAnalyzed, 0); assert.ok(result.manualContext > 0); assert.equal(called, 0);
   const records = await cases.list(f.db, await actor(f.db));
   assert.ok(records.cases.every(c => c.evidence.signals.some(s => s.code === 'missing_context') && c.evidence.model === null));
+  const report=await require('../banking/agents/reports').investigation(f.db,await actor(f.db),{transactionId:records.cases[0].transactionId});
+  assert.equal(report.assessment.available,false);assert.equal(report.monitoring.available,true);assert.equal(report.monitoring.model,null);assert.equal(report.humanReview.open,true);
+  assert.ok(report.findings.some(s=>/original bound historical input/.test(s)));
+  assert.ok(require('../banking/agents/reports').assistantItems('investigate_transaction',report).some(i=>i.title==='Latest monitoring AI score'&&i.value==='Not recorded'));
   assert.deepEqual(await money(f.db), before);
+});
+pg('Batch monitoring includes counterparty-linked receipts and counts every remaining payment', async t => {
+  const f=await fixture(t,{http:false}), row=(await f.db.query("SELECT t.*,a.user_id FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE amount_cents<0 ORDER BY insert_seq LIMIT 1")).rows[0];
+  await f.db.query('INSERT INTO demo_counterparties(id,user_id,company,company_key,sector,receipt_ids_json,fixture_key) VALUES($1,$2,$3,$4,$5,$6,$7)',[randomUUID(),row.user_id,'GLDB Demo Supplier Pte. Ltd.','gldb demo supplier pte. ltd.','Logistics',JSON.stringify([row.id]),'monitoring-coverage']);
+  const before=await money(f.db), total=Number((await f.db.query("SELECT count(*) FROM transactions WHERE amount_cents<0 AND type IN ('transfer','bill') AND requested_at<=now() ")).rows[0].count);
+  let summary=await scan(f,{limit:1});assert.equal(summary.checked,1);assert.equal(summary.remaining,total-1);
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM fraud_screenings WHERE transaction_id=$1',[row.id])).rows[0].count),1);
+  while(summary.remaining)summary=await scan(f);
+  assert.equal(Number((await f.db.query('SELECT count(*) FROM fraud_screenings')).rows[0].count),total);
+  assert.deepEqual(await money(f.db),before);
+});
+pg('A corrupt bound history becomes a visible coverage gap instead of stopping every scan',async t=>{
+  const f=await fixture(t), transaction=await payment(f), before=await money(f.db);
+  await f.db.query("UPDATE fraud_assessments SET input_json=jsonb_set(input_json,'{historySummary}','null') WHERE id=$1",[transaction.id]);
+  const result=await scan(f,{transactionId:transaction.id});assert.equal(result.checked,1);assert.equal(result.modelAnalyzed,0);assert.equal(result.manualContext,1);
+  const c=await caseFor(f,transaction.id);assert.equal(c.evidence.model,null);assert.ok(c.evidence.signals.some(s=>s.code==='missing_context'));
+  assert.deepEqual(await money(f.db),before);
 });
 pg('A staff member can analyse any selected outgoing payment and inspect a low-risk result without a fabricated flag', async t => {
   const f = await fixture(t, { poolMax: 1 }), transaction = await payment(f), client = f.client(); await client.login('reviewer@greenlink.demo');

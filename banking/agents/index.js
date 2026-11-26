@@ -66,7 +66,7 @@ const properties = {
   search_transactions:{q:{type:'string'},accountId:{type:'string'}},
   project_liquidity:{days:{type:'integer'}},
   investigate_transaction:{transactionId:{type:'string'}},get_related_payments:{transactionId:{type:'string'}},
-  simulate_rule:{ruleId:{type:'string'},threshold:{type:'number'},enabled:{type:'boolean'},action:{type:'string'},days:{type:'integer'}},
+  simulate_rule:{ruleId:{type:'string',enum:['high_value','new_payee','velocity','balance_utilization','daily_limit'],description:'Canonical rule ID: high_value (payment amount), new_payee (new recipient amount), velocity (recent payment count), balance_utilization (balance percentage), daily_limit (daily outgoing amount).'},threshold:{type:'number',exclusiveMinimum:0,description:'SGD for amount rules, whole payment count for velocity, or percentage up to 100 for balance_utilization.'},enabled:{type:'boolean'},action:{type:'string',enum:['review','block']},days:{type:'integer',minimum:1,maximum:90}},
   prepare_payment_draft:Object.fromEntries(['kind','type','fromAccountId','toAccountNumber','billerId','reference','amount','description','scheduledAt','frequency'].map(key=>[key,{type:'string'}])),
 };
 properties.prepare_payment_draft.fromAccountId.description = 'Exact owned account id from get_accounts; never an account name or account number.';
@@ -91,9 +91,9 @@ const descriptions = {
   get_schedules:'Read up to 50 of the signed-in operator\'s scheduled instructions. No execution or cancellation.',
   search_transactions:'Retrieve individual owned receipt records and matching totals. Use for itemized money movements, individual entries or what happened in an account; the user need not say transaction or history. This is distinct from an aggregate finance report or chart. The date range is parsed by the server from the current message. q is only an explicit company, description or reference term, never dates, generic money-movement words or the whole question. Returns complete matching totals and up to 20 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
   project_liquidity:'Project owned balances using scheduled occurrences over 1-90 days. Includes draft-only funding suggestions.',
-  investigate_transaction:'Bank staff only: inspect a specific outgoing payment, historical comparison and recorded risk explanation.',
+  investigate_transaction:'Bank staff only: inspect a specific outgoing payment, original risk assessment, latest saved monitoring signals and current human investigation status/outcome. Distinguish later findings from the original payment decision.',
   get_related_payments:'Compare up to 20 earlier completed payments on the source account of a permitted transaction.',
-  simulate_rule:'Bank staff only: replay a proposed rule threshold/status/action against recorded assessment snapshots; no live changes.',
+  simulate_rule:'Bank staff only: replay a proposed rule threshold/status/action against recorded assessment snapshots; no live changes. Select an exact canonical ruleId from its enum, including high_value for a high-value payment threshold. Report skipped inputs and eligible coverage; no eligible snapshots means impact is unknown.',
   reconcile_accounts:'Read ledger reconciliation and schedule/notification exceptions. Staff see bank operations; operators see only their accounts.',
   prepare_payment_draft:'Prepare a transfer, bill or scheduled payment FORM DRAFT. First call get_accounts. Pass only kind: transfer, bill or schedule. The server reads exact amounts, owned sources, recipients, references, recurrence and Singapore dates/times from the user message or existing draft context. Do not calculate or send those values yourself. Missing details are returned for clarification. Never submits money.',
 };

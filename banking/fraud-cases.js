@@ -4,7 +4,7 @@ const {fingerprint}=require('./ai-provider');
 const { randomUUID, createHash } = require('node:crypto');
 const { HttpError } = require('../models/errors');
 const { assertActor } = require('./agents/reports');
-const { readPolicy, evaluateRules } = require('./risk');
+const { readPolicy, evaluateRules, validateInput } = require('./risk');
 const { enqueue, assertAuthorization } = require('./ledger');
 const iso = value => new Date(value).toISOString();
 const VERSION = 'surveillance-v4-ai';
@@ -12,6 +12,7 @@ const reviewCodes = new Set(['confirmed_fraud', 'legitimate', 'inconclusive']);
 function batchSize(value = 25) { if (!Number.isInteger(value) || value < 1 || value > 25) throw new HttpError(400, 'Scan between 1 and 25 payments per batch.'); return value; }
 function signal(code, message, source) { return { code, message, source }; }
 function bindingMatches(input, row) {
+  try { validateInput(input); } catch { return false; }
   return input && input.transactionId === row.id && input.userId === String(row.user_id) && input.sourceAccountId === String(row.account_id) && input.amountCents === -Number(row.amount_cents) && input.type === row.type && input.payee === row.payee && input.isInternal === row.internal && Date.parse(input.createdAt) === new Date(row.requested_at).getTime();
 }
 function finding(row, { model = null, policy, prior, now = Date.now } = {}) {
@@ -97,7 +98,6 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
     const rows = (await db.query(`SELECT t.*,a.user_id,f.input_json,f.result_json FROM transactions t JOIN accounts a ON a.id=t.account_id
       LEFT JOIN fraud_assessments f ON f.id=t.id WHERE t.amount_cents<0 AND t.type IN ('transfer','bill') AND t.requested_at<=$2
       AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1) AND ($4::text IS NULL OR t.id=$4)
-      AND ($4::text IS NOT NULL OR NOT EXISTS(SELECT 1 FROM demo_counterparties d WHERE d.user_id=a.user_id AND d.receipt_ids_json ? t.id))
       ORDER BY t.insert_seq LIMIT $3`, [detector, iso(started), limit + 1, transactionId])).rows;
     for (const row of rows.slice(0, limit)) {
       if (Date.now() + 8000 > deadline) break;
@@ -110,7 +110,7 @@ async function scan(db, riskClient, { actor = null, now = Date.now, limit = 25, 
       summary.checked++; summary.flagged += Number(evidence.flagged); summary.created += saved.created; summary.reopened += saved.reopened;
       if (model) summary.modelAnalyzed++; else summary.manualContext++;
     }
-    summary.remaining = Number((await db.query(`SELECT count(*)::int AS count FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.amount_cents<0 AND t.type IN ('transfer','bill') AND t.requested_at<=$2 AND ($3::text IS NULL OR t.id=$3) AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1) AND ($3::text IS NOT NULL OR NOT EXISTS(SELECT 1 FROM demo_counterparties d WHERE d.user_id=a.user_id AND d.receipt_ids_json ? t.id))`, [detector, iso(started), transactionId])).rows[0].count);
+    summary.remaining = Number((await db.query(`SELECT count(*)::int AS count FROM transactions t WHERE t.amount_cents<0 AND t.type IN ('transfer','bill') AND t.requested_at<=$2 AND ($3::text IS NULL OR t.id=$3) AND NOT EXISTS(SELECT 1 FROM fraud_screenings s WHERE s.transaction_id=t.id AND s.detector_version=$1)`, [detector, iso(started), transactionId])).rows[0].count);
     await db.query('UPDATE fraud_monitor_state SET lease_owner=NULL,lease_until=NULL,last_completed_at=$2,last_error=NULL,last_summary=$3 WHERE id=1 AND lease_owner=$1', [lease, iso(now()), summary]);
     return summary;
   } catch (error) {

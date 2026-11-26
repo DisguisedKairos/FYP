@@ -116,6 +116,17 @@ pg('Staff presentation replies expose recorded scores, comparison counts and rul
  }
 });
 
+pg('Natural fraud rule requests advertise canonical identifiers and supported review actions',async t=>{
+ const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT * FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];
+ const agents=createAgents({db:f.db,model:provider(async(messages,schemas)=>{
+  const rule=schemas.find(s=>s.function.name==='simulate_rule');
+  if(rule){assert.deepEqual(rule.function.parameters.properties.ruleId.enum,['high_value','new_payee','velocity','balance_utilization','daily_limit']);assert.deepEqual(rule.function.parameters.properties.action.enum,['review','block']);}
+  return messages.some(m=>m.role==='tool')?answer('banking_evidence','There are no eligible assessments, so the preview has insufficient coverage [E1].',['simulate_rule']):call('simulate_rule',{ruleId:'high value',threshold:150,days:30});
+ })});
+ const r=await agents.execute(user,'assistant',{message:'What if we reduced the high value threshold to SGD 150 for the past month? Preview it only.'});
+ assert.equal(r.narrativeWithheld,undefined,r.narrativeIssue);assert.ok(r.items.some(i=>i.title==='Proposed rule threshold'&&i.amountCents===15000));
+});
+
 test('An empty rule preview must state insufficient coverage instead of implying a tested safe threshold',()=>{
  const {narrativeIssue}=require('../banking/agents/evidence');
  const options={results:[{tool:'simulate_rule',value:{assessed:0}}],evidence:[{id:'E1'}],requireCitations:true};

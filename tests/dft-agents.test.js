@@ -108,9 +108,47 @@ pg('Fraud investigation and rule simulation retain recorded evidence without cha
   assert.equal(simulation.skipped,archived.length);assert.equal(simulation.assessed,1);
   assert.deepEqual(simulation.before,{allow:1,review:0,block:0});assert.deepEqual(simulation.after,{allow:0,review:1,block:0});
   assert.equal(simulation.changed,1);assert.deepEqual((await f.db.query('SELECT id,result_json FROM fraud_assessments ORDER BY id')).rows,evidenceBefore);
+  for(const alias of ['high value','High-Value'])assert.equal((await reports.simulation(f.db,reviewer,{ruleId:alias,patch:{threshold:50}})).changed,1);
   assert.match(simulation.limitations.join(' '),/No labeled fraud outcomes/);
   assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(await financialSnapshot(f.db),before);
   await assert.rejects(reports.simulation(f.db,reviewer,{ruleId:'velocity',patch:{threshold:1.5}}),e=>e.status===400);
+});
+
+pg('Investigations retain original decisions alongside later AI findings and the current human outcome',async t=>{
+  let score=2;const f=await fixture(t,{assessModel:input=>require('./dft-helpers').modelStub(score)(input)}),client=f.client();await client.login();
+  const source=(await client.dashboard()).accounts[0];
+  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'INVESTIGATION-MONITORING',amount:'100',requestId:randomUUID()}});assert.equal(paid.status,200);
+  const id=paid.data.transaction.id,before=await financialSnapshot(f.db),reviewer=(await actors(f.db)).reviewer;
+  score=82;await require('../banking/fraud-cases').scan(f.db,f.riskClient,{force:true,transactionId:id});
+  let report=await reports.investigation(f.db,reviewer,{transactionId:id});
+  assert.equal(report.assessment.decision,'allow');assert.equal(report.assessment.modelScore,2);
+  assert.equal(report.monitoring.model.score,82);assert.equal(report.humanReview.open,true);assert.equal(report.humanReview.status,'open');
+  assert.ok(report.findings.some(s=>/above its review threshold/.test(s)));assert.ok(report.evidence.some(e=>e.type==='screening'));assert.ok(report.evidence.some(e=>e.type==='fraud_case'));
+  const items=reports.assistantItems('investigate_transaction',report);assert.ok(items.some(i=>i.title==='Latest monitoring AI score'&&i.value==='82 / 100'));assert.ok(items.some(i=>i.title==='Human investigation status'&&i.value==='open'));
+  const options={results:[{tool:'investigate_transaction',value:report}]};
+  assert.equal(narrativeIssue('Later monitoring flagged this payment and an existing human investigation remains open. The original payment assessment is separate.',null,options),null);
+  assert.ok(narrativeIssue('There are no open human investigations.',null,options));
+  assert.ok(narrativeIssue('The original payment assessment is shown below.',null,options));
+  const admin=f.client();await admin.login('reviewer@greenlink.demo');const path='/api/fraud/cases/'+report.humanReview.id+'/review';
+  const claim=await admin.request(path,{method:'POST',body:{action:'claim',version:report.humanReview.version}});assert.equal(claim.status,200,JSON.stringify(claim.data));
+  report=await reports.investigation(f.db,reviewer,{transactionId:id});assert.equal(report.humanReview.status,'in_review');assert.ok(report.humanReview.reviewer);
+  const closed=await admin.request(path,{method:'POST',body:{action:'close',version:claim.data.case.version,outcome:'legitimate',reason:'Independent invoice and beneficiary verification completed.',authorizationPassword:'Greenlink123!'}});assert.equal(closed.status,200,JSON.stringify(closed.data));
+  report=await reports.investigation(f.db,reviewer,{transactionId:id});assert.equal(report.humanReview.open,false);assert.equal(report.humanReview.outcome,'legitimate');assert.equal(report.assessment.modelScore,2);
+  assert.ok(reports.assistantItems('investigate_transaction',report).some(i=>i.title==='Recorded human outcome'&&i.value==='legitimate'));
+  await assert.rejects(reports.investigation(f.db,(await actors(f.db)).jamie,{transactionId:id}),e=>e.status===403);
+  assert.deepEqual(await financialSnapshot(f.db),before);
+});
+
+pg('Rule previews skip damaged or mismatched inputs without crashing or inventing impact',async t=>{
+  const f=await fixture(t),client=f.client();await client.login();const source=(await client.dashboard()).accounts[0];
+  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'RULE-INPUT',amount:'100',requestId:randomUUID()}});assert.equal(paid.status,200);
+  const original=(await f.db.query('SELECT * FROM fraud_assessments WHERE id=$1',[paid.data.transaction.id])).rows[0],reviewer=(await actors(f.db)).reviewer,policy=await f.riskClient.getRules();
+  for(const broken of [null,{...original.input_json,historySummary:null},{...original.input_json,transactionId:randomUUID()}]){
+    const id=randomUUID();await f.db.query('INSERT INTO fraud_assessments(id,user_id,source_account_id,payload_hash,policy_version,policy_json,input_json,result_json) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',[id,original.user_id,source.id,original.payload_hash,original.policy_version,original.policy_json,JSON.stringify(broken),original.result_json]);
+  }
+  const before=await financialSnapshot(f.db),result=await reports.simulation(f.db,reviewer,{ruleId:'high_value',patch:{threshold:50},days:30});
+  assert.equal(result.assessed,1);assert.equal(result.skipped,3);assert.equal(result.changed,1);assert.deepEqual(result.after,{allow:0,review:1,block:0});
+  assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(await financialSnapshot(f.db),before);
 });
 
 pg('Reconciliation finds seeded drift and schedule exceptions while customer reports remain isolated and read-only',async t=>{

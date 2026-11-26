@@ -17,6 +17,10 @@ The standalone Banking insights workspace has been removed, including its forms,
 | AI rule impact analysis | Bank administrators | GLDB Assistant: ask for a rule preview with proposed settings and lookback |
 | Reconciliation investigation | Customers: owned records; administrators: bank operations | GLDB Assistant |
 
+Administrator investigations show the original payment assessment, latest saved monitoring findings and current human case status separately. A later flag does not rewrite the original decision. Ask “Investigate transaction <actual outgoing receipt ID>, including its latest fraud findings and human review status.” Open cases, assigned reviewers and recorded outcomes come from the case records; this enquiry does not create or close a case.
+
+In Fraud monitoring, the suspicious-activity queue, held-payment reviews and model panels load independently. Batch scans include all recorded outgoing transfers and bills. Scan counts distinguish actual AI reassessments from records requiring manual context review. Missing or damaged original inputs cannot receive an invented score or stop the remainder of the scan. Claim a case before recording an outcome; password confirmation and an independent reviewer remain required. Closing an investigation does not settle or reverse its payment. Rule previews accept natural wording, advertise the supported rule identifiers and exclude malformed or mismatched assessment snapshots without changing live rules.
+
 See [daily market and scam context](market-context.md) for official public feeds and the assistant's guarded human-review requests.
 
 ## Chat popup and payment drafts

@@ -149,13 +149,17 @@ pg('Recorded payment reviews and pending requests remain distinct from completed
  const report=risk.validateEvaluation(reply(input),input);assert.equal(report.assessments[0].reputation.level,'review');assert.equal(report.assessments[0].financial.level,'review');assert.deepEqual(await financial(f.db),before);
 });
 
-pg('Only operator-registered historical demo receipts are omitted from automatic monitoring',async t=>{
+pg('Counterparty-linked receipts receive the same monitoring coverage as other payments',async t=>{
  const {modelStub}=require('./dft-helpers'),f=await fixture(t,{assessModel:modelStub(80)});await seedSectorCompanies(f.db);const owner=await actor(f.db),cases=require('../banking/fraud-cases');
- await cases.scan(f.db,f.riskClient,{force:true});
- assert.equal((await f.db.query('SELECT count(*)::int AS n FROM fraud_cases c JOIN transactions t ON t.id=c.transaction_id JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1',[owner.id])).rows[0].n,0);
+ const before=await financial(f.db);await cases.scan(f.db,f.riskClient,{force:true});
+ const expected=(await f.db.query("SELECT count(*)::int AS n FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND t.amount_cents<0 AND t.type IN ('transfer','bill')",[owner.id])).rows[0].n;
+ const monitored=(await f.db.query('SELECT s.evidence_json FROM fraud_cases c JOIN fraud_screenings s ON s.id=c.screening_id JOIN transactions t ON t.id=c.transaction_id JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1',[owner.id])).rows;
+ assert.equal(monitored.length,expected);assert.ok(expected>0);assert.ok(monitored.every(s=>s.evidence_json.model===null&&s.evidence_json.signals.some(v=>v.code==='missing_context')));
+ const after=await financial(f.db);for(const key of ['accounts','transactions','rules'])assert.deepEqual(after[key],before[key]);
  const client=f.client();await client.login(EMAIL,PASSWORD);const source=(await client.dashboard()).accounts[0];
  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'SECTOR-DEMO-real-payment',amount:'25',requestId:require('node:crypto').randomUUID()}});assert.equal(paid.status,200);
  await cases.scan(f.db,f.riskClient,{force:true});assert.equal((await f.db.query('SELECT count(*)::int AS n FROM fraud_cases WHERE transaction_id=$1',[paid.data.transaction.id])).rows[0].n,1);
  const receipt=(await f.db.query("SELECT t.id FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND t.amount_cents<0 ORDER BY t.insert_seq LIMIT 1",[owner.id])).rows[0];
- assert.equal((await cases.scan(f.db,f.riskClient,{force:true,transactionId:receipt.id})).checked,1);
+ assert.equal((await cases.scan(f.db,f.riskClient,{force:true,transactionId:receipt.id})).checked,0);
+ const admin=(await f.db.query("SELECT * FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];assert.ok((await cases.analysis(f.db,admin,receipt.id)).caseId);
 });

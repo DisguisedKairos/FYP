@@ -37,6 +37,24 @@ test('Staff analyse a completed payment, inspect its AI flag and record an indep
 });
 
 
+test('Fraud cases stay usable when payment reviews fail and model metadata is delayed',async t=>{
+  const f=await fixture(t,{assessModel:modelStub(80)}),client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
+  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:account.id,billerId:'pub',reference:'INDEPENDENT-PANELS',amount:'1.00',requestId:randomUUID()}});assert.equal(paid.status,200);
+  await require('../banking/fraud-cases').scan(f.db,f.riskClient,{force:true,transactionId:paid.data.transaction.id});
+  const page=await launchChrome(t,{width:1280,height:900});await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');await page.fill('#email','reviewer@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
+  await page.evaluate("window.originalFraudFetch=window.fetch;window.fetch=async(...args)=>{const path=String(args[0]);if(path==='/api/fraud/reviews')return new Response(JSON.stringify({error:'Payment review queue unavailable.'}),{status:503,headers:{'Content-Type':'application/json'}});if(path==='/api/fraud/model')await new Promise(resolve=>window.releaseModelRead=resolve);return window.originalFraudFetch(...args);};");
+  await page.click('[data-nav=fraud]');await page.waitFor('!!document.querySelector("[data-fraud-case]") && !!document.querySelector("[data-model-activity]") && !!window.releaseModelRead');
+  assert.match(await page.evaluate('document.body.textContent'),/Payment review queue unavailable/);
+  assert.match(await page.evaluate('document.querySelector("[data-fraud-scan-status]").textContent'),/1 AI assessments, 0 requiring manual context review/);
+  await page.click('[data-fraud-case]');await page.waitFor('!!document.querySelector("#modal[open] [data-claim-fraud-case]")');
+  assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/AI model identified/);
+  await page.click('#modal [data-action=close-dialog]');await page.waitFor("import('/js/core.js').then(m=>!m.modal.open&&m.state.modalOpener===null)");await page.fill('#fraud-scan-transaction',paid.data.transaction.id);
+  await page.evaluate("document.querySelector('#fraud-scan-transaction').focus();document.querySelector('#fraud-scan-transaction').setSelectionRange(3,8);window.releaseModelRead();window.fetch=window.originalFraudFetch;");
+  await page.waitFor('!!document.querySelector(".model-card .tag")');
+  assert.deepEqual(await page.evaluate("({value:document.querySelector('#fraud-scan-transaction').value,focused:document.activeElement.id,start:document.activeElement.selectionStart,end:document.activeElement.selectionEnd})"),{value:paid.data.transaction.id,focused:'fraud-scan-transaction',start:3,end:8});
+  await page.click('[data-action=reload-page]');await page.waitFor('!!document.querySelector(".review-queue")');assert.deepEqual(page.errors,[]);
+});
+
 test('Delayed fraud case reads and completed scans do not reopen dialogs after navigation',async t=>{
  const f=await fixture(t,{assessModel:modelStub(80)}),client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:account.id,billerId:'pub',reference:'DELAYED-CASE',amount:'1.00',requestId:randomUUID()}});assert.equal(paid.status,200);

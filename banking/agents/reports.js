@@ -1,7 +1,7 @@
 'use strict';
 
 const { HttpError } = require('../../models/errors');
-const { readPolicy, evaluateRules } = require('../risk');
+const { readPolicy, evaluateRules, validateInput, sameBinding } = require('../risk');
 const { nextOccurrence } = require('../workflows');
 const { validProvenance } = require('../ai-provider');
 const {projectionWarnings}=require('./funds');
@@ -117,6 +117,13 @@ async function investigation(db, user, { transactionId, now = Date.now } = {}) {
     const row = (await client.query('SELECT t.*,a.user_id,a.number,b.legal_name FROM transactions t JOIN accounts a ON a.id=t.account_id LEFT JOIN businesses b ON b.id=a.business_id WHERE t.id=$1', [transactionId])).rows[0];
     if (!row || Number(row.amount_cents) >= 0) throw new HttpError(404,'Outgoing transaction not found.');
     const assessment = (await client.query('SELECT id,input_json,result_json,policy_version FROM fraud_assessments WHERE id=$1', [transactionId])).rows[0];
+    const screening = (await client.query('SELECT id,evidence_json,created_at FROM fraud_screenings WHERE transaction_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1', [transactionId])).rows[0];
+    const review = (await client.query(`SELECT c.*,u.name AS reviewer_name,s.evidence_json FROM fraud_cases c
+      JOIN fraud_screenings s ON s.id=c.screening_id LEFT JOIN users u ON u.id=c.assigned_to WHERE c.transaction_id=$1`, [transactionId])).rows[0];
+    const monitoring = screening ? { ...screening.evidence_json, available:true, screeningId:screening.id, recordedAt:iso(screening.created_at) } : { available:false };
+    const humanReview = review ? { exists:true, id:review.id, status:review.status, open:review.status!=='closed', version:review.version,
+      reviewer:review.reviewer_name || null, outcome:review.outcome, reason:review.review_reason, resolvedAt:review.resolved_at?iso(review.resolved_at):null,
+      screeningId:review.screening_id, priorityScore:review.score, signals:review.evidence_json.signals || [] } : { exists:false, open:false, status:'none' };
     const prior = (await client.query(`SELECT count(*)::int AS count,COALESCE(avg(-amount_cents),0)::text AS average,
       count(*) FILTER (WHERE payee=$3)::int AS same_payee,COALESCE(max(-amount_cents),0)::text AS maximum
       FROM transactions WHERE account_id=$1 AND amount_cents<0 AND status='completed' AND completed_at<$2 AND id<>$4`, [row.account_id,row.requested_at,row.payee,row.id])).rows[0];
@@ -125,11 +132,15 @@ async function investigation(db, user, { transactionId, now = Date.now } = {}) {
     const average = Math.round(Number(prior.average));
     return { title: 'Fraud investigation brief', generatedAt: iso(now()), transaction: { id: row.id, accountSuffix: row.number.slice(-4), business: row.legal_name || 'Business profile required', amountCents: -amount(row.amount_cents), status: row.status, requestedAt: iso(row.requested_at), counterparty: row.counterparty },
       assessment: { available: Boolean(risk), modelScore: risk?.modelScore ?? null, combinedScore: risk?.score ?? null, scoreScale:100, decision: risk?.decision || 'unavailable', modelVersion: risk?.modelVersion || null, policyVersion: risk?.currentRuleVersion || risk?.ruleVersion || (assessment ? Number(assessment.policy_version) : null), initialPolicyVersion: assessment ? Number(assessment.policy_version) : null, reasons },
+      monitoring, humanReview,
       history: { priorCompletedOutgoing: prior.count, averageCents: average, maximumCents: amount(prior.maximum), samePayeeCount: prior.same_payee, amountMultiple: average > 0 ? Number((-Number(row.amount_cents)/average).toFixed(2)) : null },
-      findings: [...reasons, ...(prior.same_payee === 0 ? ['No earlier completed outgoing payment to this payee was found on the source account.'] : []), ...(!prior.count ? ['Insufficient completed history for a reliable behavioral comparison.'] : [])],
+      findings: [...reasons, ...new Set([...(monitoring.signals || []), ...(monitoring.model?.reasons || [])].map(s=>'Latest monitoring: '+s.message)),
+        ...(humanReview.exists && humanReview.screeningId!==screening?.id ? humanReview.signals.map(s=>'Saved investigation evidence: '+s.message) : []),
+        ...(prior.same_payee === 0 ? ['No earlier completed outgoing payment to this payee was found on the source account.'] : []), ...(!prior.count ? ['Insufficient completed history for a reliable behavioral comparison.'] : [])],
       nextSteps: ['Verify the business purpose and recipient through an independent channel.', 'Inspect the linked receipt and evidence before making a bank review decision.', 'Use the existing independent review screen; this brief does not approve, reject or prove fraud.'],
       limitations: ['Historical comparison uses payments completed before the requested time; explanations are evidence summaries, not a fraud verdict.', 'Current AI scoring is qualitative without validated fraud accuracy. Historical assessments retain their recorded provider and missing scores remain unavailable.'],
-      evidence: [{ type:'transaction',id:row.id,label:'Payment receipt' }, ...(assessment ? [{type:'assessment',id:assessment.id,label:'Recorded assessment and input snapshot'}] : [])], actions: [] };
+      evidence: [{ type:'transaction',id:row.id,label:'Payment receipt' }, ...(assessment ? [{type:'assessment',id:assessment.id,label:'Original assessment and input snapshot'}] : []),
+        ...(screening ? [{type:'screening',id:screening.id,label:'Latest saved monitoring findings'}] : []), ...(review ? [{type:'fraud_case',id:review.id,label:'Human investigation and recorded outcome'}] : [])], actions: [] };
   }, { isolation:'REPEATABLE READ',readOnly:true });
 }
 
@@ -143,9 +154,10 @@ function candidateRule(rule, patch) {
 async function simulation(db, user, { ruleId, patch, days=30, now=Date.now }={}) {
   await assertActor(db,user,{admin:true}); days=horizon(days);
   return db.transaction(async client => {
-    const policy=await readPolicy(client), rule=policy.rules.find(r=>r.id===ruleId);
+    const key=typeof ruleId==='string'?ruleId.trim().toLowerCase().replace(/[\s-]+/g,'_'):null;
+    const policy=await readPolicy(client), rule=policy.rules.find(r=>r.id===key);
     if (!rule) throw new HttpError(400,'Choose a supported fraud rule.');
-    const candidate=candidateRule(rule,patch), proposed=policy.rules.map(r=>r.id===ruleId?candidate:r);
+    const candidate=candidateRule(rule,patch), proposed=policy.rules.map(r=>r.id===rule.id?candidate:r);
     const rows=(await client.query('SELECT id,input_json,result_json,created_at FROM fraud_assessments WHERE created_at>=$1 AND created_at<=$2 ORDER BY created_at DESC,id LIMIT 1001',[iso(now()-days*DAY),iso(now())])).rows;
     const truncated=rows.length>1000, inspected=rows.slice(0,1000), before={allow:0,review:0,block:0},after={allow:0,review:0,block:0}, changes=[];
     const decide=(rules,input,result)=>{const matches=evaluateRules(rules,input); return matches.some(r=>r.action==='block')?'block':matches.length || result.modelScore>=65?'review':'allow';};
@@ -154,6 +166,9 @@ async function simulation(db, user, { ruleId, patch, days=30, now=Date.now }={})
       // Archived providers remain readable, but only verified OpenAI scores enter current reports.
       const result=row.result_json;
       if(!validProvenance(result) || !Number.isInteger(result.modelScore) || result.modelScore<0 || result.modelScore>94){skipped++;continue;}
+      // A valid score cannot make a missing or mismatched input safe to replay.
+      try { validateInput(row.input_json); } catch { skipped++;continue; }
+      if(row.input_json.transactionId!==row.id || !sameBinding(result,row.input_json)){skipped++;continue;}
       const initial=decide(policy.rules,row.input_json,row.result_json), next=decide(proposed,row.input_json,row.result_json);
       before[initial]++;after[next]++;
       if(initial!==next)changes.push({assessmentId:row.id,before:initial,after:next,amountCents:row.input_json.amountCents});
@@ -186,7 +201,17 @@ function assistantItems(name,value){
       {title:'Reviewed outgoing payment',amountCents:value.transaction.amountCents,status:value.transaction.status,date:value.transaction.requestedAt,detail:value.transaction.counterparty+'; receipt '+value.transaction.id},
       {title:'Recorded model risk score',value:score(value.assessment.modelScore),detail:value.assessment.modelVersion||'No recorded model identity'},
       {title:'Recorded combined risk score',value:score(value.assessment.combinedScore),detail:'Historical recorded assessment; no new score was calculated.'},
-      {title:'Recorded decision',value:value.assessment.decision==='unavailable'?'Not recorded':value.assessment.decision},
+      {title:'Recorded decision',value:value.assessment.decision==='unavailable'?'Not recorded':value.assessment.decision,detail:'Original payment decision; subsequent monitoring and human review are separate.'},
+      {title:'Latest monitoring analysis',value:value.monitoring?.available?'Recorded':'Not recorded',date:value.monitoring?.recordedAt},
+      ...(value.monitoring?.available?[
+        {title:'Latest monitoring AI score',value:score(value.monitoring.model?.score),detail:value.monitoring.model?.version||'No numeric AI reassessment was recorded.'},
+        {title:'Latest monitoring result',value:value.monitoring.flagged?'Human review requested':'No additional signal',detail:'This saved check does not establish that a payment is safe.'},
+      ]:[]),
+      {title:'Human investigation status',value:value.humanReview?.status || 'none',detail:value.humanReview?.reviewer?'Reviewer: '+value.humanReview.reviewer:value.humanReview?.exists?'Unassigned':'No saved investigation case'},
+      ...(value.humanReview?.exists?[
+        {title:'Human investigation case',value:value.humanReview.id},
+        ...(value.humanReview.outcome?[{title:'Recorded human outcome',value:value.humanReview.outcome,detail:value.humanReview.reason,date:value.humanReview.resolvedAt}]:[]),
+      ]:[]),
       {title:'Earlier completed outgoing payments',value:String(value.history.priorCompletedOutgoing)},
       {title:'Earlier payments to this payee',value:String(value.history.samePayeeCount)},
       ...(value.history.priorCompletedOutgoing?[{title:'Earlier payment average',amountCents:value.history.averageCents},{title:'Earlier payment maximum',amountCents:value.history.maximumCents}]:[]),
