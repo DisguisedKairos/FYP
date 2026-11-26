@@ -23,18 +23,18 @@ The native database remains separate from the current Neon roster; retain its or
 
 ## Business banking and customer experience
 
-1. Sign in as the business tester. Inspect the company dashboard, operating savings and liquidity reserve. The initial sample funding is SGD 45,000 operating and SGD 5,000 reserve; prepared payments change those balances. Historical sample-funds deposits make statements useful across dates.
+1. Sign in as the business tester. Inspect the company dashboard, operating savings and liquidity reserve. The initial test funding is SGD 45,000 operating and SGD 5,000 reserve; prepared payments change those balances. Historical test-funds deposits make statements useful across dates.
 2. Open Accounts. Create an empty savings account, rename it and close it. Keep one account open. Closing the funded operating account is refused. A closed fixture account is already visible.
 3. Transfer SGD 10 to recipient account **1088800201**. Move SGD 5 to your own reserve **1088800102**. Review the details and authorize with the current test password. Sign in as the recipient in another browser profile to see the matching incoming receipt.
-4. Pay a small PUB, SP Services or Singtel bill with a sample reference. Billers simulate settlement; the local payment and notification workflows are implemented.
+4. Pay a small PUB, SP Services or Singtel bill with a test reference. Billers simulate settlement; the local payment and notification workflows are implemented.
 5. Open Activity and inspect the prepared completed, held and rejected transactions. Search **Feature tour**, filter by status/account/date, export filtered CSV and print/save an account statement as PDF. Statements reconcile opening funds and completed ledger entries; pending/rejected rows never reduce the settled balance.
-6. Open Scheduled payments. Business examples include active one-time, weekly and monthly instructions, a cancelled instruction and an executed once-only bill. Future sample instructions are initially seven or more days away. Create your own instruction a few minutes ahead to watch the normal server worker execute it, or cancel an active sample. The failed zero-balance fixture belongs to the retired empty tester and is exercised only in isolated tests.
+6. Open Scheduled payments. Business examples include active one-time, weekly and monthly instructions, a cancelled instruction and an executed once-only bill. Future test instructions are initially seven or more days away. Create your own instruction a few minutes ahead to watch the normal server worker execute it, or cancel an active test instruction. The failed zero-balance fixture belongs to the retired empty tester and is exercised only in isolated tests.
 7. Open Notifications. Onboarding, payment, review and schedule examples generate real persisted in-app alerts. Mark one or all read and follow a receipt link.
 8. Ask the private assistant for balances, recent transactions, scheduled payments or an explanation of a flagged payment. Request a small transfer/payment draft and finish through the ordinary review form. Chat never executes the financial action. Keep passwords and authenticator codes out of chat.
 
 ## Onboarding and staff workflows
 
-1. The pending tester can view its pending application but cannot move funds or change savings accounts. Use a different browser profile to sign in as the reviewer tester. Open business applications, inspect the sample company, confirm sample verification and approve with a reason and current password. Refresh the pending user's application to see approval.
+1. The pending tester can view its pending application but cannot move funds or change savings accounts. Use a different browser profile to sign in as the reviewer tester. Open business applications, inspect the test company, confirm test verification and approve with a reason and current password. Refresh the pending user's application to see approval.
 2. The rejected tester sees the saved rejection reason. Correct its details and resubmit. It returns to pending review and requires another independent staff decision.
 3. The reviewer has no fabricated business or deposit accounts. Its interface opens the bank operations workspace.
 
@@ -44,7 +44,7 @@ Missing-profile registration and the approved zero-balance/failed-schedule cases
 
 The feature setup uses the real configured Python scorer and the existing rule policy. It creates a SGD 10,000 held high-value payment, a held maker payment to a new recipient, a SGD 30,000 policy-blocked payment, and independently approved/rejected examples. The existing rule values and policy version are preserved.
 
-1. Sign in as the reviewer tester. In Fraud monitoring, open **high-value-awaiting-review** or **maker-awaiting-independent-review**. Inspect AI score, combined score, model explanation, matched controls and recorded authorization. Approve one with a verified sample reason; reject another. Refresh the business sender to see the final receipt and balance.
+1. Sign in as the reviewer tester. In Fraud monitoring, open **high-value-awaiting-review** or **maker-awaiting-independent-review**. Inspect AI score, combined score, model explanation, matched controls and recorded authorization. Approve one with a verified test reason; reject another. Refresh the business sender to see the final receipt and balance.
 2. The maker tester can see its held payment in Activity. Its own transaction is excluded from its review queue, and a direct self-approval request returns 403. The fixture has verified this guard. A different administrator can review it.
 3. As the reviewer, open Fraud rules. For a small rule-management demonstration, record the initial threshold, change the high-value threshold from SGD 10,000 to SGD 9,500, authorize and inspect the audit entry. Restore the original threshold afterward and inspect the second audit event. Rule edits affect the shared local policy; the fixture itself does not edit it. Ordinary customer accounts cannot use these administrator APIs.
 4. Use npm run demo:agents for actual configured AI scoring and all five analysis features in a disposable schema. Old preset fraud simulations have been removed.

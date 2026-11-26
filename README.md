@@ -2,7 +2,7 @@
 
 **AI-Enabled Cloud-Native Digital Banking Platform - Version 2.12.0**
 
-Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **OpenAI API**. Sample funds, business checks and bill settlement are educational project flows.
+Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **OpenAI API**. Account balances and transactions are stored in PostgreSQL. Business checks and bill settlement are educational project workflows.
 
 ## OpenAI integration
 
@@ -60,7 +60,7 @@ The original native credentials under `data/testing/` and legacy Neon feature-to
 
 ## Industry business demo accounts
 
-Eight fictional businesses have separate customer logins, operating/reserve accounts and monthly sample activity across logistics, technology, manufacturing, wholesale trade, hospitality, construction, healthcare and energy. See the [login table and walkthrough](data/testing/neon/README.md#industry-business-demo-accounts).
+Eight fictional businesses have separate customer logins, operating/reserve accounts and monthly recorded activity across logistics, technology, manufacturing, wholesale trade, hospitality, construction, healthcare and energy. See the [login table and walkthrough](data/testing/neon/README.md#industry-business-demo-accounts).
 
 In **Business profile > Customize industry news**, choose the company's operating markets, activities and priorities. Then click **Ask for an industry briefing**. The assistant retrieves real industry news, explains its conditional relevance to that business and offers sector-specific next checks with source links. Saved preferences are private to that business. Fictional company names are excluded from industry search queries, and news cannot authorize payments or create staff cases.
 
@@ -163,7 +163,7 @@ Ask the popup assistant: "Summarize my transactions with other companies in a da
 
 Ask the assistant: "Generate a downloadable finance report for this month" or "Pull a finance report for the last 30 days." The chat reply shows current owned account balances and completed external cash flow, with **Download CSV** and **Download PDF** buttons. Each download queries a fresh PostgreSQL snapshot for the displayed date range and records its generation time.
 
-Reports include company totals and ledger entries; pending/rejected requests remain separate and own-account transfers/opening funds do not inflate external cash flow. Balances are current, even for a historical activity period. Supported periods are two YYYY-MM-DD dates, today, yesterday, this month, last month, or last/past N days, with a maximum of 366 days. CSV supports up to 10,000 entries, PDF up to 2,000; exports over 4 MB require a shorter period. This is sample banking activity, not a full accounting or audited financial statement.
+Reports include company totals and ledger entries; pending/rejected requests remain separate and own-account transfers/opening funds do not inflate external cash flow. Balances are current, even for a historical activity period. Supported periods are two YYYY-MM-DD dates, today, yesterday, this month, last month, or last/past N days, with a maximum of 366 days. CSV supports up to 10,000 entries, PDF up to 2,000; exports over 4 MB require a shorter period. These reports describe recorded banking activity, not a full accounting or audited financial statement.
 
 ### Funding warnings
 

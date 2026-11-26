@@ -39,7 +39,7 @@ npm run devops:up
 
 Open `http://localhost:8080`. This creates a separate, initially empty PostgreSQL database in the `greenlink_postgres_data` Docker volume. Register a business operator, then provision staff and review its application as documented below. Existing local customers are not copied into this volume.
 
-For an explicitly seeded sample stack, set `GREENLINK_SEED_DEMO=true` before starting. PowerShell:
+For an explicitly seeded test stack, set `GREENLINK_SEED_DEMO=true` before starting. PowerShell:
 
 ```powershell
 $env:GREENLINK_SEED_DEMO = 'true'
@@ -47,7 +47,7 @@ npm run devops:up
 npm run test:containers
 ```
 
-On macOS/Linux use `GREENLINK_SEED_DEMO=true npm run devops:up` and `GREENLINK_SEED_DEMO=true npm run test:containers`. The sample identities/passwords in the root README apply to this freshly seeded container database. The smoke command performs a small sample transfer and requires that explicit flag; it is intended only for a disposable demo stack.
+On macOS/Linux use `GREENLINK_SEED_DEMO=true npm run devops:up` and `GREENLINK_SEED_DEMO=true npm run test:containers`. The test identities/passwords in the root README apply to this freshly seeded container database. The smoke command performs a small test transfer and requires that explicit flag; it is intended only for a disposable demo stack.
 
 Stop using `npm run devops:down`; this retains the database volume and secret files. Repeating setup preserves secrets, accounts and money. Do not remove the volume or regenerate secrets to perform a normal restart or update.
 
@@ -59,7 +59,7 @@ Container configuration uses `GREENLINK_` prefixes so the native app's `.env` ca
 | `GREENLINK_PUBLIC_ORIGIN` | `http://localhost:8080`; must match the browser's exact origin |
 | `GREENLINK_BANKING_IMAGE` | `greenlink-banking:local`, or a published GHCR banking commit tag |
 | `GREENLINK_FRAUD_IMAGE` | `greenlink-fraud:local`, or a published GHCR fraud commit tag |
-| `GREENLINK_SEED_DEMO` | `false`; opt in only for sample data |
+| `GREENLINK_SEED_DEMO` | `false`; opt in only for test data |
 
 When changing the port, change the origin too. The proxy network reserves `172.30.5.0/24`, with only Nginx's `172.30.5.10/32` trusted by Express. If that subnet conflicts with an existing network, update the subnet, Nginx address and trust setting together.
 

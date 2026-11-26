@@ -133,10 +133,10 @@ async function simulation(db, user, { ruleId, patch, days=30, now=Date.now }={})
     if (!rule) throw new HttpError(400,'Choose a supported fraud rule.');
     const candidate=candidateRule(rule,patch), proposed=policy.rules.map(r=>r.id===ruleId?candidate:r);
     const rows=(await client.query('SELECT id,input_json,result_json,created_at FROM fraud_assessments WHERE created_at>=$1 AND created_at<=$2 ORDER BY created_at DESC,id LIMIT 1001',[iso(now()-days*DAY),iso(now())])).rows;
-    const truncated=rows.length>1000, sample=rows.slice(0,1000), before={allow:0,review:0,block:0},after={allow:0,review:0,block:0}, changes=[];
+    const truncated=rows.length>1000, inspected=rows.slice(0,1000), before={allow:0,review:0,block:0},after={allow:0,review:0,block:0}, changes=[];
     const decide=(rules,input,result)=>{const matches=evaluateRules(rules,input); return matches.some(r=>r.action==='block')?'block':matches.length || result.modelScore>=65?'review':'allow';};
     let skipped=0;
-    for(const row of sample){
+    for(const row of inspected){
       // Archived providers remain readable, but only verified OpenAI scores enter current reports.
       const result=row.result_json;
       if(!validProvenance(result) || !Number.isInteger(result.modelScore) || result.modelScore<0 || result.modelScore>94){skipped++;continue;}
@@ -144,8 +144,8 @@ async function simulation(db, user, { ruleId, patch, days=30, now=Date.now }={})
       before[initial]++;after[next]++;
       if(initial!==next)changes.push({assessmentId:row.id,before:initial,after:next,amountCents:row.input_json.amountCents});
     }
-    return {title:'Historical fraud rule impact analysis',generatedAt:iso(now()),days,policyVersion:policy.version,rule:rule,candidate,assessed:sample.length-skipped,skipped,truncated,before,after,changed:changes.length,changes:changes.slice(0,100),actions:[],
-      interpretation:changes.length ? `The proposed rule changes ${changes.length} sampled decisions. Review the affected cases before applying it.` : 'No sampled decision changes. This does not establish that the proposed rule is safe.',
+    return {title:'Historical fraud rule impact analysis',generatedAt:iso(now()),days,policyVersion:policy.version,rule:rule,candidate,assessed:inspected.length-skipped,skipped,truncated,before,after,changed:changes.length,changes:changes.slice(0,100),actions:[],
+      interpretation:changes.length ? `The proposed rule changes ${changes.length} assessed decisions. Review the affected cases before applying it.` : 'No decisions change in the assessed records. This does not establish that the proposed rule is safe.',
       limitations:['Current and proposed policies are replayed against the same recorded input snapshots and original model scores.', 'This is a static historical comparison, not a counterfactual settlement simulation or a forecast.', 'No labeled fraud outcomes are available; false positives, recall and accuracy cannot be inferred.', 'Only the latest 1,000 assessments in the selected window are inspected. Live rules and money are unchanged.'],
       evidence:changes.slice(0,100).map(c=>({type:'assessment',id:c.assessmentId,label:'Changed historical assessment'}))};
   },{isolation:'REPEATABLE READ',readOnly:true});
@@ -160,7 +160,7 @@ async function reconciliation(db,user,{now=Date.now}={}) {
     const outbox=(await client.query(`SELECT id,status,attempts,created_at FROM notification_outbox WHERE ${staff?'':'user_id=$1 AND '}status<>'delivered' AND (attempts>0 OR created_at<now()-interval '5 minutes') ORDER BY created_at DESC LIMIT 101`,staff?[]:[user.id])).rows;
     const failedSchedules=schedules.slice(0,100).map(s=>({id:s.id,status:s.status,lastStatus:s.last_status,reason:s.last_error || 'An occurrence is overdue. Inspect its run history.',nextRunAt:s.next_run_at?iso(s.next_run_at):null}));
     return {title:'Reconciliation and exception investigation',generatedAt:iso(now()),scope:staff?'bank operations':'your business',accountsChecked:accounts.length,balanced:discrepancies.length===0,discrepancies,failedSchedules,notificationExceptions:outbox.slice(0,100).map(o=>({id:o.id,status:o.status,attempts:o.attempts,createdAt:iso(o.created_at)})),truncated:schedules.length>100||outbox.length>100,
-      findings:[discrepancies.length?`${discrepancies.length} account balance discrepancies require investigation.`:'Every inspected balance matches its opening funds plus completed ledger entries.',`${schedules.length} sampled schedule exceptions and ${outbox.length} sampled notification exceptions found.`],
+      findings:[discrepancies.length?`${discrepancies.length} account balance discrepancies require investigation.`:'Every inspected balance matches its opening funds plus completed ledger entries.',`${schedules.length} schedule exceptions and ${outbox.length} notification exceptions found in the inspected records.`],
       nextSteps:['Inspect the linked account or instruction and its audit history.','Resolve operational causes through existing authorized workflows. This report never rewrites balances, ledger entries or schedules.'],
       evidence:[...discrepancies.map(a=>({type:'account',id:a.accountId,label:'Balance discrepancy'})),...failedSchedules.map(s=>({type:'schedule',id:s.id,label:'Schedule exception'}))],actions:[]};
   },{isolation:'REPEATABLE READ',readOnly:true});

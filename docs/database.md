@@ -59,7 +59,7 @@ npm run db:check
 
 Setup saves randomly generated passwords privately; rerunning it reuses the saved credentials and preserves banking records. It does not seed, reset or overwrite users. Do not change the generated URLs to perform password rotation; coordinate a deliberate PostgreSQL role password change and matching configuration update instead. Database/role creation is not one PostgreSQL transaction; an interrupted setup may leave provisioned objects and saved credentials, which a retry can reuse.
 
-For an empty sample database only, run `npm run db:seed`. Seeding is unnecessary on this machine's already populated database. The former import command has been retired.
+For an empty test database only, run `npm run db:seed`. Seeding is unnecessary on this machine's already populated database. The former import command has been retired.
 
 ## Credentials and SQL permissions
 

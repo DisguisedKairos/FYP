@@ -15,7 +15,7 @@ async function seedDemo(db, { now = Date.now } = {}) {
       users[key] = (await client.query('INSERT INTO users(name,email,password_hash,role,created_at) VALUES($1,$2,$3,$4,$5) RETURNING id', [name, `${key}@greenlink.demo`, passwordHash, role, date(days)])).rows[0].id;
     }
     for(const [key,legalName,registrationNumber] of [['alex','Meridian Logistics Pte. Ltd.','202600001A'],['jamie','Harbour Supplies Pte. Ltd.','202600002B'],['reviewer','Northstar Treasury Pte. Ltd.','202600003C']]) {
-      await businesses.create(client,{id:users[key]},{legalName,registrationNumber,country:'SG',legalForm:'company',industry:'Business services',registeredAddress:'1 Sample Business Avenue, Singapore 000001'},{now,status:'approved'});
+      await businesses.create(client,{id:users[key]},{legalName,registrationNumber,country:'SG',legalForm:'company',industry:'Business services',registeredAddress:'1 Test Business Avenue, Singapore 000001'},{now,status:'approved'});
     }
     const accounts = {};
     for (const [key, owner, name, number, days] of [['main','alex','Operating savings','1020001001',100],['rainy','alex','Liquidity reserve','1020001002',80],['jamie','jamie','Operating savings','1020002001',90],['reviewer','reviewer','Operating savings','1020009001',100]]) {

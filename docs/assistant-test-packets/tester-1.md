@@ -946,7 +946,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 **Role:** Business | **Effect:** UI write
 
-**Setup:** Owner-approved small sample bill, real scoring
+**Setup:** Owner-approved small test bill, real scoring
 
 **Question or steps:**
 

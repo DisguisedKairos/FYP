@@ -65,6 +65,6 @@ Unused initial recovery codes (one use each):
 
 ## Verification
 
-10 sign-ins verified through real Express/PostgreSQL. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Sample financial writes were scored by the configured private Python service; original policy values were retained.
+10 sign-ins verified through real Express/PostgreSQL. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Test financial writes were scored by the configured private Python service; original policy values were retained.
 
 This file and feature-accounts.json contain shared synthetic demo credentials. Rotate or remove demo accounts before public deployment.

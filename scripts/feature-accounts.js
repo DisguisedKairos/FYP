@@ -74,21 +74,21 @@ async function ensureAccounts(db, password, { now = Date.now } = {}) {
     const collision = await client.query('SELECT email FROM users WHERE lower(email)=ANY($1::text[])', [ACCOUNTS.map(a => a.email)]);
     assert.equal(collision.rowCount, 0, 'A reserved test email already exists. Existing users are never adopted or replaced.');
     const numbers = ACCOUNTS.filter(a => a.number).map(a => a.number).concat('1088800102', '1088800103');
-    assert.equal((await client.query('SELECT 1 FROM accounts WHERE number=ANY($1::text[])', [numbers])).rowCount, 0, 'A reserved sample account number already exists.');
-    assert.equal((await client.query('SELECT 1 FROM businesses WHERE registration_number=ANY($1::text[])', [ACCOUNTS.map(a => a.registration)])).rowCount, 0, 'A reserved sample business registration already exists.');
+    assert.equal((await client.query('SELECT 1 FROM accounts WHERE number=ANY($1::text[])', [numbers])).rowCount, 0, 'A reserved test account number already exists.');
+    assert.equal((await client.query('SELECT 1 FROM businesses WHERE registration_number=ANY($1::text[])', [ACCOUNTS.map(a => a.registration)])).rowCount, 0, 'A reserved test business registration already exists.');
     const manifest = { fixture: FIXTURE, users: {}, accounts: {}, businesses: {}, createdAt: new Date(now()).toISOString() };
     for (const [index, account] of ACCOUNTS.entries()) {
       const user = (await client.query('INSERT INTO users(name,email,password_hash,role) VALUES($1,$2,$3,$4) RETURNING id', [account.name, account.email, hashes[index], account.role])).rows[0];
       manifest.users[account.key] = String(user.id);
       if (account.company) {
-        const record = await business.create(client, user, { legalName: account.company, registrationNumber: account.registration, country: 'SG', legalForm: 'company', industry: 'Synthetic feature testing', registeredAddress: '1 Sample Business Avenue, Singapore 000001' }, { now });
+        const record = await business.create(client, user, { legalName: account.company, registrationNumber: account.registration, country: 'SG', legalForm: 'company', industry: 'Synthetic feature testing', registeredAddress: '1 Test Business Avenue, Singapore 000001' }, { now });
         manifest.businesses[account.key] = record.id;
         await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata) VALUES($1,$1,'business.application_submitted',$2)", [user.id, { fixture: FIXTURE, businessId: record.id, synthetic: true }]);
       }
       if (account.number) {
         const record = (await client.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_provenance,created_at) VALUES($1,'Operating savings',$2,$3,'seed',$4) RETURNING id", [user.id, account.number, account.funds, new Date(now() - 60 * 86400000)])).rows[0];
         manifest.accounts[account.key] = String(record.id);
-        if (account.funds) await credit(client, record.id, account.funds, 'Feature tour sample-funds deposit', now() - 45 * 86400000);
+        if (account.funds) await credit(client, record.id, account.funds, 'Feature tour funding deposit', now() - 45 * 86400000);
       }
     }
     const reserve = (await client.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_provenance,created_at) VALUES($1,'Liquidity reserve','1088800102',500000,'seed',$2) RETURNING id", [manifest.users.business, new Date(now() - 45 * 86400000)])).rows[0];
@@ -97,7 +97,7 @@ async function ensureAccounts(db, password, { now = Date.now } = {}) {
     const closed = (await client.query("INSERT INTO accounts(user_id,name,number,status,opening_provenance) VALUES($1,'Closed feature-test account','1088800103','closed','seed') RETURNING id", [manifest.users.business])).rows[0];
     manifest.accounts.closed = String(closed.id);
     await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata) VALUES($1,$1,'account.closed',$2)", [manifest.users.business, {accountId: String(closed.id), fixture: FIXTURE, synthetic: true}]);
-    await ledger.enqueue(client, { userId: manifest.users.business, type: 'feature.welcome', title: 'Feature tour is ready', message: 'Sample business accounts are available for the feature walkthrough.', metadata: { fixture: FIXTURE } });
+    await ledger.enqueue(client, { userId: manifest.users.business, type: 'feature.welcome', title: 'Feature tour is ready', message: 'Test business accounts are available for the feature walkthrough.', metadata: { fixture: FIXTURE } });
     await client.query("INSERT INTO audit_log(event_type,metadata) VALUES('operator.feature_accounts_created',$1)", [manifest]);
     return { ...manifest, created: true };
   });
@@ -105,7 +105,7 @@ async function ensureAccounts(db, password, { now = Date.now } = {}) {
 async function credit(client, accountId, cents, description, timestamp) {
   const date = new Date(timestamp);
   await client.query(`INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,created_at,requested_at,completed_at,settlement_seq)
-    VALUES($1,$2,'credit',$3,$4,'Synthetic feature-test funds','completed','GLFT-SAMPLE-FUNDS',$5,$5,$5,nextval('settlement_sequence'))`, [randomUUID(), accountId, description, cents, date]);
+    VALUES($1,$2,'credit',$3,$4,'Synthetic feature-test funds','completed','GLFT-OPENING-FUNDS',$5,$5,$5,nextval('settlement_sequence'))`, [randomUUID(), accountId, description, cents, date]);
 }
 
 async function seedExamples(db, manifest, password, riskClient, { now = Date.now } = {}) {
@@ -128,7 +128,7 @@ async function seedExamples(db, manifest, password, riskClient, { now = Date.now
       const application = await business.own(db, await user(account.key));
       if (application.status !== 'pending_review') return { id: application.id, status: application.status };
       const result = await business.review(db, reviewer, application.id, { decision: account.status === 'approved' ? 'approve' : 'reject', version: application.version,
-        reason: account.status === 'approved' ? 'Synthetic feature fixture: sample business checks confirmed.' : 'Synthetic feature fixture: supporting business documents need correction.', verificationConfirmed: true, authorizationPassword: password }, options);
+        reason: account.status === 'approved' ? 'Synthetic feature fixture: test business checks confirmed.' : 'Synthetic feature fixture: supporting business documents need correction.', verificationConfirmed: true, authorizationPassword: password }, options);
       return { id: result.id, status: result.status };
     });
   }
@@ -145,7 +145,7 @@ async function seedExamples(db, manifest, password, riskClient, { now = Date.now
   await once('approve-held', () => ledger.review(db, reviewer, approved.id, { decision: 'approve', reason: 'Feature tour: supplier invoice independently confirmed.', authorizationPassword: password }, options));
   outcome.payments['independently-approved'].status = 'completed';
   const rejected = await payment('independently-rejected', 'business', '1500.00', '1088800601');
-  await once('reject-held', () => ledger.review(db, reviewer, rejected.id, { decision: 'reject', reason: 'Feature tour: sample supplier details could not be verified.', authorizationPassword: password }, options));
+  await once('reject-held', () => ledger.review(db, reviewer, rejected.id, { decision: 'reject', reason: 'Feature tour: test supplier details could not be verified.', authorizationPassword: password }, options));
   outcome.payments['independently-rejected'].status = 'rejected';
   await payment('high-value-awaiting-review', 'business', '10000.00', '1088800201');
   await payment('daily-limit-blocked', 'business', '30000.00', '1088800201');
@@ -262,7 +262,7 @@ async function waitForScheduledExamples(db, examples) {
 
 function renderGuide(manifest, credentials, examples, verified) {
   const rows = ACCOUNTS.map(a => `| ${a.email} | ${a.role} | ${a.status || (a.key === 'profile' ? 'Missing profile' : 'Staff workspace')} | ${a.number || 'No deposit account'} | ${a.purpose} |`).join('\n');
-  return `# Greenlink private feature-testing logins\n\nOpen ${credentials.origin}. These are dedicated synthetic test identities. Original users, passwords, accounts and fraud settings are preserved.\n\nInitial password for all ten new users: **${credentials.password}**\n\nChanged passwords, approvals, review decisions and balances are retained when setup is repeated.\n\n| Login email | Actual permission role | Business state | Operating account | Test purpose |\n| --- | --- | --- | --- | --- |\n${rows}\n\n## Feature walkthrough\n\nFollow docs/feature-testing.md for every screen and workflow. Use different browser profiles/private windows for maker and reviewer. Business operating account: 1088800101; reserve: 1088800102; recipient: 1088800201.\n\nPrepared payment outcomes:\n\n${Object.entries(examples.payments).map(([key,p])=>`- ${key}: ${p.status}, AI score ${p.modelScore}, combined score ${p.score}; receipt ${p.id}`).join('\n')}\n\nPrepared schedules:\n\n${Object.entries(examples.schedules).map(([key,s])=>`- ${key}: ${s.status}; instruction ${s.id}${s.error?' ('+s.error+')':''}`).join('\n')}\n\n## Authenticator account\n\nOnly mfa-tester@greenlink.demo requires a second factor initially. Add this account to your authenticator using the private secret **${credentials.mfa?.secret || 'See saved credentials'}**.\n\nAuthenticator URI: ${credentials.mfa?.otpauthUrl || ''}\n\nOr run npm run test:accounts:otp to obtain the current local test code. Codes cannot be reused; wait for the next 30-second slot after a successful code login.\n\nUnused initial recovery codes (one use each):\n\n${(credentials.mfa?.recoveryCodes || []).map(code=>'- '+code).join('\n')}\n\n## Verification\n\n${verified.length} sign-ins verified through real Express/PostgreSQL. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Sample financial writes were scored by the configured private Python service; original policy values were retained.\n\nThis file and feature-accounts.json contain synthetic demo credentials shared under data/testing/. Rotate or remove demo accounts before public deployment. Application secrets, PostgreSQL connection credentials and other runtime data remain excluded from Git.\n`;
+  return `# Greenlink private feature-testing logins\n\nOpen ${credentials.origin}. These are dedicated synthetic test identities. Original users, passwords, accounts and fraud settings are preserved.\n\nInitial password for all ten new users: **${credentials.password}**\n\nChanged passwords, approvals, review decisions and balances are retained when setup is repeated.\n\n| Login email | Actual permission role | Business state | Operating account | Test purpose |\n| --- | --- | --- | --- | --- |\n${rows}\n\n## Feature walkthrough\n\nFollow docs/feature-testing.md for every screen and workflow. Use different browser profiles/private windows for maker and reviewer. Business operating account: 1088800101; reserve: 1088800102; recipient: 1088800201.\n\nPrepared payment outcomes:\n\n${Object.entries(examples.payments).map(([key,p])=>`- ${key}: ${p.status}, AI score ${p.modelScore}, combined score ${p.score}; receipt ${p.id}`).join('\n')}\n\nPrepared schedules:\n\n${Object.entries(examples.schedules).map(([key,s])=>`- ${key}: ${s.status}; instruction ${s.id}${s.error?' ('+s.error+')':''}`).join('\n')}\n\n## Authenticator account\n\nOnly mfa-tester@greenlink.demo requires a second factor initially. Add this account to your authenticator using the private secret **${credentials.mfa?.secret || 'See saved credentials'}**.\n\nAuthenticator URI: ${credentials.mfa?.otpauthUrl || ''}\n\nOr run npm run test:accounts:otp to obtain the current local test code. Codes cannot be reused; wait for the next 30-second slot after a successful code login.\n\nUnused initial recovery codes (one use each):\n\n${(credentials.mfa?.recoveryCodes || []).map(code=>'- '+code).join('\n')}\n\n## Verification\n\n${verified.length} sign-ins verified through real Express/PostgreSQL. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Test financial writes were scored by the configured private Python service; original policy values were retained.\n\nThis file and feature-accounts.json contain synthetic demo credentials shared under data/testing/. Rotate or remove demo accounts before public deployment. Application secrets, PostgreSQL connection credentials and other runtime data remain excluded from Git.\n`;
 }
 
 async function main() {

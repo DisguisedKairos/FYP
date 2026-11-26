@@ -13,7 +13,7 @@ Retrieved on 24 October 2026 from the bank's [official website](https://www.glba
 | `public/favicon.svg` | Official orange G monogram path placed on a blue square for the browser tab |
 | UI colours | Official homepage CSS variables: blue `#003C82`, orange `#F08200`; lighter/darker supporting colours are project styling |
 
-The bank's logo and identity belong to their respective owner. They identify the company studied by this educational project; the application is a student prototype. The login, application footer and printed statements identify the project and sample funds.
+The bank's logo and identity belong to their respective owner. They identify the company studied by this educational project; the application is a student prototype. The login, application footer and printed statements identify the educational project.
 
 Logos are served locally, so signing in, account pages, statements and the assistant do not contact the bank or an external asset host. Browser security policy remains restricted to local application resources. No bank login page, real customer data, banking credentials or external payment connection is included.
 

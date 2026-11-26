@@ -14,7 +14,7 @@ Rejected applications can be corrected and resubmitted. Approved legal identity 
 
 `businesses` stores the legal customer independently of `users`. `accounts.business_id` is the legal account owner; `accounts.user_id` is the authorized primary operator. A PostgreSQL trigger rejects an account binding to another operator's business. Existing balance and history records are retained. Legacy operators must submit business details and receive bank approval before financial writes resume; the system does not invent a company name or registration number for them.
 
-The internal role value `customer` means an authorized business operator. The `admin` role means bank operations access for onboarding and fraud controls. A standalone bank staff login can be provisioned only through the local operator script; it receives no company or deposit account. Its dashboard is an operations workspace. The demo seed also retains broad administrator/customer scenarios for the FYP tests; these are explicitly sample identities.
+The internal role value `customer` means an authorized business operator. The `admin` role means bank operations access for onboarding and fraud controls. A standalone bank staff login can be provisioned only through the local operator script; it receives no company or deposit account. Its dashboard is an operations workspace. The demo seed also retains broad administrator/customer scenarios for the FYP tests; these are explicitly test identities.
 
 One authorized primary operator per business is supported. Duplicate registration identifiers cannot be used to join or take over another business. Multi-user company membership, business administrator roles, company payment mandates, corporate maker/checker approvals and batch payroll are future work. The existing independent fraud reviewer is a bank control, not a substitute for a corporate signing mandate.
 
@@ -24,7 +24,7 @@ Payment submission, current settlement, held-payment approval and schedule creat
 
 Standing schedules waiting for business approval retain their original occurrence and consent. They do not debit funds, advance the due occurrence or consume transient scoring retries while waiting. They resume only after approval; cancellation remains available to their owner.
 
-The private assistant shows only the signed-in business operator's owned records and prepares drafts requiring normal payment authorization. The dashboard, account products, activity, bills and sample transactions use business terminology and operating/liquidity examples.
+The private assistant shows only the signed-in business operator's owned records and prepares drafts requiring normal payment authorization. The dashboard, account products, activity, bills and test transactions use business terminology and operating/liquidity examples.
 
 ## Remaining project limitations
 
