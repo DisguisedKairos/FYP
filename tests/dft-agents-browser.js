@@ -201,6 +201,44 @@ async function pausePopupReply(page){
  await page.evaluate(`const popupFetch=window.fetch;window.fetch=async(...args)=>{const response=await popupFetch(...args);if(String(args[0])==='/api/agents/assistant'){window.fetch=popupFetch;const body=await response.text();await new Promise(resolve=>window.releasePopupReply=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};`);
 }
 
+test('Assistant timestamps use Singapore time and survive retries, reopening and viewport changes',async t=>{
+ const {page}=await open(t,390,'jamie@greenlink.demo');
+ await page.send('Emulation.setTimezoneOverride',{timezoneId:'America/Los_Angeles'});
+ await page.click('[data-action="assistant-toggle"]');
+ await page.evaluate(`const timestampFetch=window.fetch;window.fetch=(...args)=>{if(String(args[0])==='/api/agents/assistant'){window.fetch=timestampFetch;return Promise.resolve(new Response(JSON.stringify({error:'Temporary assistant error.'}),{status:503,headers:{'Content-Type':'application/json'}}));}return timestampFetch(...args);};`);
+ const sentAfter=Date.now();
+ await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('document.querySelector("#assistant-error").textContent.includes("Temporary assistant error")');
+ const sentAt=await page.evaluate('document.querySelector(".from-user time").dateTime');
+ assert.ok(Date.parse(sentAt)>=sentAfter && Date.parse(sentAt)<=Date.now());
+ assert.equal(await page.evaluate('document.querySelector(".from-user time").getAttribute("aria-label").startsWith("Sent ")'),true);
+ await pausePopupReply(page);await page.click('[data-action="assistant-retry"]');
+ await page.waitFor('typeof window.releasePopupReply==="function"');
+ assert.equal(await page.evaluate('document.querySelectorAll(".from-user").length'),1);
+ assert.equal(await page.evaluate('document.querySelector(".from-user time").dateTime'),sentAt);
+ assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant time").length'),0);
+ const receivedAfter=Date.now();
+ await page.evaluate('window.releasePopupReply()');await page.waitFor('!!document.querySelector(".from-assistant time")');
+ const readTimes=()=>page.evaluate('Array.from(document.querySelectorAll(".assistant-message time"),t=>({at:t.dateTime,text:t.textContent,label:t.getAttribute("aria-label")}))');
+ const times=await readTimes();assert.equal(times.length,2);
+ assert.ok(Date.parse(times[1].at)>=receivedAfter && Date.parse(times[1].at)<=Date.now());
+ assert.match(times[1].label,/^Received /);
+ const singapore=new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
+ for(const time of times)assert.equal(time.text,singapore.format(new Date(time.at))+' SGT');
+ await page.click('[data-action="assistant-close"]');await page.click('[data-action="assistant-toggle"]');
+ assert.deepEqual(await readTimes(),times);
+ for(const [width,height] of [[1280,900],[360,640]]){
+  await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<760});
+  assert.equal(await page.evaluate('Array.from(document.querySelectorAll(".assistant-message time")).every(t=>{const a=t.getBoundingClientRect(),b=t.closest(".assistant-message").getBoundingClientRect();return a.left>=b.left && a.right<=b.right;})'),true);
+  assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+  assert.deepEqual(await readTimes(),times);
+ }
+ await page.screenshot(path.resolve('test-results','assistant-message-timestamps.png'));
+ await page.click('[data-action="assistant-clear"]');
+ assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message time").length'),0);
+ assert.deepEqual(page.errors,[]);
+});
+
 test('Assistant popup preserves drafts across banking navigation and receives replies while minimized',async t=>{
  const {f,page}=await open(t,1280,'jamie@greenlink.demo');
  const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);

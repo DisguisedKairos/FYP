@@ -319,7 +319,10 @@ dialog.wide-dialog { width:900px; }
 .assistant-welcome p { color:var(--muted); font-size:11px; line-height:1.7; margin-top:8px; }
 .assistant-message { width:96%; max-width:100%; padding:13px 14px; border:1px solid var(--line); border-radius:10px 10px 10px 0; background:#f6f8fc; align-self:flex-start; }
 .assistant-message.from-user { align-self:flex-end; width:auto; max-width:85%; background:var(--pine); color:#fff; border-color:var(--pine); border-radius:10px 10px 0 10px; }
-.assistant-message-author { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:650; color:#315b89; margin-bottom:9px; }
+.assistant-message-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; margin-bottom:9px; }
+.assistant-message-author { display:flex; align-items:center; gap:6px; font-size:10px; font-weight:650; color:#315b89; }
+.assistant-message-time { font-size:10px; line-height:1.5; color:#64748b; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.assistant-message.from-user .assistant-message-time { color:#c8dcf6; }
 .assistant-message-author .icon { width:13px; height:13px; }
 .assistant-message.from-user .assistant-message-author { color:#c8dcf6; }
 .assistant-message-text { font-size:12px; line-height:1.9; white-space:pre-wrap; overflow-wrap:anywhere; }

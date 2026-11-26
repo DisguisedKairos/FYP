@@ -13,7 +13,15 @@ let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
 const dashboardFollowup=/^\s*(?:(?:please|can you|could you|yes)[,\s]+)*(?:save|bookmark|keep|add|pin)\s+(?:(?:it|this|that)(?:\s+(?:dashboard|view|chart))?|(?:the|my)\s+(?:dashboard|view|chart)|chart)(?=\s|[.!?]|$)/i;
 const SAFE_SECURITY_HELP = /^(?:(?:how (?:do|can) i|where can i) (?:change|reset) my password|how (?:do|can) i (?:enable|disable) (?:mfa|two-factor authentication)|how (?:do|can) i use recovery codes|test mfa\/recovery and password change\/session revocation through profile & security)[.!?]*$/i;
 const starters=['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Generate a downloadable finance report'];
+const messageTimeFormat=new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,open:false,unread:false}); }
+function messageTimeHtml(message) {
+  if(typeof message.createdAt!=='string')return '';
+  const date=new Date(message.createdAt);
+  if(!Number.isFinite(date.getTime()))return '';
+  const label=messageTimeFormat.format(date)+' SGT';
+  return '<time class="assistant-message-time" datetime="'+date.toISOString()+'" aria-label="'+(message.role==='user'?'Sent ':'Received ')+esc(label)+'">'+esc(label)+'</time>';
+}
 function itemContent(item) {
   if(typeof item==='string')return '<li>'+esc(item)+'</li>';
   if(!item || typeof item!=='object')return '';
@@ -24,7 +32,7 @@ function itemContent(item) {
 }
 function messageHtml(message) {
   const dashboard=message.role==='assistant'?publicResearchHtml(message)+counterpartyRiskHtml(message)+savedDashboardsHtml(message)+dashboardHtml(message)+financeReportHtml(message)+paymentReadinessHtml(message):'';
-  return '<article data-message-id="'+message.id+'" class="assistant-message '+(message.role==='user'?'from-user':'from-assistant')+'" aria-label="'+(message.role==='user'?'You':'GLDB Assistant')+'"><div class="assistant-message-author">'+(message.role==='user'?'You':icon('chat')+' GLDB Assistant')+'</div><'+(message.role==='assistant'?'p':'div')+' class="assistant-message-text">'+esc(message.text)+'</'+(message.role==='assistant'?'p':'div')+'>'+(message.items?.length?'<ul class="assistant-items">'+message.items.map(itemContent).join('')+'</ul>':'')+(message.paymentReadiness?'':fundingWarningsHtml(message.fundingWarnings||[]))+dashboard+(message.actions?.length?'<div class="assistant-actions">'+message.actions.map((action,index)=>'<button type="button" class="button secondary" data-assistant-action="'+message.id+':'+index+'">'+esc(action.label || 'Open banking form')+' '+icon('arrow')+'</button>').join('')+'</div>':'')+(message.auditRunId && state.user?.role==='admin'?'<button type="button" class="text-button" data-ai-audit-kind="agent" data-ai-audit-id="'+esc(message.auditRunId)+'">View AI audit</button>':'')+'</article>';
+  return '<article data-message-id="'+message.id+'" class="assistant-message '+(message.role==='user'?'from-user':'from-assistant')+'" aria-label="'+(message.role==='user'?'You':'GLDB Assistant')+'"><div class="assistant-message-header"><div class="assistant-message-author">'+(message.role==='user'?'You':icon('chat')+' GLDB Assistant')+'</div>'+messageTimeHtml(message)+'</div><'+(message.role==='assistant'?'p':'div')+' class="assistant-message-text">'+esc(message.text)+'</'+(message.role==='assistant'?'p':'div')+'>'+(message.items?.length?'<ul class="assistant-items">'+message.items.map(itemContent).join('')+'</ul>':'')+(message.paymentReadiness?'':fundingWarningsHtml(message.fundingWarnings||[]))+dashboard+(message.actions?.length?'<div class="assistant-actions">'+message.actions.map((action,index)=>'<button type="button" class="button secondary" data-assistant-action="'+message.id+':'+index+'">'+esc(action.label || 'Open banking form')+' '+icon('arrow')+'</button>').join('')+'</div>':'')+(message.auditRunId && state.user?.role==='admin'?'<button type="button" class="text-button" data-ai-audit-kind="agent" data-ai-audit-id="'+esc(message.auditRunId)+'">View AI audit</button>':'')+'</article>';
 }
 function suggestionHtml() {
   const messages=thread().messages;
@@ -127,7 +135,7 @@ export async function sendAssistant(message,{retry=false}={}) {
   if(dashboardFollowup.test(text)&&t.dashboardSelectionPending){t.error='Wait for the selected dashboard to finish loading before saving it.';renderThread();return;}
   const request=++generation,userId=state.user.id,selectionVersion=t.dashboardSelectionVersion||0;
   controller?.abort(); controller=new AbortController();
-  if(!retry)t.messages.push({id:++nextMessageId,role:'user',text});
+  if(!retry)t.messages.push({id:++nextMessageId,role:'user',text,createdAt:new Date().toISOString()});
   t.busy=true;t.error='';t.retryMessage=text;t.input='';
   const input=document.querySelector('#assistant-message');if(input)input.value='';
   renderThread();
@@ -137,7 +145,7 @@ export async function sendAssistant(message,{retry=false}={}) {
     if(result.sensitiveInput){const submitted=[...t.messages].reverse().find(message=>message.role==='user');if(submitted)submitted.text='[Sensitive message removed]';}
     t.previousRunId=result.runId || null;
     if((t.dashboardSelectionVersion||0)===selectionVersion){t.activeDashboardDefinition=result.companyDashboard?.definition||null;t.dashboardSelectionVersion=selectionVersion+1;t.dashboardSelectionPending=false;}
-    t.messages.push({id:++nextMessageId,role:'assistant',auditRunId:result.runId,publicResearch:result.publicResearch||null,newsInsights:result.newsInsights||null,counterpartyScan:result.counterpartyScan||null,counterpartyRisk:result.counterpartyRisk||null,paymentReadiness:result.paymentReadiness||null,financeReport:result.financeReport||null,fundingWarnings:Array.isArray(result.fundingWarnings)?result.fundingWarnings:[],dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
+    t.messages.push({id:++nextMessageId,role:'assistant',createdAt:new Date().toISOString(),auditRunId:result.runId,publicResearch:result.publicResearch||null,newsInsights:result.newsInsights||null,counterpartyScan:result.counterpartyScan||null,counterpartyRisk:result.counterpartyRisk||null,paymentReadiness:result.paymentReadiness||null,financeReport:result.financeReport||null,fundingWarnings:Array.isArray(result.fundingWarnings)?result.fundingWarnings:[],dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
     if(!t.open)t.unread=true;
   } catch(error) {
