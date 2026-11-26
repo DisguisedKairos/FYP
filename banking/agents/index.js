@@ -241,6 +241,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         }
         args=expected;
       }
+      if(name==='project_liquidity'){const days=reports.requestedHorizon(message);if(days!==undefined)args={...args,days};}
       if(++step>8)throw new HttpError(422,'The agent tool-call limit was reached. Narrow the request.');
       let output;
       if(name==='get_business_profile'){

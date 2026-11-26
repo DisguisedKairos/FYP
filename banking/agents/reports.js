@@ -16,6 +16,20 @@ function horizon(value = 30) {
   if (!Number.isInteger(Number(value)) || Number(value) < 1 || Number(value) > 90) throw new HttpError(400, 'Choose a horizon from 1 to 90 days.');
   return Number(value);
 }
+// Projection scope comes from the customer's question, not a model-selected
+// replacement period. Keep the rolling-day convention used by the report.
+function requestedHorizon(message){
+  const periods=[...message.matchAll(/(?<![\w.])([+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s+(days?|weeks?|months?)\b/gi)];
+  if(periods.length>1)throw new HttpError(400,'Choose a single projection period from 1 to 90 days.');
+  if(periods.length){
+    const [,count,unit]=periods[0];
+    if(!/^\d+$/.test(count))throw new HttpError(400,'Choose a whole-number projection period from 1 to 90 days.');
+    return horizon(Number(count)*(unit.toLowerCase().startsWith('week')?7:unit.toLowerCase().startsWith('month')?30:1));
+  }
+  if(/\bnext week\b/i.test(message))return 7;
+  if(/\bnext month\b/i.test(message))return 30;
+  return undefined;
+}
 async function assertActor(db, user, { admin = false } = {}) {
   const actor = (await db.query('SELECT id,role,auth_version FROM users WHERE id=$1', [user?.id])).rows[0];
   if (!actor) throw new HttpError(401, 'Sign in to continue.');
@@ -165,4 +179,4 @@ async function reconciliation(db,user,{now=Date.now}={}) {
       evidence:[...discrepancies.map(a=>({type:'account',id:a.accountId,label:'Balance discrepancy'})),...failedSchedules.map(s=>({type:'schedule',id:s.id,label:'Schedule exception'}))],actions:[]};
   },{isolation:'REPEATABLE READ',readOnly:true});
 }
-module.exports={liquidity,balances,fundingCoverage,investigation,simulation,reconciliation,assertActor,candidateRule,horizon};
+module.exports={liquidity,balances,fundingCoverage,investigation,simulation,reconciliation,assertActor,candidateRule,horizon,requestedHorizon};

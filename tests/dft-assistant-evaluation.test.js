@@ -250,3 +250,32 @@ test('Market narratives must distinguish an existing open human investigation fr
  assert.match(narrativeIssue('No payment-specific signal qualified for human review; safety is not established [E1].',null,options),/existing human investigation/);
  assert.equal(narrativeIssue('The earlier human review is closed; this check cannot establish safety [E1].',null,{...options,results:[{tool:'analyze_market_transactions',value:{transactions:[{humanReview:{status:'closed',open:false}}]}}]}),null);
 });
+
+
+pg('Liquidity projections use the requested horizon even when the model supplies a different period',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);
+ const engine=model(async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'Review the scheduled-payment scenario and its funding assumptions before making decisions [E1].'}:tool('project_liquidity',{days:1}));
+ for(const [message,days]of [['Can I cover my scheduled payments over the next 7 days?',7],['Can I cover my scheduled payments over the next 2 weeks?',14]]){
+  const result=await createAgents({db:f.db,model:engine}).execute(user,'assistant',{message});assert.equal(result.narrativeWithheld,undefined);
+  const saved=(await f.db.query("SELECT arguments_json,result_json FROM agent_tool_calls WHERE run_id=$1 AND tool_name='project_liquidity'",[result.runId])).rows[0];
+  assert.equal(saved.arguments_json.days,days);assert.equal(saved.result_json.days,days);
+ }
+ for(const message of ['Can I cover my scheduled payments over the next 91 days?','Can I cover my scheduled payments over the next 0 days?','Can I cover my scheduled payments over the next -1 days?']){
+  await assert.rejects(createAgents({db:f.db,model:engine}).execute(user,'assistant',{message}),e=>e.status===400);
+ }
+});
+
+
+test('Company-risk uncertainty lists do not become guarantees or hide later certainty claims',()=>{
+ const options={evidence,requireCitations:true};
+ for(const reply of [
+  'There are no reliable exact fraud probabilities or guaranteed-loss estimates for these flagged companies; historical flows do not establish losses [E1].',
+  'The assessment does not provide exact fraud probabilities or guaranteed loss estimates. No company is confirmed safe by this assessment [E1].',
+  'The assessment does not establish fraud probability, guaranteed loss, or that any company is safe [E1].'
+ ])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of [
+  'The assessment does not provide exact fraud probabilities or guaranteed loss estimates; I guarantee the next payment [E1].',
+  'No company is confirmed safe by this assessment, but this company is definitely safe [E1].',
+  'The assessment does not establish fraud probability, guaranteed loss is certain [E1].'
+ ])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
+});
