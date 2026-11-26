@@ -66,7 +66,8 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
       }else throw invalid();
     }
     if(content.length>12000 || calls.length>4 || (!content.trim() && !calls.length))throw invalid();
-    const parsed=answerFormat&&!calls.length?require('./response').parse(content,answerFormat.schema.properties.requiredTools.items.enum):{content};
+    const responses=require('./response');
+    const parsed=answerFormat&&!calls.length?(answerFormat.name==='banking_assistant_narrative'?responses.parseNarrative(content):responses.parse(content,answerFormat.schema.properties.requiredTools.items.enum)):{content};
     return {role:'assistant',...parsed,...(calls.length?{tool_calls:calls,responseItems:data.output}:{}),modelResponse:{provider:'openai',model:data.model,responseId:typeof data.id==='string'?data.id:null}};
   }
 

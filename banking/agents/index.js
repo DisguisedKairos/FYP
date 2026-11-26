@@ -206,7 +206,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
     async function trackedChat(messages,tools,options,phase='banking_task'){
       const started=Date.now(),base={kind:'agent',subjectId:id,userId:user.id,actorId:user.id,provider:engine,model:model.model,promptSha256,phase,attempt:++attempt,startedAt:iso(now())};
       let response;
-      try{response=await model.chat(messages,tools,{...options,answerFormat:assistantResponse.format(allowed)});}
+      try{response=await model.chat(messages,tools,{...options,answerFormat:phase==='narrative_repair'?assistantResponse.narrativeFormat():assistantResponse.format(allowed)});}
       catch(error){await aiAudit.record(db,{...base,status:'failed',errorCode:error instanceof HttpError?'HTTP_'+error.status:'MODEL_UNAVAILABLE',durationMs:Date.now()-started,createdAt:iso(now())});throw error;}
       await aiAudit.record(db,{...base,status:'completed',responseId:response.modelResponse?.responseId,resolvedModel:response.modelResponse?.model,toolNames:(response.tool_calls || []).map(c=>c?.function?.name),durationMs:Date.now()-started,createdAt:iso(now())});
       if(!response.tool_calls?.length && phase!=='narrative_repair')responseIntent=response.intent||null;

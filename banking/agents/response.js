@@ -15,6 +15,18 @@ function format(toolNames){
   required:['mode','requiresResearch','requiredTools','reply'],
  }};
 }
+// A wording repair cannot reclassify the task or redefine its evidence needs.
+function narrativeFormat(){
+ return {type:'json_schema',name:'banking_assistant_narrative',strict:true,schema:{
+  type:'object',additionalProperties:false,properties:{reply:{type:'string'}},required:['reply'],
+ }};
+}
+function parseNarrative(content){
+ const invalid=()=>new HttpError(503,'The assistant returned an invalid wording correction. Retry the request.');
+ let value;try{value=JSON.parse(content);}catch{throw invalid();}
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join(',')!=='reply'||typeof value.reply!=='string'||!value.reply.trim()||value.reply.length>12000)throw invalid();
+ return {content:value.reply};
+}
 function parse(content,toolNames){
  const invalid=()=>new HttpError(503,'The assistant returned an invalid response. Retry the request.');
  let value;try{value=JSON.parse(content);}catch{throw invalid();}
@@ -34,4 +46,4 @@ function issue(intent,results){
  return null;
 }
 function readContext(value){return Array.isArray(value)?[...new Set(value)].filter(name=>CONTEXT_TOOLS.includes(name)).slice(0,8):[];}
-module.exports={INSTRUCTIONS,format,parse,issue,readContext};
+module.exports={INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext};

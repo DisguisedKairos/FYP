@@ -102,7 +102,7 @@ Common screen instructions, literal test placeholders and incomplete public-comp
 
 When the model skips tools for a supported banking enquiry, its recovery request requires a permitted tool call. A request that still retrieves no evidence is described as an incomplete banking lookup, rather than incorrectly being called outside scope. Actual balances, reports, payments, research and risk analysis continue to use their evidence tools and existing limits. Refusals for unauthorized records or actions remain expected negative-test outcomes.
 
-For payment drafts, the model selects only the draft type. The server derives amounts, owned sources, recipients and schedule times from the operator's wording or current draft context, preserving Singapore time conversion and the ordinary authorization workflow. Narrative checks distinguish explicit statements such as "no payment was sent" and "not authorization or a guarantee" from claims of execution or guaranteed funding; mixed statements that still claim an unauthorized action remain blocked.
+For payment drafts, the model selects only the draft type. The server derives amounts, owned sources, recipients and schedule times from the operator's wording or current draft context, preserving Singapore time conversion and the ordinary authorization workflow. Narrative checks distinguish explicit statements such as "no payment was sent" and "not authorization or a guarantee" from claims of execution or guaranteed funding; mixed statements that still claim an unauthorized action remain blocked. Wording corrections use a reply-only response format, retain the original enquiry's evidence requirements and pass through the same financial checks before display.
 
 ## Evidence, privacy and boundaries
 

@@ -17,6 +17,28 @@ test('Semantic responses validate routing metadata without granting tools or acc
  assert.equal(answer('general_banking','Available cash helps a business meet its obligations.').intent.mode,'general_banking');
 });
 
+test('Wording corrections accept only a reply and cannot redefine intent or tool permissions',()=>{
+ const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['reply']);
+ assert.deepEqual(response.parseNarrative('{"reply":"Inspect the owned records [E1]."}'),{content:'Inspect the owned records [E1].'});
+ for(const value of [{reply:'',mode:'general_banking'},{reply:'Inspect the records.',requiredTools:['execute_payment']},{reply:'Inspect the records.',requiresResearch:false},{reply:''},{reply:5},[],null])assert.throws(()=>response.parseNarrative(JSON.stringify(value)),e=>e.status===503);
+ assert.throws(()=>response.parseNarrative('not JSON'),e=>e.status===503);
+});
+
+pg('Wording-only corrections preserve the original enquiry intent without requiring new tool selection',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const model=createOpenAIModel({apiKey:'test-only-openai-key-not-a-real-secret',fetchImpl:async(url,options)=>{
+  if(String(url).includes('/models/'))return new Response(JSON.stringify({id:'gpt-6-luna'}));
+  const body=JSON.parse(options.body);calls++;
+  const text=JSON.stringify(body.text.format.name==='banking_assistant_narrative'?{reply:'The funds in your owned accounts are shown below [E1].'}:{mode:'banking_evidence',requiresResearch:false,requiredTools:calls===2?['get_accounts']:[],reply:calls===2?'There is one account in the retrieved records [E1].':'The funds in your owned accounts are shown below [E1].'});
+  return new Response(JSON.stringify({id:'resp_rewrite_'+calls,status:'completed',model:'gpt-6-luna',output:calls===1?[{type:'function_call',call_id:'call_accounts',name:'get_accounts',arguments:'{}'}]:[{type:'message',role:'assistant',content:[{type:'output_text',text}]}]}));
+ }});
+ const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'How much have I got available right now?'});
+ assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ assert.equal(calls,3);assert.deepEqual(result.aiAudit.intent.requiredTools,['get_accounts']);
+ assert.equal(result.aiAudit.intent.mode,'banking_evidence');assert.deepEqual(result.steps.map(s=>s.tool),['get_accounts']);
+ assert.ok(result.items.some(i=>typeof i.amountCents==='number'));assert.doesNotMatch(result.reply,/one account/);
+});
+
 test('Semantic task checks require every interpreted tool and current sources; explanations do not need private projections',()=>{
  const intent=answer('banking_evidence','Review the evidence.',['get_accounts','get_schedules']).intent;
  assert.match(response.issue(intent,[{tool:'get_accounts'}]),/get_schedules/);
