@@ -1,56 +1,40 @@
-# Current localhost login details - Neon
+# Current demo logins - Neon
 
-Open **http://localhost:3000**. The running application uses Neon PostgreSQL (`neondb`). Use the full email as your username and copy the matching password below without Markdown backticks or extra spaces.
+Updated **26 November 2026**. There are **nine usable logins: one customer for each of eight industries, plus one bank administrator**. The local app at http://localhost:3000 and [the hosted app](https://fyp-greenlink-six.vercel.app) use this Neon database when configured with the current connection settings.
 
-Current roster, **26 November 2026**: **16 usable demo logins** consisting of the seven feature testers below, one [sector-portfolio tester](../../../docs/counterparty-risk.md) and all eight industry businesses listed later in this guide. The initial ten-feature-login set was verified through the login API on 29 October 2026, including MFA; that historical check predates account retirement.
-
-| Login email | Password | Permission role | What to test |
-| --- | --- | --- | --- |
-| `business-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Everyday business banking, payments, schedules, statements and assistant |
-| `recipient-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Receive transfers and verify business/account isolation |
-| `pending-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Pending onboarding and blocked financial actions |
-| `rejected-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Rejected application, review explanation and resubmission |
-| `reviewer-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Bank operations, onboarding, independent decisions and fraud-rule audit |
-| `maker-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Administrator payment maker; own held payment cannot be self-approved |
-| `mfa-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `customer` | Authenticator login, recovery codes and profile security |
-
-Only `mfa-tester@greenlink.demo` also requires an authenticator code. Run `npm run test:accounts:otp:neon` for a current code. A successful code cannot be reused; wait for the next 30-second code. Private authenticator setup and recovery details are in [FEATURE-TESTING.md](FEATURE-TESTING.md).
-
-The original native database has different passwords. Its `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` accounts are not in this Neon database. Use the business tester for customer banking or the reviewer tester for bank operations.
-
-`staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired. Use the reviewer for staff workflows. Missing-profile and zero-balance edge fixtures are available only in isolated tests. The three user-created logins are also retired. Retirement disables sign-in and revokes sessions while retaining financial and audit records; [operator preview/apply instructions](../../../docs/feature-testing.md#retire-an-existing-login) explain the process.
-
-If your browser fills an older saved password, replace it with the password above. Changed passwords remain changed: this guide records the verified credentials at the time above and does not reset accounts. Repeated failed logins are limited for up to 15 minutes.
-
-This file contains shared synthetic demo credentials for project testing. Rotate or remove demo accounts before public deployment. It remains excluded from source packages.
-
+Use the full email as the username. Retained passwords were preserved; this cleanup did not reset passwords or MFA. The values below are the shared synthetic demo credentials; a later password change takes precedence.
 
 ## Industry business demo accounts
 
-These eight additional **customer** identities represent fictional Singapore businesses in real industries. They use real public industry research through the configured OpenAI provider; their names, banking activity and funds are educational fixtures. They are separate from the seven active feature-testing identities above and the sector-portfolio tester. All eight industry logins remain active.
+| Login email | Demo password | Permission role | Industry |
+| --- | --- | --- | --- |
+| `logistics-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Logistics and freight transport |
+| `technology-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Technology and software services |
+| `manufacturing-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Manufacturing and electronics |
+| `wholesale-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Wholesale import and export |
+| `hospitality-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Food and hospitality |
+| `construction-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Construction and property services |
+| `healthcare-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Healthcare and medical supplies |
+| `energy-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Renewable energy services |
+| `reviewer-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Bank operations and independent review |
 
-Verified on **24 November 2026** through the Express login/profile/dashboard APIs using the restricted Neon runtime connection. All eight sign-ins succeeded, and each business has two owned savings accounts.
+Each industry login owns one fictional business, with its existing operating savings account, liquidity reserve and historical receipts. The administrator handles fraud reviews, fraud rules, onboarding and the AI audit log. Customer logins cannot open administrator controls or another company's private records.
 
-**Initial password for these eight accounts only:** `IndustryDemo123!`. Changed passwords remain changed; rerunning setup does not reset them. Each business has an operating savings account, a liquidity reserve, several months of fictional completed receipts and its own saved news-planning preferences.
+The other feature-testing, sector-portfolio and user-created logins are retired. Their sign-in access and sessions are disabled; financial records, balances and audit history remain. The owner-approved monthly PUB test schedule for SGD 12.50 on the retired business tester was cancelled, including future occurrences. No funds were moved during cleanup.
 
-| Login email | Fictional business | Industry focus |
-| --- | --- | --- |
-| `logistics-business@greenlink.demo` | GLDB Demo Meridian Logistics Pte. Ltd. | Freight routes, customs and carrier dependencies |
-| `technology-business@greenlink.demo` | GLDB Demo Nimbus Cloud Pte. Ltd. | Cloud continuity, vendor security and software services |
-| `manufacturing-business@greenlink.demo` | GLDB Demo Precision Electronics Pte. Ltd. | Components, production dependencies and lead times |
-| `wholesale-business@greenlink.demo` | GLDB Demo Straits Wholesale Pte. Ltd. | Imports/exports, trade documents and supplier terms |
-| `hospitality-business@greenlink.demo` | GLDB Demo Orchard Hospitality Pte. Ltd. | Food supply, hospitality demand and operating costs |
-| `construction-business@greenlink.demo` | GLDB Demo Keystone Projects Pte. Ltd. | Project milestones, subcontractors and building materials |
-| `healthcare-business@greenlink.demo` | GLDB Demo Clearwell Medical Pte. Ltd. | Medical product notices, licensing checks and supply continuity |
-| `energy-business@greenlink.demo` | GLDB Demo Aurora Renewables Pte. Ltd. | Energy contracts, equipment dependencies and project delivery |
+## Try the retained accounts
 
-### Try a company-specific briefing
+1. Sign in as an industry customer and inspect Overview, Accounts and Activity.
+2. Open **Business profile > Customize industry news**, choose operating markets, activities and priorities, then save.
+3. Ask **Show current news for my industry and explain what our company should do next.** Verify the business label and dated sources.
+4. Test balances, finance downloads, funding checks, charts and payment drafts using this customer's own records.
+5. Compare logistics and technology in separate browser profiles for isolation and different industry advice. Use the normal banking forms for authorized synthetic transfers between retained businesses.
+6. Use the reviewer login separately for bank operations. Never put passwords, authenticator codes or recovery codes in assistant chat.
 
-1. Sign in with one of the eight emails and its current password.
-2. Open **Business profile > Customize industry news**. Confirm or change operating markets, activities and priorities, then save.
-3. Click **Ask for an industry briefing**, or ask **Show current news for my industry and explain what our company should do next.**
-4. Check the company label, selected activities/markets, dated source links, conditional business implications and practical next checks.
-5. Sign in as a different industry business and ask the same question. Confirm the company context and industry-specific next steps differ. One company must never receive another company's saved settings or private banking records.
-6. Reopen the preferences after signing in again to confirm persistence. Save an outdated version in a separate tab to verify a reload is required.
+See the [current walkthrough](FEATURE-TESTING.md) and [assistant question bank](../../../docs/assistant-testing.md). Historical tester packets keep their original case IDs; use the current identity mapping and mark missing isolated fixtures Blocked.
 
-Setup: `npm run db:migrate`, then `npm run demo:industries`. This creates only the dedicated demo businesses and records audited sample funding. Existing identities, passwords, receipts, approvals and account balances are preserved. No live news or AI assessment is fabricated by setup. All these companies are fictional; company-name searches must not present them as real firms.
+## Setup and retained history
+
+`npm run demo:industries` prepares the eight industry fixtures on an appropriately configured development database and preserves changed credentials and existing records. The full feature-tour and sector-portfolio seeders are for fresh or isolated fixtures; their historical credential JSON is not the current hosted roster. Do not rerun those seeders to restore retired shared logins.
+
+The original native PostgreSQL fixtures have separate credentials and do not describe this Neon roster. [Account-retirement instructions](../../../docs/feature-testing.md#retire-an-existing-login) explain the operator preview/apply process. These synthetic demo credentials remain excluded from release packages; database connections and application/API secrets must stay private.

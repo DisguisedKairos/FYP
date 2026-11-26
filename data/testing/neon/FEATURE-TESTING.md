@@ -1,69 +1,25 @@
-# Greenlink demo feature-testing logins
+# Current Neon feature walkthrough
 
-Open http://localhost:3000. These are the **seven active synthetic feature-testing identities** in the current Neon database. Together with the sector-portfolio tester and all eight industry businesses, there are **16 usable demo logins**. See the [current login guide](README.md) for the full roster. Banking records, audit history and retained credentials are preserved.
+The hosted roster contains **eight industry customers and one administrator**. Use the [nine-login table](README.md); the earlier feature-tour and sector logins are retired. Their financial and audit records remain available as history, and the approved old monthly PUB test schedule has been cancelled.
 
-Initial password for all ten new users: **GLTest-ljDD9JhfDfmi!a1**
+## Customer banking
 
-Changed passwords, approvals, review decisions and balances are retained when setup is repeated. Retired credentials remain disabled. Full ten-login feature setup is intended for fresh or isolated databases; its verification includes identities retired from the current hosted roster.
+Use `logistics-business@greenlink.demo` for ordinary banking and `technology-business@greenlink.demo` as the separate recipient/privacy identity. Any of the eight industry customers can test their own balances, accounts, transaction history/search, statements, finance CSV/PDF downloads, schedules, notifications, charts, saved dashboards, company profiles and industry-news advice. Use actual current account numbers, receipt IDs, dates and balances from that identity's screens.
 
-| Login email | Actual permission role | Business state | Operating account | Test purpose |
-| --- | --- | --- | --- | --- |
-| business-tester@greenlink.demo | customer | approved | 1088800101 | Everyday business banking, payments, schedules, statements and assistant |
-| recipient-tester@greenlink.demo | customer | approved | 1088800201 | Receive transfers and verify business/account isolation |
-| pending-tester@greenlink.demo | customer | pending_review | 1088800301 | Pending onboarding and blocked financial actions |
-| rejected-tester@greenlink.demo | customer | rejected | 1088800401 | Rejected application, review explanation and resubmission |
-| reviewer-tester@greenlink.demo | admin | Staff workspace | No deposit account | Bank operations, onboarding, independent decisions and fraud-rule audit |
-| maker-tester@greenlink.demo | admin | approved | 1088800901 | Administrator payment maker; own held payment cannot be self-approved |
-| mfa-tester@greenlink.demo | customer | approved | 1088801001 | Authenticator login, recovery codes and profile security |
+Open Ask GLDB for read-only enquiries and drafts. Chat does not execute payments or approve held transactions. Authorize financial instructions only in the banking forms. For cross-business checks, use separate browser profiles and confirm that one customer cannot read another customer's records or saved preferences.
 
-`staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired. Use the reviewer for staff workflows. Missing-profile and zero-balance edge fixtures remain available only in isolated tests. The three user-created logins are also retired. Financial and audit records remain; retirement revokes sign-in and existing sessions.
+Each industry customer retains its operating savings and reserve. New customer savings accounts start empty. Do not alter shared balances or schedules merely to restore a test baseline.
 
-## Feature walkthrough
+## Bank administrator
 
-Follow the [feature walkthrough](../../../docs/feature-testing.md) for every screen and workflow. Use different browser profiles/private windows for maker and reviewer. Business operating account: 1088800101; reserve: 1088800102; recipient: 1088800201.
+`reviewer-tester@greenlink.demo` is the only retained administrator. It handles business applications, fraud monitoring, independent payment reviews, rule management and AI audit. A customer can create a permitted held payment for independent review; the reviewer must use the normal authorization workflow. The administrator role does not grant ownership of customer deposits or their private assistant conversations.
 
-Historical prepared payment outcomes (retained for reference):
+## Cases requiring isolated setup
 
-- supplier-payment: completed, AI score 20, combined score 20; receipt 3b60a73b-582a-5c41-a736-0fd5cddda9b5
-- utility-bill: completed, AI score 25, combined score 25; receipt d49279e6-8fa8-5501-ae28-7e2fcf27a9bb
-- liquidity-transfer: completed, AI score 42, combined score 42; receipt dd44d918-9e86-5942-a01c-a77a372a1073
-- independently-approved: completed, AI score 68, combined score 70; receipt 348bd2a1-a245-5bad-ae65-2f6467da8259
-- independently-rejected: rejected, AI score 42, combined score 70; receipt 2c4ac2ce-f020-58b2-a3f9-14036f34b3e9
-- high-value-awaiting-review: pending_review, AI score 68, combined score 70; receipt 537bd25e-6713-5c3b-a0b1-ba6b5e48213e
-- daily-limit-blocked: rejected, AI score 68, combined score 95; receipt 69e8c950-b18e-5900-a3fb-87d3a06cc596
-- maker-awaiting-independent-review: pending_review, AI score 25, combined score 70; receipt fd4d227a-ff23-5276-a877-6ac74373a675
+Pending/rejected applications, missing business profiles, zero-balance fixtures, the former MFA tester, administrator-maker self-approval and the dedicated multi-sector scenario portfolio are no longer shared hosted logins. Prepare these in an owner-controlled isolated database when testing those cases. Current industry data is not a substitute for the old sector-scenario portfolio. Do not create replacement shared production logins to satisfy a historical test packet.
 
-Historical prepared schedules (retained for reference; the insufficient-funds fixture belongs to the retired empty tester):
-
-- once: active; instruction be90a96a-e204-4d54-b7ea-a9667f0b122d
-- weekly: active; instruction 576d5100-674f-40b7-a6ec-4dce48ef8082
-- monthly: active; instruction dbcabfa1-dce5-4558-8035-d33e6ecf5eb9
-- cancelled: cancelled; instruction f3bbd0f0-94db-47f4-bb3e-21357e63e1c3
-- execute: completed; instruction d8aac958-6b2f-4ede-af9e-b3c8de0e27ab
-- insufficient: failed; instruction 43e6bf79-505c-4e14-a9c8-c2c882534e9f (Insufficient funds in the selected account.)
-
-## Authenticator account
-
-Only mfa-tester@greenlink.demo requires a second factor initially. Add this account to your authenticator using the private secret **3BVVK2W27HJFUVTQ7DCUP4464S6NLPQQ**.
-
-Authenticator URI: otpauth://totp/Green%20Link%20Digital%20Bank%3Amfa-tester%40greenlink.demo?secret=3BVVK2W27HJFUVTQ7DCUP4464S6NLPQQ&issuer=Green+Link+Digital+Bank&algorithm=SHA1&digits=6&period=30
-
-Or run npm run test:accounts:otp:neon to obtain the current local test code. Codes cannot be reused; wait for the next 30-second slot after a successful code login.
-
-Unused initial recovery codes (one use each):
-
-- F9DD-864F-576C-7489-5707
-- 183D-E3F8-CB1E-F895-2F4C
-- 246D-A5F4-9E6A-4E35-2E6D
-- 3E84-6103-548E-75FF-DC16
-- 1926-0640-6E7B-8835-5681
-- F7C8-A2FE-C2BA-1CEB-869B
-- AFC5-AB85-2401-BC72-DE34
-- 704F-0AC1-49AC-B3D6-A248
-- 8092-ACDA-C592-C7B9-F582
+MFA and password/session-revocation controls remain implemented. Test changes using an authorized disposable local identity or a separately agreed retained account; do not consume shared historical recovery material. The legacy feature-accounts.json records the original feature-tour setup and is retained for isolated tooling, not current login instructions.
 
 ## Verification
 
-Before retirement, 10 sign-ins were verified through real Express/PostgreSQL. The current hosted roster has seven active feature logins; this historical verification does not imply the three retired logins remain usable. MFA password-only sign-in was refused, recovery sign-in succeeded, customer administrator access and cross-business reads were refused, and assistant balance enquiry succeeded. The original-record fingerprint check passed. Sample financial writes were scored by the configured private Python service; original policy values were retained.
-
-This file and feature-accounts.json contain shared synthetic demo credentials. Rotate or remove demo accounts before public deployment.
+The cleanup preserves all retained credentials, businesses, balances, receipts and existing audit records. Retirement disables access and revokes sessions rather than deleting ledger history. For assistant questions, follow the [current identity mapping](../../../docs/assistant-testing.md#logins-and-roles) and [three-person test assignment](../../../docs/assistant-team-testing.md). Mark cases with missing setup Blocked and retain the original failure observation when recording a retest.

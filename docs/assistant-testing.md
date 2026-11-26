@@ -26,22 +26,20 @@ Use credentials for the actual database/environment:
 
 The same email can have different credentials between databases. Ask the owner if a shared password changed. This guide does not copy/reset credentials.
 
-| Label | Login / purpose |
+| Label | Current login / purpose |
 | --- | --- |
-| Business | `business-tester@greenlink.demo`: approved business operator, normally two active owned accounts |
-| Recipient | `recipient-tester@greenlink.demo`: another business for ownership/privacy checks |
-| Empty | Owner-prepared isolated zero-funds fixture; the former hosted `empty-tester` login is retired |
-| Pending / Rejected / Profile | `pending-tester@greenlink.demo`, `rejected-tester@greenlink.demo`; prepare profile-state changes in an isolated fixture, since the former hosted `profile-tester` login is retired |
-| Staff | `reviewer-tester@greenlink.demo`: bank administrator; the former redundant `staff-tester` login is retired |
-| Reviewer | `reviewer-tester@greenlink.demo`: separate administrator for independent decisions |
-| Maker | `maker-tester@greenlink.demo`: administrator with an approved owned business/account |
-| MFA | `mfa-tester@greenlink.demo`, or preferably a disposable identity for changes |
-| Sector | `sector-tester@greenlink.demo`: fictional eight-sector portfolio; use the [sector demo guide](counterparty-risk.md) |
-| New operator | Fresh owner-approved synthetic registration |
+| Business | `logistics-business@greenlink.demo`: owned banking, assistant, charts and news |
+| Recipient | `technology-business@greenlink.demo`: separate business for transfer/privacy checks |
+| Staff / Reviewer | `reviewer-tester@greenlink.demo`: the sole bank administrator |
+| Maker | A retained industry customer for ordinary payment-making; administrator-maker self-approval needs an isolated fixture |
+| Industry | One of the eight industry customers in the current Neon login guide |
+| Empty / Pending / Rejected / Profile / MFA | Owner-prepared isolated edge-case fixtures; historical shared test logins are retired |
+| Sector | Isolated eight-sector scenario portfolio; the hosted sector login is retired |
+| New operator | Owner-approved disposable isolated registration |
 
-Customer and admin are the two permission roles. Labels above describe test identities/use cases, not extra roles. Use separate browser profiles for maker/reviewer and cross-business comparisons. Staff does not automatically own customer accounts.
+The hosted roster has **nine logins: eight customers and one administrator**, with two permission roles. Use separate browser profiles for customer/reviewer and cross-business comparisons. Staff access does not grant ownership of a customer's private records.
 
-Use the Sector customer for SECTOR questions and a relevant industry customer for company-specific INDUSTRY questions. A staff login cannot substitute for the customer's portfolio. Do not recreate retired shared logins or change shared balances to satisfy setup requirements; record the affected cases as Blocked until the owner provides an isolated fixture.
+The 160 case IDs remain unchanged. Use actual current owned records and an appropriate industry identity. SECTOR questions require the original isolated scenario portfolio; an industry account must not invent missing scenario flags or inherit another owner's exposures. Mark cases needing absent edge fixtures Blocked until an isolated setup is provided. Do not recreate retired shared hosted logins to run old packets.
 
 ### Result and effect labels
 

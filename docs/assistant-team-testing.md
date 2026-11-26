@@ -36,9 +36,9 @@ The fields support multiline text and pasted evidence. Longer responses can expa
 
 ## Book accounts and test slots
 
-For the current hosted roster, Business means business-tester@greenlink.demo, Recipient means recipient-tester@greenlink.demo, and both Staff and Reviewer mean reviewer-tester@greenlink.demo. Maker means maker-tester@greenlink.demo and Sector means sector-tester@greenlink.demo. Use separate Maker/Reviewer browser sessions and book Staff/Reviewer work sequentially because those labels now share one login. The [Neon login guide](../data/testing/neon/README.md) lists all **16 usable demo logins: seven feature testers, one sector tester and all eight industry businesses**. A demo role label does not grant additional permissions.
+The current hosted roster has **nine usable logins: eight industry customers and reviewer-tester@greenlink.demo as the sole administrator**. Business means logistics-business@greenlink.demo; Recipient means technology-business@greenlink.demo; Staff and Reviewer both mean reviewer-tester@greenlink.demo. For ordinary payment-making, Maker can be a retained industry customer. Administrator-maker self-approval, MFA, pending/rejected/empty/profile and the dedicated Sector portfolio require isolated owner-prepared fixtures.
 
-The hosted staff, profile and empty tester logins are retired. Missing-profile and zero-balance edge fixtures are available only in isolated tests; record cases needing those fixtures as Blocked until the isolated setup is available. The three user-created logins are also retired. The question bank, historical packets and Word forms retain their original wording; apply this current identity mapping when running them. [Retirement instructions](feature-testing.md#retire-an-existing-login) explain how sign-in and sessions are disabled while banking and audit records remain.
+Use separate browser profiles and book the shared reviewer sequentially. See the [current Neon login guide](../data/testing/neon/README.md). Historical packets and Word forms retain their original questions and case IDs; apply this mapping and mark missing setup Blocked. Retired feature, sector and user-created logins cannot sign in. [Retirement](feature-testing.md#retire-an-existing-login) preserves banking/audit history while disabling access and sessions.
 
 | Slot | Owner | Work and handoff |
 | --- | --- | --- |

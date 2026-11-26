@@ -36,27 +36,27 @@ There are two permission roles: customer (authorized business operator) and admi
 
 For assistant testing, use the [28 use cases and 160 manual questions with expected results](docs/assistant-testing.md#end-to-end-use-cases). Each case includes its role, setup and expected result. The [three-person assignment](docs/assistant-team-testing.md) provides shareable packets of 54, 55 and 55 cases, covering the full catalogue plus four recent regressions, with expected outcomes and blank result fields. Downloadable Word response/error forms are linked in each packet and the assignment table. Apply the [current hosted identity mapping](docs/assistant-team-testing.md#book-accounts-and-test-slots) when an older question bank or packet refers to Staff.
 
-Open **http://localhost:3000**. The current workspace uses **Neon PostgreSQL**, so use the verified email/password table in [the Neon testing guide](data/testing/neon/README.md). The detailed Neon walkthrough and MFA details are in `data/testing/neon/FEATURE-TESTING.md`; its JSON credential file is `data/testing/neon/feature-accounts.json` (the `password` field). These synthetic demo login files are included in Git for project testing and excluded from release packages. Anyone with repository access can use these demo credentials; rotate or remove the demo accounts before public deployment.
+Open **http://localhost:3000** or [the hosted app](https://fyp-greenlink-six.vercel.app). The current workspace uses **Neon PostgreSQL**. Use the [current email/password table](data/testing/neon/README.md) and [walkthrough](data/testing/neon/FEATURE-TESTING.md).
 
-Use the full email as the username. There are two permission roles: `customer` and `admin`. The reviewer covers bank operations and independent review; the maker demonstrates administrator payment ownership and self-approval denial.
+There are **nine usable logins: one customer per industry and one bank administrator**:
 
-| Login email | Permission role | What to test |
+| Login email | Permission role | Industry / purpose |
 | --- | --- | --- |
-| `business-tester@greenlink.demo` | `customer` | Everyday business banking, payments, schedules, statements and assistant |
-| `recipient-tester@greenlink.demo` | `customer` | Receive transfers and verify business/account isolation |
-| `pending-tester@greenlink.demo` | `customer` | Pending onboarding and blocked financial actions |
-| `rejected-tester@greenlink.demo` | `customer` | Rejected application, review explanation and resubmission |
-| `reviewer-tester@greenlink.demo` | `admin` | Bank operations, onboarding, independent decisions and fraud-rule audit |
-| `maker-tester@greenlink.demo` | `admin` | Administrator payment maker; own held payment cannot be self-approved |
-| `mfa-tester@greenlink.demo` | `customer` | Authenticator login, recovery codes and profile security |
+| `logistics-business@greenlink.demo` | `customer` | Logistics and freight transport |
+| `technology-business@greenlink.demo` | `customer` | Technology and software services |
+| `manufacturing-business@greenlink.demo` | `customer` | Manufacturing and electronics |
+| `wholesale-business@greenlink.demo` | `customer` | Wholesale import and export |
+| `hospitality-business@greenlink.demo` | `customer` | Food and hospitality |
+| `construction-business@greenlink.demo` | `customer` | Construction and property services |
+| `healthcare-business@greenlink.demo` | `customer` | Healthcare and medical supplies |
+| `energy-business@greenlink.demo` | `customer` | Renewable energy services |
+| `reviewer-tester@greenlink.demo` | `admin` | Bank operations, independent review, fraud rules and AI audit |
 
-All seven active Neon feature identities initially share the password in the Neon testing guide. `mfa-tester@greenlink.demo` additionally requires an authenticator code or unused recovery code; run `npm run test:accounts:otp:neon` for a current code. Use separate browser profiles to test independent maker/reviewer decisions. Replace any older password saved by your browser.
+Retained passwords, business profiles, savings accounts, balances and transaction history are unchanged. Former feature, sector-portfolio and user-created logins are retired and their sessions revoked. The owner-approved old monthly PUB test schedule was cancelled. See [account retirement](docs/feature-testing.md#retire-an-existing-login).
 
-**Original native database only:** `data/testing/README.md`, `data/testing/feature-accounts.json` and `data/testing/FEATURE-TESTING.md` contain the retained native database credentials. Their passwords do not work on Neon. The original `alex@greenlink.demo`, `jamie@greenlink.demo` and `bankops@greenlink.demo` users are not present in the current Neon database; use the business tester for customer banking or the reviewer tester for bank operations.
+Use logistics for everyday banking and technology for recipient/privacy comparisons. The reviewer handles staff workflows. The two permission roles remain customer and admin. Missing-profile, pending/rejected, empty, MFA, administrator-maker and dedicated sector cases remain available through isolated fixtures; do not restore retired shared hosted logins just to run historical packets.
 
-The current Neon roster has **16 usable demo logins: seven feature testers, one sector-portfolio tester and all eight industry businesses**. `staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired; their banking and audit records remain. Missing-profile and zero-balance edge fixtures remain available in isolated tests. The three user-created logins have also been retired. See [account retirement](docs/feature-testing.md#retire-an-existing-login) for the operator preview/apply command.
-
-For a new Neon development database, `npm run test:accounts:neon` prepares synthetic test identities with the app and configured AI/scoring services running. Use `npm run test:accounts` only when configured for native PostgreSQL. The full setup retains ten feature identities for fresh or isolated databases. Existing retired logins remain disabled on setup reruns; use the current Neon guide for the seven active feature logins. Setup preserves changed passwords, MFA and existing banking records. Follow the [feature-testing walkthrough](docs/feature-testing.md) for each use case. Passwords cannot be recovered from PostgreSQL hashes; this documentation update does not reset any account.
+The original native credentials under `data/testing/` and legacy Neon feature-tour JSON describe separate or historical fixtures. They are not the current hosted roster. Shared synthetic demo login files remain excluded from release packages, while database connections and application/API secrets stay private. This cleanup does not reset any password or MFA enrollment.
 
 ## Industry business demo accounts
 
@@ -192,6 +192,6 @@ Ask **Show current news for my industry, explain the business implications and a
 
 ### Sector company risk examples
 
-Sign in as **sector-tester@greenlink.demo** with initial demo password **Greenlink123!**. Ask **Evaluate reputation and money risk of interacting with my demo companies across sectors**. The dedicated portfolio contains eight fictional sectors with scenario flags and historical receipts; OpenAI generates separate reputation/financial grades and the database supplies exact exposure totals. Fictional companies are excluded from live web research. Setup: `npm run db:migrate` then `npm run demo:companies`. See [company names, scenarios and safeguards](docs/counterparty-risk.md). Existing changed credentials remain unchanged on rerun.
+The dedicated sector login is retired in the hosted roster. In an owner-controlled isolated sector fixture, sign in with that fixture's current credentials. Ask **Evaluate reputation and money risk of interacting with my demo companies across sectors**. The dedicated portfolio contains eight fictional sectors with scenario flags and historical receipts; OpenAI generates separate reputation/financial grades and the database supplies exact exposure totals. Fictional companies are excluded from live web research. Setup: `npm run db:migrate` then `npm run demo:companies`. See [company names, scenarios and safeguards](docs/counterparty-risk.md). Existing changed credentials remain unchanged on rerun.
 
 

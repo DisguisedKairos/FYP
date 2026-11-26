@@ -3,23 +3,15 @@
 For copy-and-paste assistant questions, use cases and expected outcomes, see [GLDB Assistant manual acceptance tests](assistant-testing.md).
 
 
-For the current Neon-backed app, open the verified demo login table at **`data/testing/neon/README.md`**. Use `npm run test:accounts:neon` to prepare synthetic accounts on a new Neon database, `data/testing/neon/FEATURE-TESTING.md` for the full guide, and `npm run test:accounts:otp:neon` for MFA. These are fresh synthetic Neon identities with their own generated password; original native data is retained separately. The walkthrough uses active Neon identities; the separate native setup retains its original inventory. See [Neon setup](neon.md).
+For the current Neon-backed app, use the [nine-login table](../data/testing/neon/README.md) and [current walkthrough](../data/testing/neon/FEATURE-TESTING.md). The original native fixture remains separate. See [Neon setup](neon.md).
 
 ## Current Neon logins
 
-The current hosted roster has **16 usable demo logins: seven feature testers below, one sector-portfolio tester and all eight industry businesses**. See the [Neon login guide](../data/testing/neon/README.md) for the full roster. Use the reviewer for staff workflows.
+There are **nine usable logins: eight industry customers and one bank administrator**. The industry emails are logistics-business, technology-business, manufacturing-business, wholesale-business, hospitality-business, construction-business, healthcare-business and energy-business, all at `greenlink.demo`. Each owns a separate fictional business and its existing operating/reserve savings accounts.
 
-| Login email | Actual permission role | Starting use case |
-| --- | --- | --- |
-| `business-tester@greenlink.demo` | `customer` | Approved, funded business; operating, reserve and closed savings accounts |
-| `recipient-tester@greenlink.demo` | `customer` | Approved recipient business, incoming transfers and record isolation |
-| `pending-tester@greenlink.demo` | `customer` | Business application awaiting independent approval |
-| `rejected-tester@greenlink.demo` | `customer` | Rejected application with explanation; correction and resubmission |
-| `reviewer-tester@greenlink.demo` | `admin` | Bank operations, business onboarding and independent payment review |
-| `maker-tester@greenlink.demo` | `admin` | Combined business/admin test identity to demonstrate self-approval denial |
-| `mfa-tester@greenlink.demo` | `customer` | Approved business with enrolled authenticator and recovery login |
+`reviewer-tester@greenlink.demo` is the only active administrator, for bank operations, onboarding, independent review, fraud rules and AI audit. Use logistics for ordinary banking and technology for recipient/privacy comparisons. Retained credentials are unchanged. The former feature, sector and user-created logins are retired; banking and audit history remain. The owner-approved old monthly PUB test schedule has been cancelled.
 
-There are **two permission roles**, customer and administrator. Reviewer and maker are separate administrator identities; the maker is an explicit combined-access test case. `staff-tester@greenlink.demo`, `profile-tester@greenlink.demo` and `empty-tester@greenlink.demo` are retired from the current Neon roster. Missing-profile and zero-balance edge fixtures remain available only in isolated tests. The three user-created logins are also retired. Banking and audit records remain.
+Historical workflows below describe the full isolated feature-tour fixture. Pending/rejected, zero-balance, MFA, administrator-maker and sector-portfolio cases need that isolated setup; they are not additional current hosted logins. Do not reseed shared production identities to restore old test accounts.
 
 ## Original native setup
 

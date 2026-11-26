@@ -1,6 +1,8 @@
 # Sector companies and counterparty risk
 
-One business login owns eight fictional counterparty profiles and historical receipts:
+This guide describes the **isolated sector-portfolio fixture**. Its former hosted login is retired under the nine-login roster; do not use it for current Neon sign-in. The eight industry customers remain separate and do not inherit this private portfolio. Prepare this fixture only in an owner-controlled isolated database for SECTOR tests.
+
+One isolated fixture login owns eight fictional counterparty profiles and historical receipts:
 
 | Field | Value |
 | --- | --- |
