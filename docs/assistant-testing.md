@@ -8,6 +8,8 @@ For a three-person test run, use the [assigned teammate packets](assistant-team-
 
 Copy questions below after replacing every `{PLACEHOLDER}`. Use the case IDs and workflow coverage below to organize each tester's notes. Instructions describing clicks are for the tester, not chat prompts.
 
+For a presentation, use the [current presentation questions and role/setup instructions](banking-agents.md#presentation-questions). This acceptance catalogue also includes deliberate denial tests, UI steps and isolated-data cases; those are not all positive chat demonstrations on the hosted account.
+
 ## Getting started
 
 1. Ask the owner for the test URL, deployed commit and allowed identities. Sign in and open **Ask GLDB** at the lower right.

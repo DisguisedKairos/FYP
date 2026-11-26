@@ -279,3 +279,27 @@ test('Company-risk uncertainty lists do not become guarantees or hide later cert
   'The assessment does not establish fraud probability, guaranteed loss is certain [E1].'
  ])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
 });
+
+test('Presentation bill drafts keep source and reference clauses separate',()=>{
+ const {extractDraft}=require('../banking/agents/drafts');
+ const accounts=[{id:'owned-source',name:'Industry operating savings',number:'1099100101'}],billers=[{id:'pub',name:'PUB'}];
+ for(const message of [
+  'Prepare a PUB bill payment of SGD 5.00 from 1099100101 with reference "RP-C300".',
+  'Prepare a PUB bill payment of SGD 5.00 with reference "RP-C300" from 1099100101.',
+  'Prepare a PUB bill payment of SGD 5.00 reference RP-C300 from 1099100101.'
+ ]){
+  const draft=extractDraft(message,{},accounts,billers);
+  assert.equal(draft.kind,'bill');assert.equal(draft.fromAccountId,'owned-source');assert.equal(draft.billerId,'pub');assert.equal(draft.amount,'5.00');assert.equal(draft.reference,'RP-C300');
+ }
+ assert.throws(()=>extractDraft('Prepare a PUB bill payment of SGD 5.00 from 1099100201 with reference "RP-C300".',{},accounts,billers),e=>e.status===400);
+});
+
+test('Presentation schedule punctuation preserves exact Singapore time and rejects malformed times',()=>{
+ const {extractDraft}=require('../banking/agents/drafts'),now=()=>Date.parse('2026-11-26T08:00:00Z');
+ const accounts=[{id:'owned-source',name:'Industry operating savings',number:'1099100101'}];
+ for(const clock of ['09:00.','09:00,','09:00?','09:00!']){
+  const draft=extractDraft('Prepare a weekly transfer of SGD 10.00 from 1099100101 to 1099100201 starting tomorrow at '+clock,{},accounts,[],{now});
+  assert.equal(draft.scheduledAt,'2026-11-27T01:00:00.000Z');assert.equal(draft.frequency,'weekly');assert.equal(draft.amount,'10.00');assert.equal(draft.toAccountNumber,'1099100201');
+ }
+ for(const clock of ['25:30.','09:60.','09:00.5','09:00..'])assert.throws(()=>extractDraft('Schedule a transfer of SGD 10.00 tomorrow at '+clock,{},accounts,[],{now}),e=>e.status===400);
+});

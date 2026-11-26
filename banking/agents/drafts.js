@@ -69,13 +69,13 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
     ledger.parseAmount(draft.amount);
   }
   const accountText=value=>value.trim().replace(/^(?:my|account)\s+/i,'').replace(/[.!?]$/,'').toLowerCase();
-  const sourceText=text.match(/\b(?:from|use)\s+(.+?)(?=\s+(?:to|for|at|on|tomorrow|once|weekly|monthly)\b|$)/i)?.[1];
+  const sourceText=text.match(/\b(?:from|use)\s+(.+?)(?=\s+(?:to|for|at|on|starting|tomorrow|once|weekly|monthly|(?:with\s+)?ref(?:erence)?)\b|$)/i)?.[1];
   if(sourceText){
     const matches=accounts.filter(a=>a.name.toLowerCase()===accountText(sourceText) || a.number===accountText(sourceText));
     if(matches.length!==1)throw new HttpError(400,'Choose an unambiguous owned source account by name or account number.');
     draft.fromAccountId=String(matches[0].id);
   }
-  const targetText=text.match(/\bto\s+(.+?)(?=\s+(?:for|with|reference|ref|at|on|tomorrow|once|weekly|monthly)\b|$)/i)?.[1] || (/^\d{10}$/.test(text)?text:null);
+  const targetText=text.match(/\bto\s+(.+?)(?=\s+(?:for|with|reference|ref|at|on|starting|tomorrow|once|weekly|monthly)\b|$)/i)?.[1] || (/^\d{10}$/.test(text)?text:null);
   if(targetText){
     const target=accountText(targetText),owned=accounts.filter(a=>a.name.toLowerCase()===target || a.number===target);
     delete draft.toAccountNumber;
@@ -85,8 +85,8 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
   }
   const biller=billers.find(b=>text.toLowerCase().includes(b.name.toLowerCase()));
   if(biller)draft.billerId=biller.id;
-  const reference=text.match(/\b(?:ref(?:erence)?)\s+(.+?)(?=\s+(?:tomorrow|at|on|once|weekly|monthly)\b|$)/i);
-  if(reference)draft.reference=reference[1].trim();
+  const reference=text.match(/\b(?:ref(?:erence)?)\s+("[^"\r\n]*"[.!?]?|'[^'\r\n]*'[.!?]?|.+?)(?=\s+(?:from|use|starting|tomorrow|at|on|once|weekly|monthly)\b|$)/i);
+  if(reference){const value=reference[1].trim(),quoted=value.match(/^(["'])(.*)\1[.!?]?$/);draft.reference=quoted?quoted[2]:value;}
   const date=text.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/);
   if(date)draft.scheduledAt=date[0];
   if(/\btomorrow\b/i.test(text)){
@@ -94,8 +94,9 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
     const tomorrow=new Date(now()+86400000);
     const sg=new Date(tomorrow.getTime()+8*3600000).toISOString().slice(0,10);
     const clock=text.match(/\btomorrow\s+(?:(at)\s+)?(\S+)(?:\s+(am|pm)\b)?/i);
-    const explicit=clock && (clock[1] || /^\d/.test(clock[2]));
-    const time=explicit?(clock[2]+(clock[3] || '')).match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i):null;
+    const clockToken=clock?.[2].replace(/[.,!?]$/,'');
+    const explicit=clock && (clock[1] || /^\d/.test(clockToken));
+    const time=explicit?(clockToken+(clock[3] || '')).match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i):null;
     let hour=9,minute=0;
     if(time){hour=Number(time[1]);minute=Number(time[2] || 0);if(minute>59 || (time[3]?hour<1 || hour>12:hour>23))throw new HttpError(400,'Choose a valid time for tomorrow in Singapore.');if(time[3])hour=hour%12+(/pm/i.test(time[3])?12:0);}
     else if(explicit || /\btomorrow\s+(?:at\b|(?:in\s+the\s+)?(?:morning|afternoon|evening|night|noon|midnight)\b)/i.test(text))throw new HttpError(400,'Use a valid time such as tomorrow at 15:30.');

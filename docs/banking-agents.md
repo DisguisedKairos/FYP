@@ -39,16 +39,53 @@ Set OPENAI_MODEL and a private OPENAI_API_KEY in .env. Run npm run db:migrate, n
 
 The model chooses approved read/draft tools and gives qualitative interpretations. OpenAI receives chat and permitted tool evidence, but no database connection, session token, password, MFA secret or financial execution tool. FastAPI uses the same configured provider for fraud scoring. Historical AI reports retain their recorded provider and evidence.
 
-## Demonstrate each feature
+## Presentation questions
 
-Use the ten synthetic identities and shared initial password in `data/testing/FEATURE-TESTING.md`.
+Updated 26 November 2026. Use the [current nine-login Neon guide](../data/testing/neon/README.md). Sign in as `logistics-business@greenlink.demo` for the customer questions; use `reviewer-tester@greenlink.demo` only for administrator tasks. The administrator does not own the customer's deposits or private charts.
 
-1. Sign in as `logistics-business@greenlink.demo`. In GLDB Assistant, ask whether your schedules can be covered over the next 30 days and inspect scheduled occurrences, source-account shortfalls and any suggested funding drafts. An owned transfer credits the destination in the projection and does not count as money leaving the business. No future income is guessed. Held payments are disclosed separately because they are not reserved.
-2. In GLDB Assistant, send **Transfer**, then **SGD 25**, then **1088800201**. The assistant asks for missing fields across requests and opens an ordinary transfer form when complete. Send **Schedule transfer SGD 10 to 1088800201 tomorrow weekly** to prepare a schedule draft. Tomorrow defaults to 09:00 Singapore time; an explicit time such as **tomorrow at 15:30** is respected. Inspect the displayed timestamp before authorizing. Raw conversation messages remain in browser memory.
-3. Ask the local assistant: **Check my balances and whether I can cover my upcoming scheduled payments.** Inspect the displayed tool activity, verified fact cards and AI interpretation. Exact monetary values and scores come from tool facts; generated numerical claims and unauthorized execution claims are withheld. This guard is a bounded validation rule, not proof that every qualitative model statement is correct.
-4. Sign in as `reviewer-tester@greenlink.demo`. Copy a permitted outgoing transaction ID from Activity or Fraud monitoring and ask GLDB Assistant to investigate it, inspect recorded model/rule reasons, prior completed outgoing history, evidence references and suggested independent checks. The brief does not approve/reject a payment or establish fraud. Use the normal independent review screen for decisions.
-5. Preview a high-value threshold change, for example from SGD 10,000 to SGD 9,500. Compare current/proposed allow, review and block counts. Both policies use the same recorded input snapshots and original model scores. Only the latest 1,000 assessments in the chosen window are inspected. Only OpenAI results with valid model provenance and an integer score from 0 to 94 are included. Missing, invalid and retired-provider results are counted and skipped; archived evidence is preserved. No live policy is changed. Without labeled fraud outcomes, the report cannot measure precision, false positives or accuracy.
-6. Run reconciliation as a business operator and then as staff. Customer reports include only owned accounts and exceptions. Staff can inspect bank-wide discrepancies, failed/retrying/overdue schedules and stuck notifications. Reports identify exceptions and suggest follow-up; they cannot repair balances or ledger entries.
+A read-only check of the current database confirmed logistics operating account **1099100101**, logistics reserve **1099100102**, and technology recipient **1099100201**. Confirm these in Business accounts before presenting. The former `108880...` feature-tour accounts are not the current presentation setup. Other industry logins must use their own accounts and recorded companies.
+
+Copy only the question into Ask GLDB. Use a fresh conversation for unrelated questions; keep the save-chart follow-up in the same conversation as the chart. Current hosted customer records contain fictional company labels, so they cannot establish real-world company reputation or sanctions status. Public-company research below is a separate lookup, not a claim that the customer has paid that company.
+
+| Feature | Customer question | What to show |
+| --- | --- | --- |
+| Current balances | Show my savings accounts and their current balances. | Owned account facts; compare with Business accounts. |
+| Recent activity | Show my recent transactions. | Owned receipts and recorded statuses. |
+| Company search | Find my transactions containing "GLDB Demo Straits Carrier Pte. Ltd.". | Existing logistics counterparty receipts. |
+| Historical balances | Show my opening and closing account balances from 2026-11-01 to 2026-11-25. | Historical balances for that Singapore date range, not today's balance. |
+| Scheduled instructions | List my scheduled payments. | Current instructions, or an honest empty list. |
+| Upcoming obligations | Can I cover my scheduled payments over the next 7 days? | Seven-day scenario and any source-account shortfall; no guessed future income. |
+| Finance downloads | Generate a downloadable finance report from 2026-11-01 to 2026-11-25. | Check the displayed period; download CSV and PDF. |
+| Cash flow | Summarize my inflow and outflow this month. | Completed external flows, distinct from current balances. |
+| Proposed company payment | Can I pay SGD 10.00 from 1099100101 to GLDB Demo Straits Carrier Pte. Ltd. by tomorrow? | Read-only funding check; no transfer is created. |
+| Company dashboard | Show a dashboard of my transactions with GLDB Demo Straits Carrier Pte. Ltd. for the last 90 days. | Inline ledger-derived charts for the recorded company. |
+| Monthly trends | Show my transaction trends over the past 6 months as a dashboard. | Monthly charts, including empty and partial months. |
+| Save displayed chart | Save this chart as "Presentation trends" and refresh it weekly. | Ask immediately after the trends chart; inspect My dashboard. Refresh is scheduled, not continuous. |
+| Saved charts | Show my saved dashboards. | Owned saved definitions and Open in chat controls. |
+| Own business profile | Analyze my business profile using my registered company details and transaction activity. | The signed-in business's submitted details and owned activity. |
+| Public company profile | Research the public company profile of DBS Group. | Sourced public information and identity limitations; no private DBS records. |
+| Industry news advice | Show current news for my industry and explain what our company should do next based on our business activities and priorities. | Relevant dated sources, company context and chat-only advisory concerns. |
+| Official market/scam context | Show the latest available FX reference changes and official scam alerts. | Publication dates and explicit stale/unavailable notices where needed. |
+| Market-assisted fraud review | Check my transactions for fraud using daily market trends. | Up to five eligible outgoing records, supported concerns and existing human-review status. A new flag is not guaranteed. |
+| Counterparty interaction risk | Evaluate reputation and financial risk of interacting with companies recorded in my transactions. | Owned cash-flow exposure, supported reasons and unknowns. Missing reputation evidence is not clearance or a tool failure. |
+| Reconciliation | Check my accounts for reconciliation exceptions. | Owned discrepancies or an explicit no-exception result; no balance repair. |
+
+For the sanctions/news scan, ask **Scan news for companies this account deals with, including sanctions and compliance issues.** This is conditional on having eligible real-company labels in recent owned receipts. The current logistics account has fictional counterparty labels, which are excluded from public research. Show its coverage explanation, then use the industry-news or DBS public-profile question to demonstrate live public research. Do not invent transactions or claim that missing sanctions evidence clears a company.
+
+For payment-form demonstrations, the current logistics login can ask these complete drafts. Inspect the form, then cancel unless you intend to authorize an actual instruction:
+
+- **Prepare a transfer of SGD 10.00 from 1099100101 to 1099100201.**
+- **Prepare a PUB bill payment of SGD 5.00 from 1099100101 with reference "RP-C300".**
+- **Prepare a weekly transfer of SGD 10.00 from 1099100101 to 1099100201 starting tomorrow at 09:00.**
+
+Chat prepares forms; it never submits, approves or settles them. Opening/closing accounts, notifications, password/MFA changes, live rule edits and payment decisions are demonstrations in their ordinary screens, not commands that chat executes.
+
+For administrator demonstrations, sign out of the customer account and sign in as `reviewer-tester@greenlink.demo`:
+
+1. Copy an existing outgoing transaction ID from Fraud monitoring, then ask **Investigate transaction ACTUAL_TRANSACTION_ID and explain its recorded risk reasons.** Replace `ACTUAL_TRANSACTION_ID` before sending; a fabricated, incoming or inaccessible ID is not a valid positive demonstration.
+2. Ask **Preview the high_value fraud rule with a proposed threshold of SGD 9,500 over the last 30 days without changing the live rule.** The preview replays supported recorded assessment snapshots; no eligible snapshots means insufficient coverage, not measured fraud accuracy.
+3. Ask **Check bank-wide reconciliation exceptions.** Customer questions remain limited to their owned accounts.
+4. Open **AI audit** using the administrator navigation. It shows permitted structured model/tool activity, not hidden model reasoning or other users' private conversations.
 
 ## Guidance and missing details
 

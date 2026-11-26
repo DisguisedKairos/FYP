@@ -69,11 +69,11 @@ These are examples, not guaranteed current fixtures. Each tester confirms live r
 
 | Placeholder | How to fill it |
 | --- | --- |
-| `{SOURCE}` | Owned active source number; Business example 1088800101. Other roles use their own number. |
-| `{RESERVE}` | Another owned account; Business example 1088800102. |
-| `{RECIPIENT}` | Owner-approved synthetic recipient; example 1088800201. |
-| `{FOREIGN_SOURCE}` | Account not owned by current user; Business can use Recipient's 1088800201 for denial tests. |
-| `{COMPANY}` | Exact visible Activity counterparty; Business example Feature Tour Supplier Pte. Ltd., if present. |
+| `{SOURCE}` | Owned active source number; logistics Business example 1099100101. Other roles use their own number. |
+| `{RESERVE}` | Another owned account; logistics Business example 1099100102. |
+| `{RECIPIENT}` | Owner-approved recipient; technology Business example 1099100201. |
+| `{FOREIGN_SOURCE}` | Account not owned by current user; logistics Business can use technology's 1099100201 for denial tests. |
+| `{COMPANY}` | Exact visible Activity counterparty; logistics Business example GLDB Demo Straits Carrier Pte. Ltd., if still present in the requested period. |
 | `{FOREIGN_BUSINESS}` | Owner-provided public display name of another business; never copy its private profile or identifiers. |
 | `{AMBIGUOUS_COMPANY}` | Owner-supplied partial label matching two recorded counterparties; otherwise Blocked (dataset). |
 | `{NO_MATCH_TEXT}` | Unique harmless text confirmed absent from Activity, e.g. AI-UAT-NO-MATCH-20261112. |
