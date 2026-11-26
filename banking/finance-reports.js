@@ -5,7 +5,8 @@ const {HttpError}=require('../models/errors');
 const {assertCurrentUser}=require('./auth');
 const {snapshot,dateRange}=require('./history');
 const {cents}=require('./ledger');
-const {requestedPeriod}=require('./company-activity');
+const {requestedPeriod}=require('./assistant-period');
+const {periodBalances}=require('./account-period-balances');
 const businesses=require('./business');
 const {fundingCoverage}=require('./agents/reports');
 const MAX_ROWS=10000,DAY=86400000;
@@ -20,9 +21,6 @@ function rangeFor(params,now){
 }
 function paramsForMessage(message,{now=Date.now}={}){
   const period=requestedPeriod(message,{now});
-  if(!period.from && /\btoday\b/i.test(message))period.from=period.to=day(now());
-  if(!period.from && /\byesterday\b/i.test(message))period.from=period.to=day(now()-DAY);
-  if(!period.from && /\b(?:week|weeks|year|years|quarter|quarters|since|between|until|before|after|hours?)\b/i.test(message))throw new HttpError(400,'For this report, specify two YYYY-MM-DD dates, today, yesterday, this month, last month, or last N days.');
   return new URLSearchParams(period);
 }
 async function create(db,user,params=new URLSearchParams(),{now=Date.now,includeFunding=false}={}){
@@ -36,7 +34,10 @@ async function create(db,user,params=new URLSearchParams(),{now=Date.now,include
       FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND ${WHEN}>=$2::timestamptz AND ${WHEN}<$3::timestamptz AND ${WHEN}<=$4::timestamptz
       ORDER BY ${WHEN} DESC,t.insert_seq DESC LIMIT $5`,[user.id,range.start,range.end,generatedAt,MAX_ROWS+1])).rows;
     if(rows.length>MAX_ROWS)throw new HttpError(413,'This finance report exceeds 10,000 ledger entries. Choose a shorter date range.');
-    const totals={balanceCents:cents(accounts.reduce((sum,a)=>sum+BigInt(a.balanceCents),0n)),incomeCents:0,outgoingCents:0,netCents:0,completedCount:0,pendingCount:0,rejectedCount:0,pendingOutgoingCents:0,rejectedOutgoingCents:0,transactionCount:rows.length};
+    const accountsWithHistory=await periodBalances(client,user,range);
+    for(const account of accounts)Object.assign(account,accountsWithHistory.find(row=>row.id===account.id));
+    const historicalTotal=key=>cents(accounts.reduce((sum,a)=>sum+BigInt(a[key]),0n));
+    const totals={openingBalanceCents:historicalTotal('openingBalanceCents'),closingBalanceCents:historicalTotal('closingBalanceCents'),balanceChangeCents:historicalTotal('balanceChangeCents'),balanceCents:cents(accounts.reduce((sum,a)=>sum+BigInt(a.balanceCents),0n)),incomeCents:0,outgoingCents:0,netCents:0,completedCount:0,pendingCount:0,rejectedCount:0,pendingOutgoingCents:0,rejectedOutgoingCents:0,transactionCount:rows.length};
     let incoming=0n,outgoing=0n,pending=0n,rejected=0n;
     const grouped=new Map(),transactions=[];
     for(const row of rows){
@@ -59,13 +60,17 @@ async function create(db,user,params=new URLSearchParams(),{now=Date.now,include
     const companies=[...grouped.values()].sort((a,b)=>{const left=a.incoming+a.outgoing,right=b.incoming+b.outgoing;return left===right?a.company.localeCompare(b.company):left>right?-1:1;}).map(row=>({company:row.company,incomeCents:cents(row.incoming),outgoingCents:cents(row.outgoing),netCents:cents(row.incoming-row.outgoing),completedCount:row.completedCount,pendingCount:row.pendingCount,rejectedCount:row.rejectedCount}));
     const fundingCheck=includeFunding?await fundingCoverage(db,user,{now,snapshotClient:client}):null;
     return {...(fundingCheck?{fundingCheck}:{}),title:'Business finance activity report',generatedAt,currency:'SGD',business:business?{legalName:business.legalName,registrationNumber:business.registrationNumber}:null,period:{from:range.from,to:range.to,timeZone:'Asia/Singapore'},totals,accounts,companies,transactions,
-      notes:['Balances are current at the report snapshot, not historical period closing balances.','Received, paid and net movement use completed external entries only; own-account transfers and opening funds are excluded.','Pending and rejected requests never change these cash-flow totals. Pending requests do not reserve funds.','Completed activity uses settlement time; pending and rejected activity uses request time. Dates are inclusive in Singapore time.','This report reflects recorded banking activity. It is not a full accounting statement or audited financial report.']};
+      notes:['Opening balances are immediately before the start date; closing balances are at the end of the requested period. Current balances are separately labelled and may differ. Opening funds and own-account transfers can explain differences between balance changes and external cash flow.','Received, paid and net movement use completed external entries only; own-account transfers and opening funds are excluded.','Pending and rejected requests never change these cash-flow totals. Pending requests do not reserve funds.','Completed activity uses settlement time; pending and rejected activity uses request time. Dates are inclusive in Singapore time.','This report reflects recorded banking activity. It is not a full accounting statement or audited financial report.']};
   });
 }
 function summary(report){
   const {transactions,companies,...rest}=report;
   return {...rest,companies:companies.slice(0,10),companyCount:companies.length,items:[
-    {title:'Current account balances',amountCents:report.totals.balanceCents},
+    {title:'Current account balances',amountCents:report.totals.balanceCents,detail:'Current snapshot; not the historical closing balance'},
+    {title:'Report period',detail:report.period.from+' to '+report.period.to+' (inclusive, SGT)'},
+    {title:'Period opening balance',amountCents:report.totals.openingBalanceCents},
+    {title:'Period closing balance',amountCents:report.totals.closingBalanceCents},
+    {title:'Period balance change',amountCents:report.totals.balanceChangeCents},
     {title:'Received from external accounts',amountCents:report.totals.incomeCents},
     {title:'Paid to external accounts and billers',amountCents:report.totals.outgoingCents},
     {title:'Net external movement',amountCents:report.totals.netCents},
@@ -78,9 +83,9 @@ const decimal=value=>{const n=BigInt(value),absolute=n<0n?-n:n;return (n<0n?'-':
 function csv(report){
   const lines=[],line=(...fields)=>lines.push(fields.map(text).join(',')),metric=(label,value)=>lines.push(text(label)+','+decimal(value));
   line(report.title);line('Business',report.business?.legalName||'Business profile not linked');line('Registration number',report.business?.registrationNumber||'');line('Generated at (UTC)',report.generatedAt);line('Generated at (SGT)',new Date(report.generatedAt).toLocaleString('en-SG',{timeZone:'Asia/Singapore',hour12:false})+' SGT');line('Period from (SGT)',report.period.from);line('Period to (SGT)',report.period.to);line('Currency',report.currency);line();
-  line('Summary','Amount SGD');for(const [label,key] of [['Current account balances','balanceCents'],['Received - external completed','incomeCents'],['Paid - external completed','outgoingCents'],['Net external movement','netCents'],['Pending outgoing - not reserved','pendingOutgoingCents'],['Rejected outgoing - no funds moved','rejectedOutgoingCents']])metric(label,report.totals[key]);
+  line('Summary','Amount SGD');for(const [label,key] of [['Current account balances','balanceCents'],['Period opening balance','openingBalanceCents'],['Period closing balance','closingBalanceCents'],['Period balance change','balanceChangeCents'],['Received - external completed','incomeCents'],['Paid - external completed','outgoingCents'],['Net external movement','netCents'],['Pending outgoing - not reserved','pendingOutgoingCents'],['Rejected outgoing - no funds moved','rejectedOutgoingCents']])metric(label,report.totals[key]);
   line('Completed entries',report.totals.completedCount);line('Awaiting review entries',report.totals.pendingCount);line('Rejected entries',report.totals.rejectedCount);line();
-  line('Current accounts');line('Account','Account number','Status','Current balance SGD');for(const row of report.accounts)lines.push([text(row.name),text(row.number),text(row.status),decimal(row.balanceCents)].join(','));line();
+  line('Account balances');line('Account','Account number','Status','Current balance SGD','Period opening SGD','Period closing SGD','Period change SGD');for(const row of report.accounts)lines.push([text(row.name),text(row.number),text(row.status),decimal(row.balanceCents),decimal(row.openingBalanceCents),decimal(row.closingBalanceCents),decimal(row.balanceChangeCents)].join(','));line();
   line('Company activity');line('Recorded counterparty','Received SGD','Paid SGD','Net SGD','Completed','Awaiting review','Rejected');for(const row of report.companies)lines.push([text(row.company),decimal(row.incomeCents),decimal(row.outgoingCents),decimal(row.netCents),row.completedCount,row.pendingCount,row.rejectedCount].join(','));line();
   line('Ledger entries');line('Activity at (UTC)','Requested at (UTC)','Completed at (UTC)','Account','Account number','Type','Description','Counterparty','Amount SGD','Status','Reference','Transaction ID','Own-account transfer','Opening funds');
   for(const row of report.transactions)lines.push([row.completedAt||row.requestedAt,row.requestedAt,row.completedAt,row.accountName,row.accountNumber,row.type,row.description,row.counterparty,null,row.status,row.reference,row.id,row.internal?'Yes':'No',row.openingBalance?'Yes':'No'].map((value,index)=>index===8?decimal(row.amountCents):text(value)).join(','));

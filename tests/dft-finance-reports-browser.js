@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
 const {fixture}=require('./dft-helpers'),{launchChrome}=require('./chrome');
 async function login(page,email='alex@greenlink.demo'){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=1280){const f=await fixture(t),page=await launchChrome(t,{width,height:950,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
+async function open(t,width=1280,options={}){const f=await fixture(t,options),page=await launchChrome(t,{width,height:950,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
 async function ask(page){await page.fill('#assistant-message','Pull a real time finance report for the last 30 days that I can download');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-finance-report]") && !document.querySelector("#assistant-form button[type=submit]").disabled');}
 async function capture(page){await page.evaluate(`window.financeBlobs=[];window.financeNames=[];window.originalObjectURL=URL.createObjectURL;URL.createObjectURL=blob=>{blob.arrayBuffer().then(bytes=>window.financeBlobs.push({mime:blob.type,body:new TextDecoder().decode(bytes)}));return window.originalObjectURL(blob);};window.originalAnchorClick=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download?.startsWith('greenlink-finance-')){window.financeNames.push(this.download);return;}return window.originalAnchorClick.call(this);};`);}
 test('Assistant finance CSV and PDF downloads remain in chat and retrieve changes committed after the preview',async t=>{
@@ -38,4 +38,31 @@ test('An ended-session finance response cannot download private records or unloc
   await page.evaluate('window.releaseOlderFinance();window.olderFinance');assert.equal(await page.evaluate('window.financeBlobs.length'),0);assert.equal(await page.evaluate('document.querySelector("[data-finance-format=csv]").disabled'),true);
   await page.evaluate('window.releaseNewFinance();window.newFinance');await page.waitFor('window.financeBlobs.length===1 && !document.querySelector("[data-finance-format=csv]").disabled');
   const exported=await page.evaluate('window.financeBlobs[0].body');assert.match(exported,/Harbour Supplies/);assert.doesNotMatch(exported,/Meridian Commerce/);assert.deepEqual(page.errors,[]);
+});
+
+test('Named report dates produce matching downloads, incomplete dates ask for clarification, and receipt dates carry into Activity',async t=>{
+  const {page}=await open(t,390,{now:()=>Date.parse('2026-11-26T04:00:00Z')});await capture(page);
+  async function question(text){
+    const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');
+    await page.fill('#assistant-message',text);await page.click('#assistant-form button[type=submit]');
+    await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+' && !document.querySelector("#assistant-form button[type=submit]").disabled');
+  }
+  await question('Generate a finance report from date to date');
+  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/Please clarify the report period/);
+  assert.equal(await page.evaluate('document.querySelectorAll("[data-finance-report]").length'),0);
+  assert.equal(await page.evaluate('document.querySelector("#assistant-error").textContent'),'');
+  await question('13 November 2026 to 19 November 2026');
+  assert.match(await page.evaluate('document.querySelector("[data-finance-report]").textContent'),/2026-11-13 to 2026-11-19/);
+  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/Period opening balance.*Period closing balance/s);
+  await page.click('[data-finance-format=csv]');await page.waitFor('window.financeBlobs.length===1');
+  const exported=await page.evaluate('window.financeBlobs[0].body');
+  assert.match(exported,/"Period from \(SGT\)","2026-11-13"/);assert.match(exported,/"Period to \(SGT\)","2026-11-19"/);assert.match(exported,/Period closing balance/);
+  assert.equal(await page.evaluate('window.financeNames[0]'),'greenlink-finance-2026-11-13-to-2026-11-19.csv');
+  await question('Show transactions from 13/11/2026 to 19/11/2026');
+  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/2026-11-13 to 2026-11-19/);
+  await page.click('.from-assistant:last-child [data-assistant-action]');await page.waitFor('location.pathname==="/activity" && !!document.querySelector("#history-filters")');
+  assert.equal(await page.evaluate('document.querySelector("#history-filters [name=from]").value'),'2026-11-13');
+  assert.equal(await page.evaluate('document.querySelector("#history-filters [name=to]").value'),'2026-11-19');
+  await page.waitFor('document.querySelector("#history-results")?.getAttribute("aria-busy")==="false"');
+  assert.deepEqual(page.errors,[]);
 });

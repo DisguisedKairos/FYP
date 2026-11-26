@@ -19,24 +19,7 @@ function period(params,now){
   if(from>to || to>today || Date.parse(range.end)-Date.parse(range.start)>366*DAY)throw new HttpError(400,'Choose a past or current date range of at most 366 days.');
   return range;
 }
-function requestedPeriod(message,{now=Date.now}={}){
-  const dates=message.match(/\b\d{4}-\d{2}-\d{2}\b/g)||[];
-  if(dates.length){
-    if(dates.length!==2)throw new HttpError(400,'Use two YYYY-MM-DD dates, or adjust the dates on Company activity.');
-    return {from:dates[0],to:dates[1]};
-  }
-  const today=day(now()),relative=/\b(?:last|past)\s+(\d+)\s+days?\b/i.exec(message);
-  if(relative){const days=Number(relative[1]);if(days<1 || days>366)throw new HttpError(400,'Choose between 1 and 366 days.');return {from:day(now()-(days-1)*DAY),to:today};}
-  const months=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message);
-  if(months){const count=Number(months[1]);if(count<1||count>12)throw new HttpError(400,'Choose between 1 and 12 calendar months.');const start=new Date(today.slice(0,7)+'-01T00:00:00Z');start.setUTCMonth(start.getUTCMonth()-(count-1));return {from:start.toISOString().slice(0,10),to:today};}
-  if(/\b(?:this|current) month\b/i.test(message))return {from:today.slice(0,7)+'-01',to:today};
-  if(/\blast month\b/i.test(message)){
-    const end=Date.parse(today.slice(0,7)+'-01T00:00:00+08:00')-DAY,to=day(end);return {from:to.slice(0,7)+'-01',to};
-  }
-  // The dashboard always displays its explicit default window; other periods
-  // can be selected in its date form rather than guessed by the model.
-  return {};
-}
+const {requestedPeriod}=require('./assistant-period');
 
 function monthlyRows(rows,range){
  const result=[];

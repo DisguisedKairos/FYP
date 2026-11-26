@@ -82,9 +82,10 @@ pg('Cash-flow summaries use settlement time and exclude pending, rejected, own-t
   const f=await fixture(t,{http:false,now}),user=await actor(f.db),source=(await accounts(f.db))[0],before=await planning.assess(f.db,user,message(source).replace('this month.','last month.'),{now});
   for(const [amount,status,internal,description] of [[1000,'completed',false,'Invoice received'],[-200,'completed',false,'Supplier paid'],[-400,'pending_review',false,'Pending'],[-500,'rejected',false,'Rejected'],[600,'completed',true,'Own account'],[700,'completed',false,'Opening balance']]){
     await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,internal,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,$3,$4,$5,'Planning test',$6,$7,'2026-10-15T00:00:00Z','2026-10-01T00:00:00Z',CASE WHEN $6='completed' THEN '2026-10-15T00:00:00Z'::timestamptz END,CASE WHEN $6='completed' THEN nextval('settlement_sequence') END)",[randomUUID(),source.id,amount>0?'credit':'transfer',description,amount,status,internal]);
+    if(status==='completed')await f.db.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1',[source.id,amount]);
   }
   const after=(await planning.assess(f.db,user,message(source).replace('this month.','last month.'),{now})).paymentReadiness;
-  assert.equal(after.flow.incomeCents,before.paymentReadiness.flow.incomeCents+1000);assert.equal(after.flow.outgoingCents,before.paymentReadiness.flow.outgoingCents+200);assert.equal(after.source.balanceCents,before.paymentReadiness.source.balanceCents);
+  assert.equal(after.flow.incomeCents,before.paymentReadiness.flow.incomeCents+1000);assert.equal(after.flow.outgoingCents,before.paymentReadiness.flow.outgoingCents+200);assert.equal(after.source.balanceCents,before.paymentReadiness.source.balanceCents+2100);
   assert.equal(after.flow.period.from,'2026-10-01');assert.equal(after.flow.period.to,'2026-10-31');
 });
 pg('The assistant returns structured date-specific readiness without drafts, and ownership and revocation remain enforced',async t=>{

@@ -19,8 +19,8 @@ function createTestAgentModel(){
     else if(/\b(?:afford|enough|sufficient|check)\b/i.test(text) && /\bSGD\s*\d|S\$\s*\d|\$\s*\d/i.test(text) && !/\b(?:scheduled|upcoming)\b/i.test(text))name='check_payment_funds';
     else if(/\b(?:finance|financial)\b/i.test(text) && /\breports?\b/i.test(text))name='get_finance_report';
     else if(/\b(?:low (?:on )?funds|insufficient funds|sufficient funds|enough money|enough funds)\b/i.test(text))name='project_liquidity';
-    else if(/\bbalance\b/i.test(text))name='get_accounts';
-    else if(/\b(?:history|recent transactions|search|find)\b/i.test(text))name='search_transactions';
+    else if(/\bbalances?\b/i.test(text))name='get_accounts';
+    else if(/\b(?:history|transactions?|search|find)\b/i.test(text))name='search_transactions';
     else if(/\b(?:liquidity|cash.?flow|afford|shortfall|cover|projection)\b/i.test(text))name='project_liquidity';
     else if(/^(?:please\s+)?(?:help me\s+)?(?:transfer|send|move|pay|schedule)\b/i.test(text) || pending){
       name='prepare_payment_draft';

@@ -6,7 +6,8 @@ const { HttpError } = require('../../models/errors');
 const { consumeLimits } = require('../auth');
 const { bucketKey } = require('../security');
 const SENSITIVE = /\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i;
-const history = require('../history');
+const accountHistory=require('./account-history');
+const assistantPeriod=require('../assistant-period');
 const companyActivity = require('../company-activity');
 const dashboardViews = require('../dashboard-views');
 const assistantPreferences=require('../assistant-preferences');
@@ -75,7 +76,7 @@ const descriptions = {
   analyze_news_insights:'Analyze sourced public news already retrieved in this run by get_market_insights, research_public_company or scan_counterparty_news. Retrieve relevant current news first. Explains business implications and gives independent checks with chat-only watch, human-review or insufficient-evidence advisory flags, citing exact retrieved summaries. No arguments. Cannot change payments, fraud scores, rules or staff cases; news alone is not proof of fraud.',
   research_public_company:'Research a named public company profile and recent business news with sourced live web search. companyName must be an exact public company name from the user message, never an account identifier or private ledger record. Distinguish name matches from verified identity.',
   check_payment_funds:'Read-only proposed-payment funding check. No arguments: the server reads the SGD amount, owned source after from, proposed recipient after to, and payment deadline/month from the user message. Use for affordability questions and combined inflow/outflow summaries with whether a company payment can be funded by a date or month. Dated checks support YYYY-MM-DD, YYYY-MM, named months/dates with a year, this month, next month, today or tomorrow, up to 90 days. Dates mean end of day in Singapore. They return completed historical cash flow separately from current balance minus active outgoing schedules and the additional proposed payment. Future credits are excluded until settled. Missing/unsupported details return clarification, not a sufficient-funds claim. No payment, reservation, saving or form action is created. For an obligations-only projection use project_liquidity.',
-  get_finance_report:'Retrieve a current read-only finance activity report for the signed-in operator, including owned balances, completed external cash flow, company totals and pending/rejected counts. Use when asked for a finance/financial report, especially a downloadable or real-time report. No arguments: dates are parsed from the user message (two YYYY-MM-DD dates, today, yesterday, last/past N days, this month or last month; default this month). CSV and PDF download controls are rendered by the application. Each click reads a fresh snapshot. No payments are made; this is not a profit-and-loss statement or a forecast.',
+  get_finance_report:'Retrieve a current read-only finance activity report for the signed-in operator, including owned balances, completed external cash flow, company totals and pending/rejected counts. Use when asked for a finance/financial report, especially a downloadable or real-time report. No arguments: server parses ISO dates, DD/MM/YYYY, named dates, today, yesterday, this/last week or month and last/past N days/weeks/months; default this month only when no period was specified. Returns period opening/closing balances separately from current balances. Invalid/incomplete dates require clarification. CSV and PDF download controls are rendered by the application. Each click reads a fresh snapshot. No payments are made; this is not a profit-and-loss statement or a forecast.',
   list_saved_dashboards:'List the signed-in operator\'s private saved company dashboards. Use when asked to show, list, find or reopen saved dashboards. Returns only owned view ids and titles; no money is moved.',
   open_saved_dashboard:'Reopen an owned saved dashboard inside chat with fresh ledger figures. First call list_saved_dashboards in this run and use an exact returned viewId. Never invent an id or select an unrelated dashboard.',
   save_company_dashboard:'Save the company dashboard just retrieved by get_company_activity as a private reusable live view. No arguments; the server takes only its validated filters. Requires an explicit user request to save, bookmark or keep this dashboard. Also accepts a direct save-this-dashboard follow-up with server-supplied previous dashboard context. Does not change payments. Only claim success when saved=true. Add/pin this chart to a customized dashboard and weekly refresh requests are supported; settings come only from the user message.',
@@ -83,9 +84,9 @@ const descriptions = {
   get_daily_market_context:'Retrieve dated official ScamShield alerts, ECB reference FX changes and ECB financial news. Unavailable/stale sources are explicit. This is supplementary context, not proof of fraud.',
   analyze_market_transactions:'Compare up to five recent permitted outgoing payments, or the specified transactionId, against daily official public context and bound pre-payment history. Customers see only their own payments; bank staff may inspect bank payments. Returns eligible signal codes; no payment changes.',
   flag_transaction_for_review:'Request human investigation of an analyzed outgoing payment, only after an explicit user request to check payments for fraud or suspicious activity. Supply an exact eligible signalCode from analyze_market_transactions in this run. Market movements alone cannot qualify. No settlement, approval, balance or numeric score change.',
-  get_accounts:'Read the signed-in operator\'s active accounts and available balances, plus a read-only default 30-day scheduled-payment funding check. Use for balance or low-funds enquiries. Returned fundingCheck warnings must be highlighted. No fixed low-balance threshold or payment execution. For a specific upcoming planning period, use project_liquidity.',
+  get_accounts:'Read current owned balances, or historical opening and closing balances when the question supplies a past date range. Dates come only from the message. Current balance is not historical closing balance. Otherwise returns active accounts and available balances, plus a read-only default 30-day scheduled-payment funding check. Use for balance or low-funds enquiries. Returned fundingCheck warnings must be highlighted. No fixed low-balance threshold or payment execution. For a specific upcoming planning period, use project_liquidity.',
   get_schedules:'Read up to 50 of the signed-in operator\'s scheduled instructions. No execution or cancellation.',
-  search_transactions:'Search up to 20 owned transaction receipts. q is optional. This is a bounded recent list, not the complete history; use Activity for full filtering and statements.',
+  search_transactions:'Search owned receipts within the date range parsed by the server from the current message. q is only an explicit company, description or reference term, never dates or the whole question. Returns complete matching totals and up to 15 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
   project_liquidity:'Project owned balances using scheduled occurrences over 1-90 days. Includes draft-only funding suggestions.',
   investigate_transaction:'Bank staff only: inspect a specific outgoing payment, historical comparison and recorded risk explanation.',
   get_related_payments:'Compare up to 20 earlier completed payments on the source account of a permitted transaction.',
@@ -137,17 +138,14 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
   const handlers={
     get_daily_market_context:async()=>{const context=await marketContext.get();return {...context,items:marketRisk.publicItems(context)};},
     analyze_market_transactions:async(user,args)=>marketRisk.analyze(db,user,{...args,context:await marketContext.get(),now}),
-    get_accounts:(user)=>reports.balances(db,user,{now}),get_schedules:(user)=>schedules(user),
+    get_schedules:(user)=>schedules(user),
     project_liquidity:(user,args)=>reports.liquidity(db,user,{...args,now}),
     reconcile_accounts:(user)=>reports.reconciliation(db,user,{now}),
     investigate_transaction:(user,args)=>reports.investigation(db,user,{...args,now}),
     get_related_payments:(user,args)=>related(user,args.transactionId),
     simulate_rule:(user,args)=>{const {ruleId,days,...patch}=args;return reports.simulation(db,user,{ruleId,patch,days,now});},
     prepare_payment_draft:(user,args)=>prepareDraft(db,user,args,{now}),
-    search_transactions:async(user,args)=>{
-      await reports.assertActor(db,user);const result=await history.list(db,user,new URLSearchParams({...args,pageSize:'20'}));
-      return {total:result.pagination.total,transactions:result.transactions.map(t=>({id:t.id,description:t.description,amountCents:t.amountCents,status:t.status,date:t.createdAt}))};
-    },
+
   };
   async function detail(user,id){await reports.assertActor(db,user);const row=(await db.query('SELECT * FROM agent_runs WHERE id=$1 AND user_id=$2',[id,user.id])).rows[0];if(!row)throw new HttpError(404,'Investigation record not found.');const calls=(await db.query('SELECT step,tool_name,arguments_json,result_json,created_at FROM agent_tool_calls WHERE run_id=$1 ORDER BY step',[row.id])).rows;return {...view(row),steps:calls.map(c=>({step:c.step,tool:c.tool_name,arguments:c.arguments_json,result:c.result_json,createdAt:iso(c.created_at)}))};}
   async function list(user){await reports.assertActor(db,user);return (await db.query('SELECT * FROM agent_runs WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 30',[user.id])).rows.map(r=>({...view(r),report:undefined,title:r.report_json?.title || r.kind.replace(/_/g,' ')}));}
@@ -179,8 +177,12 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         previous={...previous,lastCompanyDashboard:{...definition,company:definition.scope==='all'?'':data.company}};
       }
     }
+    const dateTasks={get_finance_report:'Generate a finance report ',get_accounts:'Show historical balances ',search_transactions:'Show transactions '};
+    const dateFollowup=kind==='assistant'&&Object.hasOwn(dateTasks,previous.pendingDateEnquiry?.tool||'')&&assistantPeriod.isDateReply(message)?previous.pendingDateEnquiry:null;
+    // Only a dates-only reply may resume a pending read-only enquiry.
+    if(dateFollowup)message=dateTasks[dateFollowup.tool]+message;
     const preferences=await assistantPreferences.read(db,acting);
-    const activeSystem=SYSTEM+ASSISTANT_EXTENSION+' For reputation or financial/money risk from interacting with flagged companies, or requests to list/evaluate demo companies across sectors, call assess_counterparty_risk. Omit company to assess the owned portfolio, or supply an exact owned name from this question. Fictional names starting GLDB Demo and their flags are synthetic case inputs: never present them as real public news, real sanctions listings or misconduct. Never web-search fictional names. Reputation and financial interaction grades are qualitative, not payment authorization or a fraud score. The returned exposure amounts are historical flows and pending requests, not actual/predicted loss. Distinguish demo scenarios from recorded open payment reviews. Exact amounts and grades appear in the report cards.'+' For sanctions, compliance, regulator or recent-news checks about companies this account deals with, suppliers or business partners, use scan_counterparty_news. Omit company to retrieve authorized recent counterparties automatically; the optional company must be an exact recorded name in this question. It also researches public developments in the business industry. Public relationships and amounts must never be invented. Name-only research is not sanctions screening clearance. Highlight unavailable checks and human identity verification; never assert that counterparties are compliant, cleared or safe to pay.'+' For a general market-insights question, omit the topic argument so the server uses the operator preference: '+preferences.marketTopic+'. Select a topic only when the user asks for that subject.'+' Write the final chat answer as a single paragraph in plain language. Lead with the direct answer, then the most useful next step or necessary limitation. Do not use headings, bullet points, numbered lists or repeated summaries. Keep any funding warning, uncertainty or human-review requirement clear. Charts, source links, exact figures and download controls are provided separately by the application; do not repeat their contents in prose.'+(preferences.responseStyle==='detailed'?' Keep the paragraph to at most five short sentences, adding only useful context.':' For most questions, use at most three short sentences; greetings and simple answers should be shorter.');
+    const activeSystem=SYSTEM+ASSISTANT_EXTENSION+' Date ranges for finance reports, transaction searches and historical balances are parsed by the server from the current message. Use get_finance_report for a dated finance report, search_transactions for a dated receipt list, and get_accounts for balances in a past period. Reports include distinct period opening, period closing and current balances; never call current balances historical balances. Accept named dates and Singapore DD/MM/YYYY as well as ISO dates. Never put dates, the whole question or generic transaction words into search_transactions q; q is only an explicit description, company or reference search term. When a tool returns needsClarification, ask for the missing or valid dates using its reason; do not invent a period or claim a report is ready. No download is available until a valid period is returned.'+' For reputation or financial/money risk from interacting with flagged companies, or requests to list/evaluate demo companies across sectors, call assess_counterparty_risk. Omit company to assess the owned portfolio, or supply an exact owned name from this question. Fictional names starting GLDB Demo and their flags are synthetic case inputs: never present them as real public news, real sanctions listings or misconduct. Never web-search fictional names. Reputation and financial interaction grades are qualitative, not payment authorization or a fraud score. The returned exposure amounts are historical flows and pending requests, not actual/predicted loss. Distinguish demo scenarios from recorded open payment reviews. Exact amounts and grades appear in the report cards.'+' For sanctions, compliance, regulator or recent-news checks about companies this account deals with, suppliers or business partners, use scan_counterparty_news. Omit company to retrieve authorized recent counterparties automatically; the optional company must be an exact recorded name in this question. It also researches public developments in the business industry. Public relationships and amounts must never be invented. Name-only research is not sanctions screening clearance. Highlight unavailable checks and human identity verification; never assert that counterparties are compliant, cleared or safe to pay.'+' For a general market-insights question, omit the topic argument so the server uses the operator preference: '+preferences.marketTopic+'. Select a topic only when the user asks for that subject.'+' Write the final chat answer as a single paragraph in plain language. Lead with the direct answer, then the most useful next step or necessary limitation. Do not use headings, bullet points, numbered lists or repeated summaries. Keep any funding warning, uncertainty or human-review requirement clear. Charts, source links, exact figures and download controls are provided separately by the application; do not repeat their contents in prose.'+(preferences.responseStyle==='detailed'?' Keep the paragraph to at most five short sentences, adding only useful context.':' For most questions, use at most three short sentences; greetings and simple answers should be shorter.');
     const conversational=kind==='assistant' && CONVERSATIONAL.test(message.trim());
     const requestGuidance=kind==='assistant'?guidance.guidanceFor(message,acting,previous):null;
     const engine=body.engine===undefined?model.mode:body.engine;
@@ -196,7 +198,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(Number((await client.query("SELECT count(*) FROM agent_runs WHERE status='running' AND created_at>$1",[iso(now()-120000)])).rows[0].count)>=2)throw new HttpError(429,'Two investigations are already running. Try again shortly.');
       await client.query('INSERT INTO agent_runs(id,user_id,auth_version,kind,engine,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,user.id,actor.auth_version,kind,engine,iso(now())]);
     });
-    let step=0,publicSearches=0,riskEvaluations=0,newsEvaluations=0,context={...previous,lastCompanyDashboard:null}, results=[],attempt=0;
+    let step=0,publicSearches=0,riskEvaluations=0,newsEvaluations=0,context={...previous,lastCompanyDashboard:null,pendingDateEnquiry:null}, results=[],attempt=0;
     const promptSha256=createHash('sha256').update(activeSystem).digest('hex');
     const deadline=Date.now()+60000;
     async function trackedChat(messages,tools,options,phase='banking_task'){
@@ -225,6 +227,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       await validateSession();
       if(!toolNames.includes(name))throw new HttpError(403,'This agent tool is outside the permitted task.');
       argumentsFor(name,args);
+      if(dateFollowup?.tool===name){args={...args,...dateFollowup.arguments};argumentsFor(name,args);}
       if(name==='flag_transaction_for_review'&&newsInsights.requested(message))throw new HttpError(400,'News advice produces chat-only advisory flags. A payment investigation requires a separate, supported fraud-review request.');
       if(kind==='fraud_investigation' && args.transactionId!==body.transactionId)throw new HttpError(403,'The investigation is bound to its selected payment.');
       if(kind==='assistant' && name==='prepare_payment_draft'){
@@ -282,8 +285,13 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         }catch(error){await aiAudit.record(db,{...base,status:'failed',validationAttempts:error.validationAttempts,errorCode:error.code==='NEWS_ADVISORY_INVALID'?'NEWS_ADVISORY_INVALID':'NEWS_ADVISORY_UNAVAILABLE',durationMs:Date.now()-started,createdAt:iso(now())});throw error;}
       }else if(name==='check_payment_funds'){
         output=await checkPaymentFunds(acting,message);
+      }else if(name==='get_accounts'){
+        try{output=/\bbalances?\b/i.test(message)&&!DRAFT_INTENT.test(message)&&!paymentPlanning.requested(message)?await accountHistory.balances(db,acting,message,{now}):null;}catch(error){output=assistantPeriod.clarification(error);}
+        if(!output)output=await reports.balances(db,acting,{now});
+      }else if(name==='search_transactions'){
+        try{output=await accountHistory.search(db,acting,args,message,{now});}catch(error){output=assistantPeriod.clarification(error);}
       }else if(name==='get_finance_report'){
-        output=financeReports.summary(await financeReports.create(db,acting,financeReports.paramsForMessage(message,{now}),{now,includeFunding:true}));
+        try{output=financeReports.summary(await financeReports.create(db,acting,financeReports.paramsForMessage(message,{now}),{now,includeFunding:true}));}catch(error){output=assistantPeriod.clarification(error);}
       }else if(name==='get_company_activity'){
         if(dashboardViews.followup(message)){
           if(!previous.lastCompanyDashboard)throw new HttpError(409,'Choose or retrieve an unambiguous dashboard before saving it.');
@@ -322,6 +330,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         const analysis=[...results].reverse().find(r=>r.tool==='analyze_market_transactions' && r.value.transactions.some(t=>t.id===args.transactionId))?.value;
         output=await marketRisk.flag(db,acting,{...args,analysis,runId:id,model:model.model,validateSession,now});
       }else output=await handlers[name](acting,args);
+      if(Object.hasOwn(dateTasks,name)&&output.needsClarification)context.pendingDateEnquiry={tool:name,arguments:args};
       if(Buffer.byteLength(JSON.stringify(output))>500000)throw new HttpError(413,'The investigation output is too large.');
       await db.query('INSERT INTO agent_tool_calls(run_id,step,tool_name,arguments_json,result_json,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,step,name,args,output,iso(now())]);
       results.push({tool:name,value:output});
@@ -400,9 +409,9 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(narrativeProblem)reply='The AI narrative failed a financial safety check and has been withheld. Use the authoritative tool evidence and ordinary banking review screens.';
       if(kind==='assistant'){
         reply=assistantParagraph(reply);
-        const actions=[...(requestGuidance?.actions||[]),...results.flatMap(r=>r.value.actions || [])], items=results.filter(r=>!['get_company_activity','open_saved_dashboard','list_saved_dashboards'].includes(r.tool)).flatMap(r=>r.tool==='get_accounts'?r.value.accounts.map(a=>({title:a.name,amountCents:a.balanceCents})):r.tool==='project_liquidity'?r.value.accounts.map(a=>({title:a.name,amountCents:a.projectedCents,subtitle:'Scheduled-payment projection'})):r.tool==='get_schedules'?r.value.schedules.map(s=>({title:s.type+' schedule',amountCents:s.amountCents,status:s.status,date:s.nextRunAt})):r.tool==='search_transactions'?r.value.transactions.map(t=>({title:t.description,amountCents:t.amountCents,status:t.status,date:t.date})):r.tool==='prepare_payment_draft'?r.value.missing.map(m=>'Missing: '+m):r.value.items || r.value.findings || []);
+        const actions=[...(requestGuidance?.actions||[]),...results.flatMap(r=>r.value.actions || [])], items=results.filter(r=>!['get_company_activity','open_saved_dashboard','list_saved_dashboards'].includes(r.tool)).flatMap(r=>r.tool==='get_accounts'?(r.value.items||r.value.accounts.map(a=>({title:a.name,amountCents:a.balanceCents}))):r.tool==='project_liquidity'?r.value.accounts.map(a=>({title:a.name,amountCents:a.projectedCents,subtitle:'Scheduled-payment projection'})):r.tool==='get_schedules'?r.value.schedules.map(s=>({title:s.type+' schedule',amountCents:s.amountCents,status:s.status,date:s.nextRunAt})):r.tool==='search_transactions'?r.value.items:r.tool==='prepare_payment_draft'?r.value.missing.map(m=>'Missing: '+m):r.value.items || r.value.findings || []);
         report={title:'AI banking enquiry',reply,fundingWarnings:funds.collect(results),items:items.slice(0,20),actions:actions.slice(0,8),requiresAuthorization:actions.some(a=>a.type.startsWith('draft_'))};
-        if(clarification)report={...report,title:'Assistant help and clarification',clarification:true,suggestions:SUGGESTIONS};
+        if(clarification||results.some(r=>r.value.needsClarification))report={...report,title:'Assistant help and clarification',clarification:true,suggestions:SUGGESTIONS};
         const riskReport=[...results].reverse().find(r=>r.tool==='assess_counterparty_risk')?.value;
         if(riskReport)report.counterpartyRisk=riskReport;
         const newsReport=[...results].reverse().find(r=>r.tool==='analyze_news_insights')?.value;
@@ -410,7 +419,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         const readiness=[...results].reverse().find(r=>r.value.paymentReadiness)?.value.paymentReadiness;
         if(readiness)report.paymentReadiness=readiness;
         const finance=[...results].reverse().find(r=>r.tool==='get_finance_report');
-        if(finance)report.financeReport={generatedAt:finance.value.generatedAt,period:finance.value.period,currency:finance.value.currency};
+        if(finance?.value.period)report.financeReport={generatedAt:finance.value.generatedAt,period:finance.value.period,currency:finance.value.currency};
         const shown=[...results].reverse().find(r=>['get_company_activity','open_saved_dashboard'].includes(r.tool) && r.value.period);
         const saved=[...results].reverse().find(r=>r.tool==='save_company_dashboard')?.value.view || null;
         // A save receipt belongs only to the chart with the same validated filters.

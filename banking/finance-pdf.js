@@ -26,11 +26,11 @@ async function pdf(report){
     paragraph('Generated: '+new Date(report.generatedAt).toLocaleString('en-SG',{timeZone:'Asia/Singapore',hour12:false})+' SGT');
     paragraph('Generated (UTC): '+report.generatedAt);
     heading('Financial activity summary');
-    for(const [label,key] of [['Current account balances','balanceCents'],['Received - external completed','incomeCents'],['Paid - external completed','outgoingCents'],['Net external movement','netCents'],['Pending outgoing - not reserved','pendingOutgoingCents'],['Rejected outgoing - no funds moved','rejectedOutgoingCents']])paragraph(label+': SGD '+decimal(report.totals[key]));
+    for(const [label,key] of [['Current account balances','balanceCents'],['Period opening balance','openingBalanceCents'],['Period closing balance','closingBalanceCents'],['Period balance change','balanceChangeCents'],['Received - external completed','incomeCents'],['Paid - external completed','outgoingCents'],['Net external movement','netCents'],['Pending outgoing - not reserved','pendingOutgoingCents'],['Rejected outgoing - no funds moved','rejectedOutgoingCents']])paragraph(label+': SGD '+decimal(report.totals[key]));
     paragraph('Completed entries: '+report.totals.completedCount+' | Awaiting review: '+report.totals.pendingCount+' | Rejected: '+report.totals.rejectedCount);
-    heading('Current accounts');
+    heading('Account balances');
     if(!report.accounts.length)paragraph('No business accounts.');
-    for(const row of report.accounts)paragraph(row.name+' | '+row.number+' | '+row.status+' | SGD '+decimal(row.balanceCents));
+    for(const row of report.accounts)paragraph(row.name+' | '+row.number+' | '+row.status+' | Current SGD '+decimal(row.balanceCents)+' | Period opening SGD '+decimal(row.openingBalanceCents)+' | Period closing SGD '+decimal(row.closingBalanceCents));
     heading('Activity with recorded companies and billers');
     if(!report.companies.length)paragraph('No external activity in this period.');
     for(const row of report.companies){paragraph(row.company,true);paragraph('Received SGD '+decimal(row.incomeCents)+' | Paid SGD '+decimal(row.outgoingCents)+' | Net SGD '+decimal(row.netCents));paragraph('Completed '+row.completedCount+' | Awaiting review '+row.pendingCount+' | Rejected '+row.rejectedCount);doc.moveDown(0.4);}

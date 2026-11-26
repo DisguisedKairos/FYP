@@ -84,7 +84,7 @@ test('Company period parser grounds supported user dates and cash flow evidence 
  assert.deepEqual(company.requestedPeriod('with Acme this month',{now}),{from:'2026-10-01',to:'2026-10-31'});
  assert.deepEqual(company.requestedPeriod('with Acme last month',{now}),{from:'2026-09-01',to:'2026-09-30'});
  assert.deepEqual(company.requestedPeriod('Acme between 2026-08-01 and 2026-09-30',{now}),{from:'2026-08-01',to:'2026-09-30'});
- assert.throws(()=>company.requestedPeriod('Acme since 2026-09-30',{now}),e=>e.status===400);
+ assert.deepEqual(company.requestedPeriod('Acme since 2026-09-30',{now}),{from:'2026-09-30',to:'2026-10-31'});
  assert.throws(()=>company.requestedPeriod('Acme last 999 days',{now}),e=>e.status===400);
  assert.equal(relevanceIssue('Show transaction history and cash flow with Harbour Supplies',[{tool:'get_company_activity'}]),null);
 });

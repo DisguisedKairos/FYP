@@ -7,7 +7,7 @@ import {dashboardHtml,savedDashboardsHtml,hydrateDashboardCharts,cancelAssistant
 import {bindAssistantWindow,renderAssistantWindow,stopAssistantResize} from './assistant-window.js';
 // Raw messages stay in browser memory. Reports, tool evidence and draft context
 // are retained privately; financial actions only open the ordinary banking forms.
-import { state, api, esc, icon, money, sameId, pages, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
+import { state, api, esc, icon, money, sameId, pages, allAccounts, emptyFilters, statusLabel, shortDate, navigate, toast, recoverSession } from './core.js';
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
@@ -188,9 +188,11 @@ export function applyBankingAction(action) {
   if(action.type==='navigate') {
     const aliases={dashboard:'overview',transactions:'activity','scheduled-payments':'schedules','bill-payments':'payments','fraud-monitoring':'fraud','fraud-rules':'rules'};
     const page=aliases[action.page] || action.page;
-    if(page==='activity' && typeof action.filters?.q==='string'){state.filters={...emptyFilters(),search:action.filters.q.slice(0,120)};state.historyPage=1;}
+    if(page==='activity' && action.filters){
+      const f=action.filters;state.filters={...emptyFilters(),search:typeof f.q==='string'?f.q.slice(0,120):'',from:/^\d{4}-\d{2}-\d{2}$/.test(f.from||'')?f.from:'',to:/^\d{4}-\d{2}-\d{2}$/.test(f.to||'')?f.to:'',account:allAccounts().some(a=>sameId(a.id,f.accountId))?String(f.accountId):''};state.historyPage=1;
+    }
     if(pages[page]){
-      closeAssistant({focus:false});navigate(page);
+      closeAssistant({focus:false});navigate(page,{account:page==='activity'?state.filters.account:''});
     }
     return;
   }

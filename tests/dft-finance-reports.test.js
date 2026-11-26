@@ -11,7 +11,9 @@ const actor=async(db,email='alex@greenlink.demo')=>(await db.query('SELECT * FRO
 async function row(db,{email='alex@greenlink.demo',amount=-100,status='completed',at='2026-01-15T00:00:00Z',requested=at,internal=false,label='Test Supplier',description='Finance test payment',reference='FINANCE-TEST'}={}){
   const account=(await db.query('SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email=$1 ORDER BY a.id LIMIT 1',[email])).rows[0];
   const id=randomUUID();
-  await db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $7='completed' THEN nextval('settlement_sequence') END)",[id,account.id,amount>0?'credit':'transfer',description,amount,label,status,reference,internal,at,requested,status==='completed'?at:null]);return id;
+  await db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,CASE WHEN $7='completed' THEN nextval('settlement_sequence') END)",[id,account.id,amount>0?'credit':'transfer',description,amount,label,status,reference,internal,at,requested,status==='completed'?at:null]);
+  if(status==='completed')await db.query("UPDATE accounts SET opening_balance_cents=opening_balance_cents+CASE WHEN $3::timestamptz<created_at THEN 10000000 ELSE 0 END,balance_cents=balance_cents+$2+CASE WHEN $3::timestamptz<created_at THEN 10000000 ELSE 0 END,created_at=LEAST(created_at,$3::timestamptz-interval '1 day') WHERE id=$1",[account.id,amount,at]);
+  return id;
 }
 function pdfText(buffer){
   const source=buffer.toString('latin1');let text='';
@@ -86,6 +88,74 @@ test('Finance report periods are derived from user text and the model cannot sup
   assert.ok(relevanceIssue('Download a finance report',[{tool:'get_accounts'}]));
   assert.equal(relevanceIssue('Finance report with balances and cash flow',[{tool:'get_finance_report'}]),null);
   assert.ok(relevanceIssue('Can I afford future payments?',[{tool:'get_finance_report'}]),'A current activity snapshot cannot replace a future liquidity scenario.');
+});
+
+test('Assistant reports parse named and Singapore numeric dates without silently using this month',()=>{
+  for(const question of [
+    'from 1 November 2026 to 9 November 2026','between 1 Nov and 9 Nov 2026',
+    'from November 1, 2026 to November 9, 2026','from 01/11/2026 to 09/11/2026',
+    'from 1.11.2026 to 9.11.2026','from 01-11-2026 to 09-11-2026',
+    'from 2026-11-01 to 2026-11-09'
+  ])assert.deepEqual(Object.fromEntries(finance.paramsForMessage('Generate a finance report '+question,{now})),{from:'2026-11-01',to:'2026-11-09'},question);
+  for(const [question,period] of [
+    ['last week',['2026-11-02','2026-11-08']],['this week',['2026-11-09','2026-11-10']],
+    ['last 2 weeks',['2026-10-28','2026-11-10']],['October 2026',['2026-10-01','2026-10-31']],
+    ['on 9 November 2026',['2026-11-09','2026-11-09']],['since 1 November 2026',['2026-11-01','2026-11-10']]
+  ])assert.deepEqual(Object.fromEntries(finance.paramsForMessage(question,{now})),{from:period[0],to:period[1]},question);
+  assert.deepEqual(Object.fromEntries(finance.paramsForMessage('May I generate a finance report?',{now})),{});
+  for(const question of ['last November','between November and October','from date to date','between 1 November 2026 and date','from 1 Nov 2026 to','from 31/02/2026 to 02/03/2026','between 9 Nov 2026 and 1 Nov 2026','from 2026-11-01 to 2026-11-02 to 2026-11-03'])assert.throws(()=>finance.paramsForMessage(question,{now}),e=>e.status===400,question);
+});
+
+pg('Dated finance reports and balance enquiries use historical settled balances and inclusive Singapore boundaries',async t=>{
+  const f=await fixture(t,{now}),user=await actor(f.db),client=f.client();await client.login();
+  const account=(await f.db.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_balance_cents,opening_provenance,created_at) VALUES($1,'Dated savings','9100008011',100000,100000,'seed','2026-01-01T00:00:00Z') RETURNING id",[user.id])).rows[0];
+  const expected=[];
+  for(const [amount,at,status] of [[1000,'2026-01-14T15:59:59.999Z','completed'],[2000,'2026-01-14T16:00:00Z','completed'],[-500,'2026-01-15T15:59:59.999Z','completed'],[-700,'2026-01-15T16:00:00Z','completed'],[-400,'2026-01-15T02:00:00Z','pending_review'],[-300,'2026-01-15T03:00:00Z','rejected']]){
+    const id=randomUUID();await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,$3,'Dated activity',$4,'Dated Company',$5,$6,$6,CASE WHEN $5='completed' THEN $6::timestamptz END,CASE WHEN $5='completed' THEN nextval('settlement_sequence') END)",[id,account.id,amount>0?'credit':'transfer',amount,status,at]);
+    if(status==='completed')await f.db.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1',[account.id,amount]);
+    if(at>='2026-01-14T16:00:00Z'&&at<'2026-01-15T16:00:00Z')expected.push(id);
+  }
+  const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+  const report=await finance.create(f.db,user,new URLSearchParams({from:'2026-01-15',to:'2026-01-15'}),{now});
+  const a=report.accounts.find(a=>a.id===String(account.id));
+  assert.equal(a.openingBalanceCents,101000);assert.equal(a.closingBalanceCents,102500);assert.equal(a.balanceCents,101800);
+  assert.equal(report.totals.openingBalanceCents,101000);assert.equal(report.totals.closingBalanceCents,102500);assert.equal(report.totals.balanceChangeCents,1500);
+  assert.match(finance.csv(report).content,/"Period opening balance",1010\.00/);assert.match(pdfText((await pdf(report)).content),/Period closing balance: SGD 1025\.00/);
+  const balance=await client.request('/api/agents/assistant',{method:'POST',body:{message:'What were my balances between 15 January 2026 and 15 January 2026?'}});
+  assert.equal(balance.status,200,JSON.stringify(balance.data));assert.equal(balance.data.narrativeWithheld,undefined);
+  assert.equal(balance.data.items.find(i=>i.title==='Closing balance across your accounts').amountCents,102500);
+  const search=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Show transactions from 15/01/2026 to 15/01/2026'}});
+  assert.equal(search.status,200,JSON.stringify(search.data));assert.equal(search.data.narrativeWithheld,undefined);
+  const data=(await f.db.query('SELECT result_json FROM agent_tool_calls WHERE run_id=$1 AND tool_name=$2',[search.data.runId,'search_transactions'])).rows[0].result_json;
+  assert.deepEqual(data.transactions.map(t=>t.id).sort(),expected.sort());assert.equal(data.total,4);
+  assert.deepEqual(search.data.actions[0].filters,{from:'2026-01-15',to:'2026-01-15'});
+  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
+  await f.db.query('UPDATE accounts SET balance_cents=balance_cents+1 WHERE id=$1',[account.id]);
+  await assert.rejects(finance.create(f.db,user,new URLSearchParams({from:'2026-01-15',to:'2026-01-15'}),{now}),e=>e.status===409);
+});
+
+pg('Invalid assistant report periods ask for clarification without errors, invented periods or download buttons',async t=>{
+  const f=await fixture(t,{now}),client=f.client();await client.login();
+  for(const message of ['Generate a finance report from date to date','Generate a finance report from 31/02/2026 to 02/03/2026','Generate a finance report from 1 November 2026 to 30 November 2026']){
+    const result=await client.request('/api/agents/assistant',{method:'POST',body:{message}});
+    assert.equal(result.status,200,JSON.stringify(result.data));assert.equal(result.data.clarification,true);assert.equal(result.data.narrativeWithheld,undefined);assert.equal(result.data.financeReport,undefined);
+    assert.ok(result.data.items.some(i=>i.title==='Please clarify the report period'));assert.deepEqual(result.data.actions,[]);
+  }
+});
+
+pg('A dates-only follow-up resumes the pending read-only enquiry and unrelated questions discard it',async t=>{
+  const f=await fixture(t,{now}),client=f.client();await client.login();
+  for(const [message,tool] of [['Generate a finance report from date to date','get_finance_report'],['Show transactions from date to date','search_transactions'],['What were my balances from date to date?','get_accounts']]){
+    const pending=await client.request('/api/agents/assistant',{method:'POST',body:{message}});
+    assert.equal(pending.status,200,JSON.stringify(pending.data));assert.equal(pending.data.clarification,true);
+    const completed=await client.request('/api/agents/assistant',{method:'POST',body:{message:'1 November 2026 to 9 November 2026',previousRunId:pending.data.runId}});
+    assert.equal(completed.status,200,JSON.stringify(completed.data));assert.equal(completed.data.narrativeWithheld,undefined);assert.equal(completed.data.clarification,undefined);assert.equal(completed.data.steps[0].tool,tool);
+    const context=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[completed.data.runId])).rows[0].context_json;
+    assert.equal(context.pendingDateEnquiry,null);
+  }
+  const pending=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Generate a finance report from date to date'}});
+  const unrelated=await client.request('/api/agents/assistant',{method:'POST',body:{message:'What food should I eat on 1 November 2026?',previousRunId:pending.data.runId}});
+  assert.equal(unrelated.status,200,JSON.stringify(unrelated.data));assert.equal(unrelated.data.financeReport,undefined);assert.equal(unrelated.data.steps.length,0);
 });
 pg('Assistant finance tool returns an owned live snapshot and download controls without storing exported files or changing money',async t=>{
   const f=await fixture(t,{now}),client=f.client();await client.login();
