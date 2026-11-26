@@ -106,6 +106,27 @@ test('Assistant reports parse named and Singapore numeric dates without silently
   for(const question of ['last November','between November and October','from date to date','between 1 November 2026 and date','from 1 Nov 2026 to','from 31/02/2026 to 02/03/2026','between 9 Nov 2026 and 1 Nov 2026','from 2026-11-01 to 2026-11-02 to 2026-11-03'])assert.throws(()=>finance.paramsForMessage(question,{now}),e=>e.status===400,question);
 });
 
+test('Shorthand named-date ranges retain both endpoints across assistant tools',()=>{
+  for(const text of ['from 1 to 9 November 2026','between 1st and 9th Nov 2026','November 1-9, 2026','from November 1 to 9, 2026','from 1 November 2026 through 9']){
+    assert.deepEqual(Object.fromEntries(finance.paramsForMessage('Generate a finance report '+text,{now})),{from:'2026-11-01',to:'2026-11-09'},text);
+  }
+  for(const text of ['from 31 to 32 November 2026','between 9 and 1 November 2026','from November 1 to 31, 2026'])assert.throws(()=>finance.paramsForMessage(text,{now}),e=>e.status===400,text);
+  assert.deepEqual(Object.fromEntries(finance.paramsForMessage('from 1 November to 9 December 2026',{now})),{from:'2026-11-01',to:'2026-12-09'});
+});
+
+test('Written duration quantities preserve period limits and explicit projection horizons',()=>{
+  for(const [text,from,to] of [
+    ['last six months','2026-06-01','2026-11-10'],['previous three months','2026-09-01','2026-11-10'],
+    ['past two weeks','2026-10-28','2026-11-10'],['last twenty-one days','2026-10-21','2026-11-10'],
+    ['past one hundred days','2026-08-03','2026-11-10'],['last a month','2026-11-01','2026-11-10'],
+  ])assert.deepEqual(Object.fromEntries(finance.paramsForMessage(text,{now})),{from,to},text);
+  for(const text of ['past thirteen months','last zero days','past four hundred days'])assert.throws(()=>finance.paramsForMessage(text,{now}),e=>e.status===400,text);
+  const {requestedHorizon}=require('../banking/agents/reports');
+  assert.equal(requestedHorizon('Can I cover scheduled payments over the next seven days?'),7);
+  assert.equal(requestedHorizon('Can I cover scheduled payments over the next two weeks?'),14);
+  assert.throws(()=>requestedHorizon('Can I cover payments for ninety-one days?'),e=>e.status===400);
+});
+
 pg('Dated finance reports and balance enquiries use historical settled balances and inclusive Singapore boundaries',async t=>{
   const f=await fixture(t,{now}),user=await actor(f.db),client=f.client();await client.login();
   const account=(await f.db.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_balance_cents,opening_provenance,created_at) VALUES($1,'Dated savings','9100008011',100000,100000,'seed','2026-01-01T00:00:00Z') RETURNING id",[user.id])).rows[0];
@@ -132,6 +153,24 @@ pg('Dated finance reports and balance enquiries use historical settled balances 
   assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
   await f.db.query('UPDATE accounts SET balance_cents=balance_cents+1 WHERE id=$1',[account.id]);
   await assert.rejects(finance.create(f.db,user,new URLSearchParams({from:'2026-01-15',to:'2026-01-15'}),{now}),e=>e.status===409);
+});
+
+pg('Shorthand presentation questions use the same financial snapshots and filters as full dates',async t=>{
+  const f=await fixture(t,{now}),client=f.client();await client.login();const user=await actor(f.db);
+  const canonical=await finance.create(f.db,user,new URLSearchParams({from:'2026-11-01',to:'2026-11-09'}),{now});
+  const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+  for(const message of ['Generate a finance report from 1 to 9 November 2026.','Generate a finance report from November 1 to 9, 2026.']){
+    const r=await client.request('/api/agents/assistant',{method:'POST',body:{message}});assert.equal(r.status,200,JSON.stringify(r.data));assert.equal(r.data.clarification,undefined);assert.equal(r.data.narrativeWithheld,undefined);
+    assert.deepEqual(r.data.financeReport.period,canonical.period);
+    const recorded=(await f.db.query("SELECT result_json FROM agent_tool_calls WHERE run_id=$1 AND tool_name='get_finance_report'",[r.data.runId])).rows[0].result_json;
+    assert.deepEqual(recorded.totals,canonical.totals);
+  }
+  const b=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Show my opening and closing balances from 1 to 9 November 2026.'}});assert.equal(b.status,200,JSON.stringify(b.data));assert.equal(b.data.clarification,undefined);
+  assert.match(b.data.items.find(i=>i.title==='Historical balance period').detail,/2026-11-01 to 2026-11-09/);
+  assert.equal(b.data.items.find(i=>i.title==='Closing balance across your accounts').amountCents,canonical.totals.closingBalanceCents);
+  const h=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Show my transactions from 1 to 9 November 2026.'}});assert.equal(h.status,200,JSON.stringify(h.data));assert.equal(h.data.clarification,undefined);
+  assert.equal(h.data.actions.find(a=>a.page==='activity').filters.from,'2026-11-01');assert.equal(h.data.actions.find(a=>a.page==='activity').filters.to,'2026-11-09');
+  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });
 
 pg('Invalid assistant report periods ask for clarification without errors, invented periods or download buttons',async t=>{

@@ -25,6 +25,21 @@ test('Guidance covers the complete manual catalogue without replacing supported 
  assert.equal(bankingEnquiry('What food should I eat?'),false);
 });
 
+test('Polite draft requests preserve exact values and do not turn explanations into draft intent',()=>{
+ const {DRAFT_INTENT}=require('../banking/agents/evidence'),{extractDraft}=require('../banking/agents/drafts');
+ const accounts=[{id:'1',name:'Operating savings',number:'1020002001'}],billers=[{id:'pub',name:'PUB'}];
+ for(const message of ['Can you help me send SGD 10.00 from 1020002001 to 1020001001? Prepare the form for me to review.','Could you please transfer SGD 10.00 from 1020002001 to 1020001001?','I would like to send SGD 10.00 from 1020002001 to 1020001001.']){
+   assert.equal(DRAFT_INTENT.test(message),true,message);const draft=extractDraft(message,{},accounts,billers);
+   assert.equal(draft.kind,'transfer');assert.equal(draft.amount,'10.00');assert.equal(draft.fromAccountId,'1');assert.equal(draft.toAccountNumber,'1020001001');
+ }
+ const bill='Could you prepare a PUB bill draft for SGD 5.00 from 1020002001 with reference RP-C300?';assert.equal(DRAFT_INTENT.test(bill),true);
+ const result=extractDraft(bill,{},accounts,billers);assert.equal(result.kind,'bill');assert.equal(result.billerId,'pub');assert.equal(result.reference,'RP-C300');
+ for(const text of ['How do I prepare a payment?','What happens when I transfer funds?','Do not prepare a transfer draft.','Show my available funds.'])assert.equal(DRAFT_INTENT.test(text),false,text);
+ assert.throws(()=>extractDraft('Transfer SGD 10 to 1020001001 or to 1020003001',{},accounts,billers),e=>e.status===400);
+ for(const target of ['10200010010','1020001001.0','1020001001.extra'])assert.equal(extractDraft('Transfer SGD 10 to '+target,{},accounts,billers).toAccountNumber,undefined,target);
+ for(const token of ['10.999?','1e3?','10.00abc?'])assert.throws(()=>extractDraft('Transfer SGD '+token+' to 1020001001',{},accounts,billers),e=>e.status===400);
+});
+
 test('Value-free security help is accepted consistently in client and server while credential variants remain blocked',()=>{
  const source=fs.readFileSync(path.join(__dirname,'../public/js/assistant.js'),'utf8').split(/\r?\n/).find(line=>line.startsWith('const SAFE_SECURITY_HELP = '));
  assert.ok(source);const client=vm.runInNewContext(source+'; SAFE_SECURITY_HELP;');

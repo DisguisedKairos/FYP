@@ -19,7 +19,7 @@ function period(params,now){
   if(from>to || to>today || Date.parse(range.end)-Date.parse(range.start)>366*DAY)throw new HttpError(400,'Choose a past or current date range of at most 366 days.');
   return range;
 }
-const {requestedPeriod}=require('./assistant-period');
+const {requestedPeriod,normalizeDurations}=require('./assistant-period');
 
 function monthlyRows(rows,range){
  const result=[];
@@ -87,8 +87,9 @@ async function summary(db,user,params,{now=Date.now}={}){
   });
 }
 function definition(data,message=''){
-  const selected=requestedPeriod(message),monthWindow=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message),relative=/\b(?:last|past)\s+(\d+)\s+days?\b/i.exec(message);
-  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period:monthWindow?{kind:'months',months:Number(monthWindow[1])}:relative?{kind:'rolling',days:Number(relative[1])}:!selected.from && !selected.to?{kind:'rolling',days:90}:{kind:'fixed',from:data.period.from,to:data.period.to}};
+  message=normalizeDurations(message);
+  const selected=requestedPeriod(message),monthWindow=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message),relative=/\b(?:last|past)\s+(\d+)\s+(days?|weeks?)\b/i.exec(message);
+  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period:monthWindow?{kind:'months',months:Number(monthWindow[1])}:relative?{kind:'rolling',days:Number(relative[1])*(relative[2].toLowerCase().startsWith('week')?7:1)}:!selected.from && !selected.to?{kind:'rolling',days:90}:{kind:'fixed',from:data.period.from,to:data.period.to}};
 }
 function assistantResult(data,viewDefinition){
   const actions=[]; // The assistant renders the returned dashboard directly in chat.

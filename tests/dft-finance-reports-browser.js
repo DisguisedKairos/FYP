@@ -3,7 +3,7 @@ const test=require('node:test'),assert=require('node:assert/strict'),{randomUUID
 const {fixture}=require('./dft-helpers'),{launchChrome}=require('./chrome');
 async function login(page,email='alex@greenlink.demo'){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
 async function open(t,width=1280,options={}){const f=await fixture(t,options),page=await launchChrome(t,{width,height:950,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
-async function ask(page){await page.fill('#assistant-message','Pull a real time finance report for the last 30 days that I can download');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-finance-report]") && !document.querySelector("#assistant-form button[type=submit]").disabled');}
+async function ask(page,message='Pull a real time finance report for the last 30 days that I can download'){await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-finance-report]") && !document.querySelector("#assistant-form button[type=submit]").disabled');}
 async function capture(page){await page.evaluate(`window.financeBlobs=[];window.financeNames=[];window.originalObjectURL=URL.createObjectURL;URL.createObjectURL=blob=>{blob.arrayBuffer().then(bytes=>window.financeBlobs.push({mime:blob.type,body:new TextDecoder().decode(bytes)}));return window.originalObjectURL(blob);};window.originalAnchorClick=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download?.startsWith('greenlink-finance-')){window.financeNames.push(this.download);return;}return window.originalAnchorClick.call(this);};`);}
 test('Assistant finance CSV and PDF downloads remain in chat and retrieve changes committed after the preview',async t=>{
   const {f,page}=await open(t,390);await capture(page);const route=await page.evaluate('location.pathname');await ask(page);
@@ -20,6 +20,16 @@ test('Assistant finance CSV and PDF downloads remain in chat and retrieve change
   assert.equal(prose.tag,'P');assert.equal(prose.paragraphs,1);assert.equal(prose.whitespace,'normal');assert.doesNotMatch(prose.text,/[\r\n]/);
   assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response/);assert.deepEqual(page.errors,[]);
 });
+test('A shorthand presentation period remains correct in the displayed report and download request',async t=>{
+  const {page}=await open(t,390,{now:()=>Date.parse('2026-11-27T04:00:00Z')});await capture(page);
+  await ask(page,'Generate a downloadable finance report from 1 to 25 November 2026.');
+  assert.match(await page.evaluate('document.querySelector("[data-finance-report]").textContent'),/2026-11-01 to 2026-11-25/);
+  await page.evaluate("window.periodFetch=window.fetch;window.financePeriods=[];window.fetch=(...args)=>{if(String(args[0]).startsWith('/api/reports/finance'))window.financePeriods.push(Object.fromEntries(new URL(String(args[0]),location.origin).searchParams));return window.periodFetch(...args);};");
+  await page.click('[data-finance-format=csv]');await page.waitFor('window.financeBlobs.length===1 && !document.querySelector("[data-finance-format=csv]").disabled');
+  assert.deepEqual(await page.evaluate('window.financePeriods'),[{from:'2026-11-01',to:'2026-11-25',format:'csv'}]);
+  assert.deepEqual(await page.evaluate('window.financeNames'),['greenlink-finance-2026-11-01-to-2026-11-25.csv']);assert.deepEqual(page.errors,[]);
+});
+
 test('Failed finance downloads stay retryable and clearing chat cancels an unfinished download',async t=>{
   const {page}=await open(t);await capture(page);await ask(page);
   await page.evaluate(`window.financeFetch=window.fetch;window.failFinance=true;window.fetch=(...args)=>{if(String(args[0]).startsWith('/api/reports/finance') && window.failFinance){window.failFinance=false;return Promise.resolve(new Response(JSON.stringify({error:'Report temporarily unavailable.'}),{status:503,headers:{'Content-Type':'application/json'}}));}return window.financeFetch(...args);};`);

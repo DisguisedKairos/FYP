@@ -64,8 +64,9 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
     || text.match(/^(?:please\s+)?(?:transfer|send|move|pay)\s+([-+\d][^\s]*)/i)
     || (!/^\d{10}$/.test(text) && text.match(/^([-+\d][\d.,eE+-]*)$/));
   if(numeric){
-    if(!/^(?:\d{1,11}|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(numeric[1]))throw new HttpError(400,'Enter a valid SGD amount with no more than two decimal places.');
-    draft.amount=numeric[1].replace(/,/g,'');
+    const token=numeric[1].replace(/[!?]+$/,'');
+    if(!/^(?:\d{1,11}|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(token))throw new HttpError(400,'Enter a valid SGD amount with no more than two decimal places.');
+    draft.amount=token.replace(/,/g,'');
     ledger.parseAmount(draft.amount);
   }
   const accountText=value=>value.trim().replace(/^(?:my|account)\s+/i,'').replace(/[.!?]$/,'').toLowerCase();
@@ -75,7 +76,9 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
     if(matches.length!==1)throw new HttpError(400,'Choose an unambiguous owned source account by name or account number.');
     draft.fromAccountId=String(matches[0].id);
   }
-  const targetText=text.match(/\bto\s+(.+?)(?=\s+(?:for|with|reference|ref|at|on|starting|tomorrow|once|weekly|monthly)\b|$)/i)?.[1] || (/^\d{10}$/.test(text)?text:null);
+  const numberedTargets=[...text.matchAll(/\bto\s+(\d{10})(?=$|\s|[.!?,;](?=$|\s))/gi)].map(match=>match[1]);
+  if(new Set(numberedTargets).size>1)throw new HttpError(400,'Choose an unambiguous destination account number.');
+  const targetText=numberedTargets[0] || text.match(/\bto\s+(.+?)(?=\s+(?:for|with|reference|ref|at|on|starting|tomorrow|once|weekly|monthly)\b|$)/i)?.[1] || (/^\d{10}$/.test(text)?text:null);
   if(targetText){
     const target=accountText(targetText),owned=accounts.filter(a=>a.name.toLowerCase()===target || a.number===target);
     delete draft.toAccountNumber;
@@ -86,7 +89,7 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
   const biller=billers.find(b=>text.toLowerCase().includes(b.name.toLowerCase()));
   if(biller)draft.billerId=biller.id;
   const reference=text.match(/\b(?:ref(?:erence)?)\s+("[^"\r\n]*"[.!?]?|'[^'\r\n]*'[.!?]?|.+?)(?=\s+(?:from|use|starting|tomorrow|at|on|once|weekly|monthly)\b|$)/i);
-  if(reference){const value=reference[1].trim(),quoted=value.match(/^(["'])(.*)\1[.!?]?$/);draft.reference=quoted?quoted[2]:value;}
+  if(reference){const value=reference[1].trim(),quoted=value.match(/^(["'])(.*)\1[.!?]?$/);draft.reference=quoted?quoted[2]:value.replace(/[!?]+$/,'');}
   const date=text.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/);
   if(date)draft.scheduledAt=date[0];
   if(/\btomorrow\b/i.test(text)){

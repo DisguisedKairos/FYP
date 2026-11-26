@@ -19,6 +19,7 @@ function horizon(value = 30) {
 // Projection scope comes from the customer's question, not a model-selected
 // replacement period. Keep the rolling-day convention used by the report.
 function requestedHorizon(message){
+  message=require('../assistant-period').normalizeDurations(message);
   const periods=[...message.matchAll(/(?<![\w.])([+-]?\d+(?:\.\d+)?(?:e[+-]?\d+)?)\s+(days?|weeks?|months?)\b/gi)];
   if(periods.length>1)throw new HttpError(400,'Choose a single projection period from 1 to 90 days.');
   if(periods.length){

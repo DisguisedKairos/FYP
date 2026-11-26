@@ -1,12 +1,12 @@
 # GLDB Assistant: questions and manual acceptance tests
 
-Updated 13 November 2026 for the C300 wholesale banking prototype, including live public research, industry news advice, customized dashboards and sector-company reputation/financial risk. Record the tested deployment commit with each result.
+Updated 27 November 2026 for the C300 wholesale banking prototype, including live public research, industry news advice, customized dashboards and sector-company reputation/financial risk. Record the tested deployment commit with each result.
 
 This guide contains **160 manual cases** grouped into **28 end-to-end use cases** for assistant features, permissions, failure handling and the banking screens needed to complete workflows. It is a test plan: **all results start as Not run**. Creating this guide does not establish that the cases pass or measure fraud accuracy.
 
 For a three-person test run, use the [assigned teammate packets](assistant-team-testing.md): all 160 catalogue cases are allocated once, with four supplementary news-advice regressions and per-case result fields.
 
-Copy questions below after replacing every `{PLACEHOLDER}`. Use the case IDs and workflow coverage below to organize each tester's notes. Instructions describing clicks are for the tester, not chat prompts.
+The quick smoke run uses the current logistics account numbers and recorded company. In the acceptance catalogue, replace every `{PLACEHOLDER}` before copying a question. Use the case IDs and workflow coverage below to organize each tester's notes. Instructions describing clicks are for the tester, not chat prompts.
 
 For a presentation, use the [current presentation questions and role/setup instructions](banking-agents.md#presentation-questions). This acceptance catalogue also includes deliberate denial tests, UI steps and isolated-data cases; those are not all positive chat demonstrations on the hosted account.
 
@@ -106,20 +106,20 @@ For a short first session use the smoke run below; complete the remaining assign
 
 Use Business and its current owned account/company details. These checks authorize no money. Step 8 intentionally saves a private view.
 
-| Step | Case | Question / action |
-| --- | --- | --- |
-| 1 | CHAT-01 | Hello |
-| 2 | ACCT-01 | Show my savings accounts and their current balances. |
-| 3 | HIST-01 | Show my recent transactions. |
-| 4 | ACCT-02 | List my scheduled payments. |
-| 5 | FIN-01 | Summarize my inflow and outflow this month. |
-| 6 | FIN-03 | Generate a downloadable finance report for the last 30 days; open CSV/PDF. |
-| 7 | DASH-01 | Summarize my transactions with other companies in a dashboard. |
-| 8 | DASH-07 | Save this dashboard for future use. |
-| 9 | DASH-08 | Show my saved dashboards; open the selected title. |
-| 10 | FUND-01 | Can I afford SGD 10 from 1088800101? |
-| 11 | DATE-01 | Summarize inflow and outflow this month. Can I pay SGD 10 to Feature Tour Supplier Pte. Ltd. from 1088800101 by this month? |
-| 12 | DRAFT-01 | Transfer SGD 10 from 1088800101 to 1088800201; inspect/cancel the review form. |
+| Step | Case | Question to copy | On-screen check |
+| --- | --- | --- | --- |
+| 1 | CHAT-01 | Hello | Check the greeting. |
+| 2 | ACCT-01 | Show my savings accounts and their current balances. | Compare the facts with Business accounts. |
+| 3 | HIST-01 | Show my recent transactions. | Compare the receipts with Activity. |
+| 4 | ACCT-02 | List my scheduled payments. | Check recorded instructions or the empty state. |
+| 5 | FIN-01 | Summarize my inflow and outflow this month. | Check the reporting period and external cash flows. |
+| 6 | FIN-03 | Generate a downloadable finance report for the last 30 days. | Download CSV and PDF using the returned controls. |
+| 7 | DASH-01 | Summarize my transactions with other companies in a dashboard. | Inspect the inline chart and period. |
+| 8 | DASH-07 | Save this dashboard for future use. | Keep the same conversation as step 7; inspect the saved view. |
+| 9 | DASH-08 | Show my saved dashboards. | Open the selected title using its control. |
+| 10 | FUND-01 | Can I afford SGD 10 from 1099100101? | Check source-specific available funds. |
+| 11 | DATE-01 | Summarize inflow and outflow this month. Can I pay SGD 10 to GLDB Demo Straits Carrier Pte. Ltd. from 1099100101 by this month? | Check the source, deadline and scheduled obligations. |
+| 12 | DRAFT-01 | Prepare a transfer of SGD 10 from 1099100101 to 1099100201. | Inspect and cancel the review form without authorizing it. |
 
 Substitute a smaller amount or the correct owned account where needed. Read the expected results before marking passes.
 
@@ -129,11 +129,11 @@ Amounts are SGD unless testing unsupported currency. Planning cutoffs use Singap
 
 | Placeholder | Value |
 | --- | --- |
-| `{SOURCE}` | Owned active source number; Business example 1088800101. Other roles use their own number. |
-| `{RESERVE}` | Another owned account; Business example 1088800102. |
-| `{RECIPIENT}` | Owner-approved synthetic recipient; example 1088800201. |
-| `{FOREIGN_SOURCE}` | Account not owned by current user; Business can use Recipient's 1088800201 for denial tests. |
-| `{COMPANY}` | Exact visible Activity counterparty; Business example Feature Tour Supplier Pte. Ltd., if present. |
+| `{SOURCE}` | Owned active source number; Business example 1099100101. Other roles use their own number. |
+| `{RESERVE}` | Another owned account; Business example 1099100102. |
+| `{RECIPIENT}` | Owner-approved synthetic recipient; example 1099100201. |
+| `{FOREIGN_SOURCE}` | Account not owned by current user; Business can use Recipient's 1099100201 for denial tests. |
+| `{COMPANY}` | Exact visible Activity counterparty; Business example GLDB Demo Straits Carrier Pte. Ltd., if present. |
 | `{FOREIGN_BUSINESS}` | Owner-provided public display name of another business; never copy its private profile or identifiers. |
 | `{AMBIGUOUS_COMPANY}` | Owner-supplied partial label matching two recorded counterparties; otherwise Blocked (dataset). |
 | `{NO_MATCH_TEXT}` | Unique harmless text confirmed absent from Activity, e.g. AI-UAT-NO-MATCH-20261112. |

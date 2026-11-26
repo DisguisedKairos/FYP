@@ -8,6 +8,32 @@ const names=['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','
 const day=value=>new Date(value+8*3600000).toISOString().slice(0,10);
 const fail=()=>new HttpError(400,'Specify a valid start date and end date, for example 1 November 2026 to 19 November 2026 or 01/11/2026 to 19/11/2026 (DD/MM/YYYY). Dates are inclusive in Singapore time.');
 const format=(year,month,date)=>String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+'-'+String(date).padStart(2,'0');
+const SMALL=Object.fromEntries('zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen'.split(' ').map((word,index)=>[word,index]));
+const TENS={twenty:20,thirty:30,forty:40,fifty:50,sixty:60,seventy:70,eighty:80,ninety:90};
+function writtenCount(text){
+  const parts=text.toLowerCase().split(/[ -]+/);
+  if(parts.length===1&&['a','an'].includes(parts[0]))return 1;
+  const small=words=>words.length===1?(SMALL[words[0]]??TENS[words[0]]):words.length===2&&TENS[words[0]]&&SMALL[words[1]]>0&&SMALL[words[1]]<10?TENS[words[0]]+SMALL[words[1]]:undefined;
+  const hundred=parts.indexOf('hundred');
+  if(hundred===-1)return small(parts);
+  const head=hundred===1?(SMALL[parts[0]]??(['a','an'].includes(parts[0])?1:undefined)):undefined;
+  if(!head||head>9)return undefined;
+  const rest=parts.slice(2);if(rest[0]==='and')rest.shift();
+  const tail=rest.length?small(rest):0;
+  return tail===undefined?undefined:head*100+tail;
+}
+function normalizeDurations(message){
+  const words=[...Object.keys(SMALL),...Object.keys(TENS),'a','an','hundred','and'].join('|');
+  return message.replace(new RegExp('\\b((?:'+words+')(?:[ -]+(?:'+words+')){0,5})\\s+(days?|weeks?|months?)\\b','gi'),(whole,count,unit)=>{const number=writtenCount(count);return number===undefined?whole:number+' '+unit;})
+    .replace(/\bprevious(?=\s+\d+\s+(?:days?|weeks?|months?)\b)/gi,'last');
+}
+function expandNamedRanges(message){
+  const date='(\\d{1,2})(?:st|nd|rd|th)?',join='\\s*(?:to|through|until|and|[-\u2013\u2014])\\s*',year='(?:\\s*,?\\s*(\\d{4}))?',end='\\b(?!\\s*(?:'+MONTHS+')\\b)';
+  const stamp=(date,month,year)=>date+' '+month+(year?' '+year:'');
+  return message.replace(new RegExp('\\b'+date+join+date+'\\s+('+MONTHS+')'+year+'\\b','gi'),(_all,first,last,month,y)=>stamp(first,month,y)+' to '+stamp(last,month,y))
+    .replace(new RegExp('\\b('+MONTHS+')\\s+'+date+year+join+date+year+end,'gi'),(_all,month,first,y1,last,y2)=>stamp(first,month,y1||y2)+' to '+stamp(last,month,y2||y1))
+    .replace(new RegExp('\\b'+date+'\\s+('+MONTHS+')'+year+join+date+year+end,'gi'),(_all,first,month,y1,last,y2)=>stamp(first,month,y1||y2)+' to '+stamp(last,month,y2||y1));
+}
 function explicitDates(message,year){
   const pattern=new RegExp('\\b(?:\\d{4}-\\d{2}-\\d{2}|\\d{1,2}[-/\\.]\\d{1,2}[-/\\.]\\d{4}|\\d{1,2}(?:st|nd|rd|th)?\\s+(?:'+MONTHS+')(?:\\s*,?\\s*\\d{4})?|(?:'+MONTHS+')\\s+\\d{1,2}(?:st|nd|rd|th)?(?:\\s*,?\\s*\\d{4})?)\\b','gi');
   const dates=[...message.matchAll(pattern)].map(match=>{
@@ -25,6 +51,7 @@ function explicitDates(message,year){
   return dates;
 }
 function requestedPeriod(message,{now=Date.now}={}){
+  message=expandNamedRanges(normalizeDurations(message));
   const today=day(now()),year=Number(today.slice(0,4)),dates=explicitDates(message,year);
   if(dates.length){
     if(dates.length>2)throw fail();
@@ -73,6 +100,7 @@ function requestedPeriod(message,{now=Date.now}={}){
   return {};
 }
 function isDateReply(message){
+  message=normalizeDurations(message);
   const remaining=message.replace(/\b\d+(?:st|nd|rd|th)\b/gi,'').replace(new RegExp('\\b(?:'+MONTHS+'|from|to|and|between|on|for|the|since|until|through|today|yesterday|this|last|past|current|previous|days?|weeks?|months?|dates?|please|yes)\\b','gi'),'').replace(/[\d\s,./!?-]/g,'');
   return !remaining&&/\d|today|yesterday|this|last|past|current|previous|date/i.test(message);
 }
@@ -80,4 +108,4 @@ function clarification(error){
   if(!(error instanceof HttpError)||error.status!==400)throw error;
   return {complete:false,needsClarification:true,items:[{title:'Please clarify the report period',detail:error.message}],actions:[]};
 }
-module.exports={requestedPeriod,isDateReply,clarification};
+module.exports={requestedPeriod,isDateReply,clarification,normalizeDurations};

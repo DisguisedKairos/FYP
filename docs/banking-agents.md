@@ -51,6 +51,8 @@ A read-only check of the current database confirmed logistics operating account 
 
 Copy only the question into Ask GLDB. Use a fresh conversation for unrelated questions; keep the save-chart follow-up in the same conversation as the chart. Current hosted customer records contain unverified company labels, so they cannot establish real-world company reputation or sanctions status. Public-company research below is a separate lookup, not a claim that the customer has paid that company.
 
+Natural alternatives are supported: “Generate a finance report from 1 to 25 November 2026”, “Show my opening and closing balances from November 1 to 25, 2026”, “Make me a bar graph of my money going in and out over the last six months”, and “Can you help me send SGD 10.00 from 1099100101 to 1099100201? Prepare the form for me to review.” The shared parser preserves shorthand date endpoints and written duration counts. A saved chart keeps its rolling calendar-month or week window when refreshed; an explicit date range remains fixed. These are alternative phrasings, not required commands.
+
 | Feature | Customer question | What to show |
 | --- | --- | --- |
 | Current balances | Show my savings accounts and their current balances. | Owned account facts; compare with Business accounts. |
