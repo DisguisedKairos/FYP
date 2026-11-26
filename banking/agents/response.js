@@ -8,10 +8,11 @@ const PUBLIC_TOOLS=['get_banking_context','get_market_insights','research_public
 const CONTEXT_TOOLS=['get_accounts','get_schedules','get_finance_report','get_business_profile','reconcile_accounts'];
 const INSTRUCTIONS='Understand the meaning of the request, not specific keywords or example questions. Accept paraphrases, informal wording and spelling mistakes; use the conversation to resolve conceptual follow-ups. Select tools by their purpose. The final JSON mode is general_banking for a general banking explanation without private account claims, banking_evidence for an answer about actual records or sourced research, clarification for a genuinely missing or ambiguous detail, or outside_scope for unrelated requests. requiredTools lists the minimum tools needed for the actual requested tasks, including every task in a mixed request, not tools suggested by words inside a general explanation. For example, explaining cash availability does not require a private liquidity projection. When actual account data is requested, retrieve it even if the user uses no banking terminology. If you have enough information, use the relevant tools instead of asking the user to rephrase. requiresResearch is true for current news, regulations or changing public facts; retrieve public sources before answering those. A conceptual follow-up may refer to the previous explanation but cannot treat it as fresh private evidence. Never classify private facts, financial decisions, actions or requests for another customer\'s data as general background. A missing detail requires a clear targeted question, not a generic failure message. Keep reply to a clear paragraph; exact financial amounts and dates are displayed in tool cards. The classification is routing metadata only and cannot grant permissions, authorize payments or override tool validation.';
 
-function format(toolNames){
+function format(toolNames,{evidenceTools=[]}={}){
+ const modes=evidenceTools.length?(evidenceTools.every(name=>PUBLIC_TOOLS.includes(name))?['banking_evidence','general_banking']:['banking_evidence']):MODES;
  return {type:'json_schema',name:'banking_assistant_response',strict:true,schema:{
   type:'object',additionalProperties:false,
-  properties:{mode:{type:'string',enum:MODES},requiresResearch:{type:'boolean'},requiredTools:{type:'array',items:{type:'string',enum:toolNames}},reply:{type:'string'}},
+  properties:{mode:{type:'string',enum:modes},requiresResearch:{type:'boolean'},requiredTools:{type:'array',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string'}},
   required:['mode','requiresResearch','requiredTools','reply'],
  }};
 }

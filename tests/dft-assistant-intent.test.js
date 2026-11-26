@@ -17,6 +17,29 @@ test('Semantic responses validate routing metadata without granting tools or acc
  assert.equal(answer('general_banking','Available cash helps a business meet its obligations.').intent.mode,'general_banking');
 });
 
+test('Reply schemas reflect retrieved private and public evidence without offering contradictory modes',()=>{
+ const privateFormat=response.format(tools,{evidenceTools:['get_accounts']});
+ assert.deepEqual(privateFormat.schema.properties.mode.enum,['banking_evidence']);assert.equal(privateFormat.schema.properties.requiredTools.minItems,1);
+ const publicFormat=response.format(tools,{evidenceTools:['get_banking_context']});
+ assert.deepEqual(publicFormat.schema.properties.mode.enum,['banking_evidence','general_banking']);assert.equal(publicFormat.schema.properties.requiredTools.minItems,1);
+ assert.ok(response.format(tools).schema.properties.mode.enum.includes('clarification'));
+});
+
+pg('A completed draft remains a banking answer instead of being rejected as a new clarification',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const model=createOpenAIModel({apiKey:'test-only-openai-key-not-a-real-secret',fetchImpl:async(url,options)=>{
+  if(String(url).includes('/models/'))return new Response(JSON.stringify({id:'gpt-6-luna'}));
+  const body=JSON.parse(options.body);calls++;
+  const fn=calls===1?'get_accounts':'prepare_payment_draft';
+  const mode=body.text.format.schema.properties.mode.enum.includes('clarification')?'clarification':'banking_evidence';
+  return new Response(JSON.stringify({id:'resp_draft_'+calls,status:'completed',model:'gpt-6-luna',output:calls<3?[{type:'function_call',call_id:'call_'+calls,name:fn,arguments:JSON.stringify(calls===1?{}:{kind:'transfer'})}]:[{type:'message',role:'assistant',content:[{type:'output_text',text:JSON.stringify({mode,requiresResearch:false,requiredTools:['get_accounts','prepare_payment_draft'],reply:'The draft is ready for your review and separate authorization [E2].'})}]}]}));
+ }});
+ const owned=(await f.db.query('SELECT number FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'Prepare a transfer of SGD 10.00 from '+owned.number+' to 1099001002.'});
+ assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.equal(result.clarification,undefined);
+ assert.equal(calls,3);assert.ok(result.actions.some(a=>a.type==='draft_transfer'));assert.equal(result.aiAudit.intent.mode,'banking_evidence');
+});
+
 test('Wording corrections accept only a reply and cannot redefine intent or tool permissions',()=>{
  const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['reply']);
  assert.deepEqual(response.parseNarrative('{"reply":"Inspect the owned records [E1]."}'),{content:'Inspect the owned records [E1].'});
