@@ -15,11 +15,10 @@ import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, rev
 import { loadExtras, loadNotifications, stopBackgroundReads, notificationsPage, schedulesPage, markNotification, scheduleDialog, changeScheduleType, reviewSchedule, confirmSchedule, scheduleDetails, cancelScheduleDialog, cancelSchedule } from './js/services.js';
 import { fraudPage, rulesPage, ruleDialog, saveRule, reviewDialog, submitReview } from './js/admin.js';
 import { profileDialog, passwordDialog, revokeDialog, mfaSetupDialog, mfaDisableDialog, submitSecurity, copyRecoveryCodes, clearSecuritySecrets } from './js/security.js';
-import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessApplications,cancelBusinessApplications,reviewBusinessDialog,submitBusinessReview} from './js/business.js';
+import {businessPage,profileFromForm} from './js/business.js';
 
-Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelBusinessAdvisory(); cancelCustomDashboard(); cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
-Object.assign(extraViews,{ aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
-ui.loadBusinessApplications=loadBusinessApplications;
+Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelBusinessAdvisory(); cancelCustomDashboard(); cancelFunding(); stopBackgroundReads(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
+Object.assign(extraViews,{ aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage });
 ui.loadFraudCases=loadFraudCases;
 ui.cancelFraudCases=cancelFraudCases;
 extraViews.customDashboard=customDashboardPage;
@@ -79,9 +78,7 @@ document.addEventListener('submit',async event => {
         await authenticate(values); break;
       }
       case 'account-form': await submitAccount(form); break;
-      case 'business-profile-form': await submitBusiness(form); break;
       case 'business-advisory-form': await submitBusinessAdvisory(form); break;
-      case 'business-review-form': await submitBusinessReview(form); break;
       case 'close-account-form': await submitAccount(form,true); break;
       case 'money-form': reviewMoney(form); break;
       case 'confirm-money-form': await confirmMoney(form); break;
@@ -133,13 +130,11 @@ document.addEventListener('click',async event => {
     if (control.dataset.cancelSchedule) return cancelScheduleDialog(control.dataset.cancelSchedule);
     if (control.dataset.editRule) return ruleDialog(control.dataset.editRule);
     if (control.dataset.reviewTransaction) return reviewDialog(control.dataset.reviewTransaction);
-    if (control.dataset.reviewBusiness) return reviewBusinessDialog(control.dataset.reviewBusiness);
     switch (control.dataset.action) {
       case 'ai-audit-prev': await loadAiAudit({page:(state.aiAudit?.page || 1)-1}); break;
       case 'ai-audit-next': await loadAiAudit({page:(state.aiAudit?.page || 1)+1}); break;
       case 'ai-audit-download': downloadAiAudit(); break;
       case 'auth-switch': switchAuth(); break;
-      case 'refresh-business-applications': await loadBusinessApplications(); break;
       case 'business-advisory': await openBusinessAdvisory(); break;
       case 'business-news': if(!state.assistant?.open)toggleAssistant(); await sendAssistant('Show current news for my industry and explain what our company should do next based on our business activities and priorities.'); break;
       case 'assistant-toggle': toggleAssistant(); break;

@@ -20,7 +20,7 @@ Updated 26 November 2026 (Singapore). **55 assigned cases. All results start as 
 
 **Coverage:** Daily market-assisted fraud review, eight-sector company risks, staff investigation/rule preview/reconciliation, admin-only audit, prompt-injection and ownership boundaries, retry/session recovery and independent banking/security decisions.
 
-**Run order:** Read and record existing cases/policy first. Keep MARKET-03 -> MARKET-05 -> MARKET-06 in sequence using one disposable case, coordinating the independent reviewer closure. Run AUDIT-01 before AUDIT-03. Run sector assessment as Sector, then denial checks as Recipient/Staff. Do outage, limit, injected-data, credential, onboarding and live-rule drills only in the owner-controlled isolated instance.
+**Run order:** Read and record existing cases/policy first. Keep MARKET-03 -> MARKET-05 -> MARKET-06 in sequence using one disposable case, coordinating the independent reviewer closure. Run AUDIT-01 before AUDIT-03. Run sector assessment as Sector, then denial checks as Recipient/Staff. Do outage, limit, injected-data, credential and live-rule drills only in the owner-controlled isolated instance.
 
 Copy only the question when a row asks for chat; clicking, sign-out, downloads, security forms and job steps are tester actions. Replace every placeholder using the [shared setup table](../assistant-team-testing.md#fill-in-values-before-testing). Use a fresh chat for unrelated draft/date questions and the same chat for specified follow-ups.
 
@@ -642,9 +642,9 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 **Question or steps:**
 
-> Register, sign in, inspect pending application and sign out.
+> Register, sign in, inspect business profile and sign out.
 
-**Expected:** Pending with no spendable opening funds; changes require approval; logout ends session.
+**Expected:** Active business profile with an empty savings account and no staff approval step; no automatic funding; logout ends session.
 
 **Status:** Not run
 
@@ -656,13 +656,13 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 **Role:** Staff | **Effect:** UI write
 
-**Setup:** Fresh disposable application, not shared Pending fixture
+**Setup:** Staff login; no disposable application needed
 
 **Question or steps:**
 
-> Independently approve/reject with checks/reason/password; applicant inspects decision/resubmission.
+> Confirm business onboarding is absent; inspect bank operations and open Fraud monitoring.
 
-**Expected:** Recorded decision appears; rejected resubmission returns to review. Chat cannot approve onboarding.
+**Expected:** No onboarding navigation or submission/review controls; old URL returns to Overview; removed APIs return 404. Fraud review remains available to staff.
 
 **Status:** Not run
 

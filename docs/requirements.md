@@ -3,7 +3,6 @@
 | Requirement | Active implementation | Evidence |
 | --- | --- | --- |
 | Wholesale business eligibility and legal ownership | Registered business profiles, company-account foreign keys and operator binding | `dft-business.test.js` |
-| Bank onboarding review | Pending/approved/rejected lifecycle, independent staff review and financial restrictions | Business security tests and registration browser flow |
 | Register/login/logout and password security | Express routes, scrypt, hashed tokens, durable throttles | `dft-auth.test.js`, `dft-http.test.js` |
 | Authorization and customer isolation | Server roles, owned queries, password reauthorization, CSRF/origin | Auth, ledger, HTTP and browser tests |
 | Business savings management and balance enquiry | Approved business accounts, create/rename/close safeguards and company dashboard | HTTP and browser tests |
@@ -18,7 +17,7 @@
 | Authenticator and recovery | Encrypted TOTP secrets, atomic counter/recovery consumption | `dft-totp.test.js`, security browser |
 | PostgreSQL data connection | Migrations, bounded pool and transaction helper | All database integration tests |
 | Existing-data and identity maintenance | PostgreSQL provenance, credential-preserving demo identity migration, collision refusal and reconciliation | `dft-identity.test.js`, `dft-postgres.test.js` |
-| Complete local feature-testing identities | Ten opt-in test users covering both roles, onboarding states, maker/checker, MFA and real screened financial/schedule examples | `dft-feature-accounts.test.js`, live browser checks and private walkthrough |
+| Complete local feature-testing identities | Ten opt-in test users covering both roles, legacy access restrictions, maker/checker, MFA and real screened financial/schedule examples | `dft-feature-accounts.test.js`, live browser checks and private walkthrough |
 | Automated verification and container delivery | Adapted GitHub Actions workflow, separate images, gated Compose integration and optional GHCR publishing | `docs/devops.md`, delivery secret tests and CI runs |
 | Reviewable application package | Locked dependencies, source allowlist and integrity checks | `dft-package.test.js` |
 | Private banking agent extensions | Fraud investigation, multi-step draft planning, liquidity projection, historical rule comparison and reconciliation; required OpenAI tool loop | `dft-agents.test.js`, `dft-agents-browser.js`, `demo:agents`; no onboarding agent |
@@ -80,4 +79,4 @@ Login accepts the current password plus either `otp` or `recoveryCode` when enab
 
 DFT owns banking workflows, financial controls, authentication, roles, fraud guardrails, SQL injection prevention, functional/security tests and application audit records. DIT owns containerisation, CI/CD, cloud provisioning, TLS/network configuration and cloud database operations/backups. Secrets are shared: DFT excludes them from source and protects application use; the delivery team injects and operates private values.
 
-The project serves registered businesses and institutions through one authorized primary operator per business. Consumer accounts are not offered. Multi-user company permissions and corporate signing mandates are future scope. Funds, business checks and billers are simulated; official KYB/registry, beneficial ownership, sanctions screening, live settlement, email/SMS and production corporate-model validation are not implemented. See [wholesale banking scope](wholesale-banking.md) for the precise boundary.
+The project serves registered businesses and institutions through one authorized primary operator per business. Consumer accounts are not offered. Multi-user company permissions and corporate signing mandates are future scope. Funds and billers are simulated; official KYB/registry, beneficial ownership, sanctions screening, live settlement, email/SMS and production corporate-model validation are not implemented. See [wholesale banking scope](wholesale-banking.md) for the precise boundary.

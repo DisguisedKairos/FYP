@@ -111,21 +111,20 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   assert.equal(report.discrepancies.length, 1);
 });
 
-test('restricted PostgreSQL login supports business onboarding, payments, rules, schedules and audit', { skip: !available }, async t => {
+test('restricted PostgreSQL login supports business registration, payments, rules, schedules and audit', { skip: !available }, async t => {
   const f = await fixture(t);
   await seedDemo(f.owner);
-  const http = await f.start(), alex = http.client(), reviewer = http.client(), applicant = http.client();
-  await alex.login(); await reviewer.login('reviewer@greenlink.demo');
+  const http = await f.start(), alex = http.client(), applicant = http.client();
+  await alex.login();
   await applicant.session();
   const registered = await applicant.request('/api/auth/register', { method: 'POST', body: {
     name: 'Postgres Operator', email: 'pg-operator@example.test', password: 'Greenlink123!', confirmPassword: 'Greenlink123!', business: businessProfile('PGCOMPANY001'),
   } });
   assert.equal(registered.status, 201, JSON.stringify(registered.data));
   const business = registered.data.business;
-  const approved = await reviewer.request(`/api/business/applications/${business.id}/review`, { method: 'POST', body: {
-    decision: 'approve', version: business.version, reason: 'Independent database integration verification.', verificationConfirmed: true, authorizationPassword: 'Greenlink123!',
-  } });
-  assert.equal(approved.status, 200, JSON.stringify(approved.data));
+  assert.equal(business.status,'approved');
+  const opened=await applicant.request('/api/accounts',{method:'POST',body:{name:'Registered business reserve'}});
+  assert.equal(opened.status,201,JSON.stringify(opened.data));assert.equal(opened.data.account.businessId,business.id);
   const dashboard = await alex.dashboard(), source = dashboard.accounts[0];
   const sent = await alex.request('/api/transfers', { method: 'POST', body: { fromAccountId: source.id, toAccountNumber: '1020002001', amount: '1.25', description: 'Restricted SQL transfer', requestId: randomUUID() } });
   assert.equal(sent.status, 200, JSON.stringify(sent.data));

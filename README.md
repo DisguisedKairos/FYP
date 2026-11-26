@@ -29,7 +29,7 @@ Ask the assistant **Check my transactions for fraud using daily market trends** 
 | Security | Scrypt hashes, role/ownership checks, CSRF/origin protection, durable limits, session revocation, TOTP/recovery codes |
 | Financial controls | Atomic settlement, integer cents, row locking, payload-bound request keys, replay protection and reconciled statements |
 
-There are two permission roles: customer (authorized business operator) and admin (bank staff). Registration creates a pending business with no spendable opening funds. Approved business ownership is required for banking changes and payments. Makers cannot independently approve their own flagged requests.
+There are two permission roles: customer (authorized business operator) and admin (bank staff). Registration creates an active business profile and an empty savings account without a staff approval step. The business onboarding feature has been removed. Existing restricted profiles remain restricted; business ownership is required for banking changes and payments. Makers cannot independently approve their own flagged requests.
 
 ## Test accounts and passwords
 

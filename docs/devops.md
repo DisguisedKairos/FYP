@@ -87,7 +87,7 @@ An empty container database requires deliberate staff provisioning. Set `GREENLI
 docker compose --profile ops run --rm -e GREENLINK_STAFF_PASSWORD staff-admin --email bankops@example.com --name "Bank Operations"
 ```
 
-Clear the variable afterward. This short-lived operator container mounts only the owner secret and uses the existing audited staff-creation workflow; existing registrations are never replaced. The web container never receives the owner secret. Sign in as this staff account at the container URL to independently review registered business applications. The automatic CI fixture instead uses explicit demo seeding for its staff identity. Native `npm run admin:create` continues to target the native database and must not be mistaken for container administration.
+Clear the variable afterward. This short-lived operator container mounts only the owner secret and uses the existing audited staff-creation workflow; existing registrations are never replaced. The web container never receives the owner secret. Sign in as this staff account at the container URL to review flagged payments and manage fraud controls. The automatic CI fixture instead uses explicit demo seeding for its staff identity. Native `npm run admin:create` continues to target the native database and must not be mistaken for container administration.
 
 TLS termination, cloud resources, image deployment promotion, managed backups and production secret storage remain DIT operational work. This local Nginx configuration uses HTTP on loopback. For a hosted endpoint, the deployment team must supply HTTPS, the exact public origin and an appropriate explicit proxy trust boundary. No SSH, AWS or personal registry credentials are included.
 

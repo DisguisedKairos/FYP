@@ -9,7 +9,7 @@ For the current Neon-backed app, use the [nine-login table](../data/testing/neon
 
 There are **nine usable logins: eight industry customers and one bank administrator**. The industry emails are logistics-business, technology-business, manufacturing-business, wholesale-business, hospitality-business, construction-business, healthcare-business and energy-business, all at `greenlink.demo`. Each owns a separate fictional business and its existing operating/reserve savings accounts.
 
-`reviewer-tester@greenlink.demo` is the only active administrator, for bank operations, onboarding, independent review, fraud rules and AI audit. Use logistics for ordinary banking and technology for recipient/privacy comparisons. Retained credentials are unchanged. The former feature, sector and user-created logins are retired; banking and audit history remain. The owner-approved old monthly PUB test schedule has been cancelled.
+`reviewer-tester@greenlink.demo` is the only active administrator, for bank operations, independent payment review, fraud rules and AI audit. Use logistics for ordinary banking and technology for recipient/privacy comparisons. Retained credentials are unchanged. The former feature, sector and user-created logins are retired; banking and audit history remain. The owner-approved old monthly PUB test schedule has been cancelled.
 
 Historical workflows below describe the full isolated feature-tour fixture. Pending/rejected, zero-balance, MFA, administrator-maker and sector-portfolio cases need that isolated setup; they are not additional current hosted logins. Do not reseed shared production identities to restore old test accounts.
 
@@ -29,16 +29,16 @@ The native database remains separate from the current Neon roster; retain its or
 4. Pay a small PUB, SP Services or Singtel bill with a test reference. Billers simulate settlement; the local payment and notification workflows are implemented.
 5. Open Activity and inspect the prepared completed, held and rejected transactions. Search **Feature tour**, filter by status/account/date, export filtered CSV and print/save an account statement as PDF. Statements reconcile opening funds and completed ledger entries; pending/rejected rows never reduce the settled balance.
 6. Open Scheduled payments. Business examples include active one-time, weekly and monthly instructions, a cancelled instruction and an executed once-only bill. Future test instructions are initially seven or more days away. Create your own instruction a few minutes ahead to watch the normal server worker execute it, or cancel an active test instruction. The failed zero-balance fixture belongs to the retired empty tester and is exercised only in isolated tests.
-7. Open Notifications. Onboarding, payment, review and schedule examples generate real persisted in-app alerts. Mark one or all read and follow a receipt link.
+7. Open Notifications. Payment, review and schedule examples generate real persisted in-app alerts. Mark one or all read and follow a receipt link.
 8. Ask the private assistant for balances, recent transactions, scheduled payments or an explanation of a flagged payment. Request a small transfer/payment draft and finish through the ordinary review form. Chat never executes the financial action. Keep passwords and authenticator codes out of chat.
 
-## Onboarding and staff workflows
+## Business profiles and staff workflows
 
-1. The pending tester can view its pending application but cannot move funds or change savings accounts. Use a different browser profile to sign in as the reviewer tester. Open business applications, inspect the test company, confirm test verification and approve with a reason and current password. Refresh the pending user's application to see approval.
-2. The rejected tester sees the saved rejection reason. Correct its details and resubmit. It returns to pending review and requires another independent staff decision.
-3. The reviewer has no fabricated business or deposit accounts. Its interface opens the bank operations workspace.
+Registration creates an empty active business account without bank onboarding review. Open **Business profile** to inspect the legal account holder and customize industry news. The registered legal identity is read-only; amendments require bank assistance.
 
-Missing-profile registration and the approved zero-balance/failed-schedule cases remain covered by the full isolated feature fixture. The retired hosted profile and empty testers cannot sign in.
+The reviewer has no fabricated business or deposit accounts. Its interface opens the bank operations workspace, with Fraud monitoring and Fraud rules. Business onboarding, application submission and approval controls are removed.
+
+Legacy pending/rejected and missing-profile restrictions remain covered in isolated tests. These records cannot bypass ownership or financial eligibility checks, and they are not automatically activated. Historical business decisions and audit records are retained.
 
 ## Fraud rules, AI scores and independent authorization
 
@@ -64,7 +64,7 @@ Use the current Neon guide for the hosted roster. Run `npm run test:accounts` on
 
 Initial deposits are explicitly labelled synthetic fixture credits. New payment examples pass through current financial rules and real configured scoring; MFA is enrolled through Express, with encrypted secrets and hashed recovery codes in PostgreSQL. The script verifies original users, passwords, roles, MFA records, accounts, transactions, businesses and fraud settings match their pre-run snapshot, and checks that every account balance reconciles. Existing sessions are allowed to refresh normally.
 
-The command is explicit local-development tooling, never called by `npm start`, database migrations, normal seeding, or CI/container startup. `tests/dft-feature-accounts.test.js` checks collision refusal, preservation, replay, onboarding, schedules, maker/checker controls, MFA and ownership against isolated PostgreSQL fixtures; those unit/integration fixtures use a controlled model, while the live setup uses the configured Python service.
+The command is explicit local-development tooling, never called by `npm start`, database migrations, normal seeding, or CI/container startup. `tests/dft-feature-accounts.test.js` checks collision refusal, preservation, replay, business access restrictions, schedules, maker/checker controls, MFA and ownership against isolated PostgreSQL fixtures; those unit/integration fixtures use a controlled model, while the live setup uses the configured Python service.
 
 ## Retire an existing login
 

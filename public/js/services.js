@@ -49,7 +49,6 @@ export async function loadNotifications() {
 export async function loadExtras(page, { force = false } = {}) {
   if(page==='customDashboard')return ui.loadCustomDashboard?.();
   if(page==='aiAudit')return ui.loadAiAudit?.();
-  if(page==='onboarding')return ui.loadBusinessApplications?.();
   if (!state.user || state.signingOut) return;
   if (page !== 'notifications') loadNotifications();
   if (page === 'notifications') return loadNotifications();

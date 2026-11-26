@@ -49,6 +49,15 @@ pg('Missing placeholders and UI workflows return trusted guidance after a real p
  const saved=(await f.db.query('SELECT report_json FROM agent_runs')).rows;assert.ok(saved.every(r=>r.report_json.aiAudit.outcome==='help_without_banking_claims'));
 });
 
+test('Removed onboarding guidance never links to an unavailable page or grants business access',()=>{
+ for(const role of ['customer','admin']){
+  for(const question of ['How do I use business onboarding?','Independently approve/reject with checks/reason/password','Confirm business onboarding is absent; inspect bank operations and open Fraud monitoring.']){
+   const answer=guidanceFor(question,{role});assert.match(answer.reply,/removed/);assert.deepEqual(answer.actions,[{type:'navigate',page:role==='admin'?'overview':'business',label:role==='admin'?'Open Overview':'Open Business profile'}]);
+  }
+  assert.match(guidanceFor('Register, sign in, inspect business profile and sign out.',{role}).reply,/New accounts start empty/);
+ }
+});
+
 pg('A skipped banking tool is retried with required tool selection and returns verified data',async t=>{
  const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
  const result=await createAgents({db:f.db,model:model(async(_messages,tools,options)=>{

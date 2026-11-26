@@ -14,7 +14,7 @@ Copy questions below after replacing every `{PLACEHOLDER}`. Use the case IDs and
 2. The server needs PostgreSQL and configured OpenAI access. Testers need only banking logins, not API keys.
 3. Use synthetic data/amounts. Keep passwords, OTPs, recovery codes, session tokens and API keys out of chat. Authorize actions only through normal banking forms.
 4. Record live source balances, schedule IDs/statuses, transaction IDs, period and Singapore check time. Fixture balances, scores and cases may have changed.
-5. Run reads first, then drafts/saves/flags and coordinated UI changes. Do not reseed/reset shared data or consume shared pending applications/review cases to restore a baseline.
+5. Run reads first, then drafts/saves/flags and coordinated UI changes. Do not reseed/reset shared data or alter restricted business records or consume shared review cases to restore a baseline.
 6. Work in batches of roughly 10-15 requests. Current limits are 40 starts/user and 120/IP per 15 minutes, with two recent concurrent runs across the database. Coordinate testers and wait after limits.
 
 ### Logins and roles
@@ -328,8 +328,8 @@ Use a fresh chat for unrelated draft/date scenarios and the same chat for delibe
 
 | ID | Role | Effect | Setup | Question or steps | Expected result |
 | --- | --- | --- | --- | --- | --- |
-| UI-01 | New operator | UI write | Fresh owner-approved synthetic identity/company | Register, sign in, inspect pending application and sign out. | Pending with no spendable opening funds; changes require approval; logout ends session. |
-| UI-02 | Staff | UI write | Fresh disposable application, not shared Pending fixture | Independently approve/reject with checks/reason/password; applicant inspects decision/resubmission. | Recorded decision appears; rejected resubmission returns to review. Chat cannot approve onboarding. |
+| UI-01 | New operator | UI write | Fresh owner-approved synthetic identity/company | Register, sign in, inspect business profile and sign out. | Active business profile with an empty savings account and no staff approval step; no automatic funding; logout ends session. |
+| UI-02 | Staff | UI write | Staff login; no disposable application needed | Confirm business onboarding is absent; inspect bank operations and open Fraud monitoring. | No onboarding navigation or submission/review controls; old URL returns to Overview; removed APIs return 404. Fraud review remains available to staff. |
 | UI-03 | Business | UI write | Disposable empty account only | Create savings account, rename, close it; try funded closure without changing funded account. | Empty owned-account management works; funded closure refused. Keep operating/reserve fixtures open. Chat has no create/close tool. |
 | UI-04 | Business | Read | Standard | Inspect dashboard, hide/refresh balances and compare with Accounts. | Owned balances refresh/mask correctly; staff without deposit accounts sees operations workspace. |
 | UI-05 | Business | UI write | Owner-approved SGD 1-10, sufficient funds/real model; record baselines/ID | Authorize one transfer normally; compare sender/recipient in separate profiles. Retry only same submitted request if offered. | One accepted request key yields one debit/credit. Completed entries conserve value; held/rejected/failed screening does not settle. Risk/reasons/status recorded. |
@@ -426,7 +426,7 @@ Use a fresh chat for unrelated draft/date scenarios and the same chat for delibe
 | Admin-only AI audit and privacy | AUDIT-01 through AUDIT-04, SAFE-01 through SAFE-11 |
 | Provider/network failures and limits | RES-01 through RES-05, AUTO-03 |
 
-Account management, notification read state, cancellation of existing instructions, live policy edits, security settings, onboarding decisions and final payment/case decisions use normal screens. The assistant's explicit persistent actions are private saved views and supported human-review flags.
+Account management, notification read state, cancellation of existing instructions, live policy edits, security settings and final payment/case decisions use normal screens. The assistant's explicit persistent actions are private saved views and supported human-review flags.
 
 ## Assistant tool coverage
 

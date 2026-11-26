@@ -31,9 +31,6 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | PATCH | `/api/notifications/:id` | Mark owned item or `all` read with `{read:true}` |
 | POST | `/api/assistant/messages` | `{message}`; private read/draft response |
 | GET | `/api/business` | Signed-in operator's business profile |
-| POST | `/api/business/profile` | Submit/correct `{business,version?,authorizationPassword}` |
-| GET | `/api/business/applications` | Bank staff queue; optional `status` |
-| POST | `/api/business/applications/:id/review` | Independent bank `{decision,reason,version,verificationConfirmed,authorizationPassword}` |
 | GET | `/api/fraud/rules` | Admin rules and version |
 | PATCH | `/api/fraud/rules/:id` | Admin `{enabled?,threshold?,action?,version,authorizationPassword}` |
 | GET | `/api/fraud/rules/audit` | Admin paginated policy history |
@@ -68,7 +65,7 @@ New inference calls append ai.model_call metadata to the protected audit_log. Me
 
 ## Financial payloads
 
-Registration additionally requires `business:{legalName,registrationNumber,country:"SG",legalForm,industry,registeredAddress}`. Legal form is `company`, `partnership` or `institution`; personal onboarding is rejected. The business starts pending review regardless of client-supplied status. Approval requires a fresh bank staff password and `verificationConfirmed:true`; review cannot be performed by the business's own primary operator. Version mismatches and already-reviewed applications return409. Approved identity changes require bank assistance.
+Registration additionally requires `business:{legalName,registrationNumber,country:"SG",legalForm,industry,registeredAddress}`. Legal form is `company`, `partnership` or `institution`; personal profiles are rejected. Registration creates an empty active business account; the retained database status `approved` means project banking access, not an independent KYB decision. Client-supplied role, owner and status do not grant privileges. Business onboarding, profile-submission and application-review endpoints have been removed and return 404. Existing restricted/missing profiles are not automatically activated. Legal identity amendments require bank assistance; news preferences remain editable through the advisory-profile endpoint.
 
 Account changes, payment source ownership and recipient eligibility enforce an approved business. Missing/pending/rejected source identity returns 403 with `code:"BUSINESS_APPROVAL_REQUIRED"`; a recipient without approval is unavailable for transfer. `customer` is the internal role name for a business operator, not a consumer product.
 

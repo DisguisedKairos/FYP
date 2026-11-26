@@ -48,8 +48,8 @@ function accountName(value) {
 function serveFrontend(app) {
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
   app.get(['/assistant','/company-activity','/saved-dashboards'], (_req, res) => res.redirect(302, '/dashboard?chat=open'));
-  app.get('/banking-insights', (_req, res) => res.redirect(302, '/dashboard'));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/ai-audit', '/custom-dashboard']);
+  app.get(['/banking-insights','/business-onboarding'], (_req, res) => res.redirect(302, '/dashboard'));
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/ai-audit', '/custom-dashboard']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
 }
 
@@ -101,9 +101,6 @@ async function createApplication(options = {}) {
   route('get','/api/business',async req=>({business:await businesses.own(db,req.banking.user)}));
   route('get','/api/business/advisory-profile',async req=>businessAdvisory.read(db,req.banking.user));
   route('post','/api/business/advisory-profile',async req=>businessAdvisory.save(db,req.banking.user,req.body,{now}));
-  route('post','/api/business/profile',async req=>({business:await businesses.submit(db,req.banking.user,req.body,financialOptions(req))}));
-  route('get','/api/business/applications',async req=>({applications:await businesses.applications(db,req.banking.user,{status:req.query.status})}));
-  route('post','/api/business/applications/:id/review',async req=>({business:await businesses.review(db,req.banking.user,req.params.id,req.body,financialOptions(req))}));
   route('get', '/api/session', async (req, res) => {
     const session = await auth.bootstrap(req, res, req.banking);
     const demo = (await db.query("SELECT EXISTS(SELECT 1 FROM users u JOIN accounts a ON a.user_id=u.id WHERE u.email='alex@greenlink.demo' AND u.role='admin' AND u.auth_version=1 AND a.opening_provenance='seed') AS available")).rows[0];

@@ -20,11 +20,11 @@ const digest = value => createHash('sha256').update(JSON.stringify(value)).diges
 const ACCOUNTS = Object.freeze([
   { key: 'business', name: 'Business Feature Tester', role: 'customer', status: 'approved', company: 'Feature Tour Trading Pte. Ltd.', number: '1088800101', funds: 4500000, purpose: 'Everyday business banking, payments, schedules, statements and assistant' },
   { key: 'recipient', name: 'Recipient Feature Tester', role: 'customer', status: 'approved', company: 'Feature Tour Supplier Pte. Ltd.', number: '1088800201', funds: 250000, purpose: 'Receive transfers and verify business/account isolation' },
-  { key: 'pending', name: 'Pending Business Tester', role: 'customer', status: 'pending_review', company: 'Feature Tour Pending Pte. Ltd.', number: '1088800301', funds: 0, purpose: 'Pending onboarding and blocked financial actions' },
-  { key: 'rejected', name: 'Rejected Business Tester', role: 'customer', status: 'rejected', company: 'Feature Tour Rejected Pte. Ltd.', number: '1088800401', funds: 0, purpose: 'Rejected application, review explanation and resubmission' },
-  { key: 'profile', name: 'Missing Profile Tester', role: 'customer', status: null, number: '1088800501', funds: 0, purpose: 'Existing operator completing a missing registered-business profile' },
+  { key: 'pending', name: 'Pending Business Tester', role: 'customer', status: 'pending_review', company: 'Feature Tour Pending Pte. Ltd.', number: '1088800301', funds: 0, purpose: 'Restricted legacy business and blocked financial actions' },
+  { key: 'rejected', name: 'Rejected Business Tester', role: 'customer', status: 'rejected', company: 'Feature Tour Rejected Pte. Ltd.', number: '1088800401', funds: 0, purpose: 'Rejected legacy business and blocked financial actions' },
+  { key: 'profile', name: 'Missing Profile Tester', role: 'customer', status: null, number: '1088800501', funds: 0, purpose: 'Missing business-profile access restrictions' },
   { key: 'empty', name: 'Zero Balance Tester', role: 'customer', status: 'approved', company: 'Feature Tour New Business Pte. Ltd.', number: '1088800601', funds: 0, purpose: 'Zero balance, insufficient funds and failed scheduled instruction' },
-  { key: 'staff', name: 'Bank Operations Tester', role: 'admin', status: null, purpose: 'Bank operations, business approvals, fraud rules and monitoring' },
+  { key: 'staff', name: 'Bank Operations Tester', role: 'admin', status: null, purpose: 'Bank operations, payment reviews, fraud rules and monitoring' },
   { key: 'reviewer', name: 'Independent Review Tester', role: 'admin', status: null, purpose: 'Independent approve/reject decisions and fraud-rule audit' },
   { key: 'maker', name: 'Payment Maker Tester', role: 'admin', status: 'approved', company: 'Feature Tour Treasury Pte. Ltd.', number: '1088800901', funds: 4000000, purpose: 'Administrator payment maker; own held payment cannot be self-approved' },
   { key: 'mfa', name: 'Authenticator Feature Tester', role: 'customer', status: 'approved', company: 'Feature Tour Secure Business Pte. Ltd.', number: '1088801001', funds: 100000, purpose: 'Authenticator login, recovery codes and profile security' },
@@ -81,9 +81,9 @@ async function ensureAccounts(db, password, { now = Date.now } = {}) {
       const user = (await client.query('INSERT INTO users(name,email,password_hash,role) VALUES($1,$2,$3,$4) RETURNING id', [account.name, account.email, hashes[index], account.role])).rows[0];
       manifest.users[account.key] = String(user.id);
       if (account.company) {
-        const record = await business.create(client, user, { legalName: account.company, registrationNumber: account.registration, country: 'SG', legalForm: 'company', industry: 'Synthetic feature testing', registeredAddress: '1 Test Business Avenue, Singapore 000001' }, { now });
+        const record = await business.create(client, user, { legalName: account.company, registrationNumber: account.registration, country: 'SG', legalForm: 'company', industry: 'Synthetic feature testing', registeredAddress: '1 Test Business Avenue, Singapore 000001' }, { now, status: account.status });
         manifest.businesses[account.key] = record.id;
-        await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata) VALUES($1,$1,'business.application_submitted',$2)", [user.id, { fixture: FIXTURE, businessId: record.id, synthetic: true }]);
+        await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata) VALUES($1,$1,'operator.business_fixture_created',$2)", [user.id, { fixture: FIXTURE, businessId: record.id, synthetic: true }]);
       }
       if (account.number) {
         const record = (await client.query("INSERT INTO accounts(user_id,name,number,balance_cents,opening_provenance,created_at) VALUES($1,'Operating savings',$2,$3,'seed',$4) RETURNING id", [user.id, account.number, account.funds, new Date(now() - 60 * 86400000)])).rows[0];
@@ -123,15 +123,6 @@ async function seedExamples(db, manifest, password, riskClient, { now = Date.now
     return result;
   }
   const reviewer = await user('reviewer');
-  for (const account of ACCOUNTS.filter(a => a.company && a.status !== 'pending_review')) {
-    await once('onboarding-' + account.key, async () => {
-      const application = await business.own(db, await user(account.key));
-      if (application.status !== 'pending_review') return { id: application.id, status: application.status };
-      const result = await business.review(db, reviewer, application.id, { decision: account.status === 'approved' ? 'approve' : 'reject', version: application.version,
-        reason: account.status === 'approved' ? 'Synthetic feature fixture: test business checks confirmed.' : 'Synthetic feature fixture: supporting business documents need correction.', verificationConfirmed: true, authorizationPassword: password }, options);
-      return { id: result.id, status: result.status };
-    });
-  }
   async function payment(key, maker, amount, target, kind = 'transfer') {
     const result = await once(key, async () => ledger.submit(db, await user(maker), kind, { fromAccountId: manifest.accounts[maker], amount, requestId: FIXTURE + ':' + key,
       authorizationPassword: password, ...(kind === 'bill' ? { billerId: 'pub', reference: 'GLFT-BUSINESS-WATER' } : { toAccountNumber: target, description: 'Feature tour - ' + key }) }, options));

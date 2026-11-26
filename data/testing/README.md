@@ -10,11 +10,11 @@ These passwords were checked against the current local PostgreSQL password hashe
 | --- | --- | --- | --- | --- |
 | business-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Everyday business banking, payments, schedules, statements and assistant |
 | recipient-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Receive transfers and verify business/account isolation |
-| pending-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Pending onboarding and blocked financial actions |
-| rejected-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Rejected application, review explanation and resubmission |
-| profile-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Existing operator completing a missing registered-business profile |
+| pending-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Restricted legacy business and blocked financial actions |
+| rejected-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Rejected legacy business and blocked financial actions |
+| profile-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Missing business-profile access restrictions |
 | empty-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | None | Zero balance, insufficient funds and failed scheduled instruction |
-| staff-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | admin | None | Bank operations, business approvals, fraud rules and monitoring |
+| staff-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | admin | None | Bank operations, payment reviews, fraud rules and monitoring |
 | reviewer-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | admin | None | Independent approve/reject decisions and fraud-rule audit |
 | maker-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | admin | None | Administrator payment maker; own held payment cannot be self-approved |
 | mfa-tester@greenlink.demo | GLTest-GfBawLc_7sK-!a1 | customer | Authenticator or unused recovery code | Authenticator login, recovery codes and profile security |

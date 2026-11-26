@@ -59,7 +59,7 @@ The owner records the environment and provides an approved owned source, compari
 
 Owner-setup and write cases remain assigned. Missing setup is **Blocked**, not Pass and not automatically Not applicable. Arrange the missing prerequisites and rerun. An unavailable model or stale/missing public source is a recorded coverage/provider limitation; it is not a successful positive news or fraud result.
 
-Use disposable views, applications, cases, schedules and a separate test identity for password/MFA changes. Do not reset shared accounts, alter production policies, consume shared recovery codes, seed over balances or disable shared services to make a test pass. Isolated failure drills and scheduler tests need an owner-controlled instance. The existing free hosted job runs daily around 08:00 Singapore time within its scheduling window; the browser funding check never executes schedules.
+Use disposable views, cases, schedules and a separate test identity for password/MFA changes. Do not reset shared accounts, alter production policies, consume shared recovery codes, seed over balances or disable shared services to make a test pass. Isolated failure drills and scheduler tests need an owner-controlled instance. The existing free hosted job runs daily around 08:00 Singapore time within its scheduling window; the browser funding check never executes schedules.
 
 Customer and admin are the two permission roles. Customers cannot open AI audit. An administrator may inspect their own assistant runs; another staff member's private conversation remains unavailable. News advisory flags stay in chat; a supported payment-specific fraud-review request is a separate workflow.
 

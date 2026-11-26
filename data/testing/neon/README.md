@@ -18,7 +18,7 @@ Use the full email as the username. Retained passwords were preserved; this clea
 | `energy-business@greenlink.demo` | `IndustryDemo123!` | `customer` | Renewable energy services |
 | `reviewer-tester@greenlink.demo` | `GLTest-ljDD9JhfDfmi!a1` | `admin` | Bank operations and independent review |
 
-Each industry login owns one fictional business, with its existing operating savings account, liquidity reserve and historical receipts. The administrator handles fraud reviews, fraud rules, onboarding and the AI audit log. Customer logins cannot open administrator controls or another company's private records.
+Each industry login owns one fictional business, with its existing operating savings account, liquidity reserve and historical receipts. The administrator handles fraud reviews, fraud rules and the AI audit log. Customer logins cannot open administrator controls or another company's private records.
 
 The other feature-testing, sector-portfolio and user-created logins are retired. Their sign-in access and sessions are disabled; financial records, balances and audit history remain. The owner-approved monthly PUB test schedule for SGD 12.50 on the retired business tester was cancelled, including future occurrences. No funds were moved during cleanup.
 

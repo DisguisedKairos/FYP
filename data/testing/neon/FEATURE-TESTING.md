@@ -12,11 +12,11 @@ Each industry customer retains its operating savings and reserve. New customer s
 
 ## Bank administrator
 
-`reviewer-tester@greenlink.demo` is the only retained administrator. It handles business applications, fraud monitoring, independent payment reviews, rule management and AI audit. A customer can create a permitted held payment for independent review; the reviewer must use the normal authorization workflow. The administrator role does not grant ownership of customer deposits or their private assistant conversations.
+`reviewer-tester@greenlink.demo` is the only retained administrator. It handles fraud monitoring, independent payment reviews, rule management and AI audit. A customer can create a permitted held payment for independent review; the reviewer must use the normal authorization workflow. The administrator role does not grant ownership of customer deposits or their private assistant conversations.
 
 ## Cases requiring isolated setup
 
-Pending/rejected applications, missing business profiles, zero-balance fixtures, the former MFA tester, administrator-maker self-approval and the dedicated multi-sector scenario portfolio are no longer shared hosted logins. Prepare these in an owner-controlled isolated database when testing those cases. Current industry data is not a substitute for the old sector-scenario portfolio. Do not create replacement shared production logins to satisfy a historical test packet.
+Restricted legacy businesses, missing business profiles, zero-balance fixtures, the former MFA tester, administrator-maker self-approval and the dedicated multi-sector scenario portfolio are no longer shared hosted logins. Prepare these in an owner-controlled isolated database when testing those cases. Current industry data is not a substitute for the old sector-scenario portfolio. Do not create replacement shared production logins to satisfy a historical test packet.
 
 MFA and password/session-revocation controls remain implemented. Test changes using an authorized disposable local identity or a separately agreed retained account; do not consume shared historical recovery material. The legacy feature-accounts.json records the original feature-tour setup and is retained for isolated tooling, not current login instructions.
 

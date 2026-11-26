@@ -10,11 +10,11 @@ Changed passwords, approvals, review decisions and balances are retained when se
 | --- | --- | --- | --- | --- |
 | business-tester@greenlink.demo | customer | approved | 1088800101 | Everyday business banking, payments, schedules, statements and assistant |
 | recipient-tester@greenlink.demo | customer | approved | 1088800201 | Receive transfers and verify business/account isolation |
-| pending-tester@greenlink.demo | customer | pending_review | 1088800301 | Pending onboarding and blocked financial actions |
-| rejected-tester@greenlink.demo | customer | rejected | 1088800401 | Rejected application, review explanation and resubmission |
-| profile-tester@greenlink.demo | customer | Missing profile | 1088800501 | Existing operator completing a missing registered-business profile |
+| pending-tester@greenlink.demo | customer | pending_review | 1088800301 | Restricted legacy business and blocked financial actions |
+| rejected-tester@greenlink.demo | customer | rejected | 1088800401 | Rejected legacy business and blocked financial actions |
+| profile-tester@greenlink.demo | customer | Missing profile | 1088800501 | Missing business-profile access restrictions |
 | empty-tester@greenlink.demo | customer | approved | 1088800601 | Zero balance, insufficient funds and failed scheduled instruction |
-| staff-tester@greenlink.demo | admin | Staff workspace | No deposit account | Bank operations, business approvals, fraud rules and monitoring |
+| staff-tester@greenlink.demo | admin | Staff workspace | No deposit account | Bank operations, payment reviews, fraud rules and monitoring |
 | reviewer-tester@greenlink.demo | admin | Staff workspace | No deposit account | Independent approve/reject decisions and fraud-rule audit |
 | maker-tester@greenlink.demo | admin | approved | 1088800901 | Administrator payment maker; own held payment cannot be self-approved |
 | mfa-tester@greenlink.demo | customer | approved | 1088801001 | Authenticator login, recovery codes and profile security |

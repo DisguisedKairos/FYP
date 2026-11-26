@@ -2,7 +2,7 @@
 
 The active application has an Express banking API, a Python FastAPI fraud validation gateway, the OpenAI Responses API, and PostgreSQL. Financial records share one transactional database boundary. The scorer is stateless and authenticated; it cannot transfer money, change policies or mutate balances. The local launcher remains available, alongside the requested reference Nginx/Compose topology and GitHub Actions pipeline; see [DevOps setup](devops.md).
 
-This is a digital wholesale banking project. `businesses` stores the legal customer; `users` stores authorized operators and bank staff. `accounts.business_id` links the legal owner while `user_id` retains the primary operator authorization boundary. A database trigger enforces that binding. Migration 005 adds this model without rewriting existing customer names, passwords, balances or history. No business identity is fabricated for a legacy user. New applications require independent bank review before account changes or funds movement.
+This is a digital wholesale banking project. `businesses` stores the legal customer; `users` stores authorized operators and bank staff. `accounts.business_id` links the legal owner while `user_id` retains the primary operator authorization boundary. A database trigger enforces that binding. Migration 005 adds this model without rewriting existing customer names, passwords, balances or history. No business identity is fabricated for a legacy user. Self-service registration creates an empty active business account without a staff onboarding workflow. Existing restricted or missing profiles remain blocked from financial changes. The legacy `approved` database value denotes active project access, not independently verified business identity.
 
 ```mermaid
 flowchart LR

@@ -154,7 +154,9 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
     try {
       result = await db.transaction(async client => {
         const user = (await client.query(`INSERT INTO users(name,email,password_hash,created_at) VALUES($1,$2,$3,$4) RETURNING id,name,email,role,auth_version`, [name, email, hash, date])).rows[0];
-        const business = await businesses.create(client,user,businessProfile,{now});
+        // Self-service project registration no longer has a bank review workflow.
+        // The legacy approved value denotes active access, not verified KYB.
+        const business = await businesses.create(client,user,businessProfile,{now,status:'approved'});
         let account;
         for (let attempt = 0; attempt < 10 && !account; attempt++) account = (await client.query(`INSERT INTO accounts(user_id,name,number,created_at)
           VALUES($1,'Operating savings',$2,$3) ON CONFLICT(number) DO NOTHING RETURNING *`, [user.id, security.accountNumber(), date])).rows[0];
@@ -164,7 +166,7 @@ function createAuth({ db, now = Date.now, publicOrigin = null, secureCookies = f
         await audit(client, 'auth.registered', { userId: user.id, ip, now: date });
         return { user, account, session, business };
       });
-    } catch (error) { if (error.code === '23505') throw new HttpError(409, 'An application with this email or business registration number already exists.'); throw error; }
+    } catch (error) { if (error.code === '23505') throw new HttpError(409, 'An account with this email or business registration number already exists.'); throw error; }
     return finish(res, result.session, result.user, { business: result.business, account: { id: String(result.account.id), name: result.account.name, number: result.account.number, balanceCents: 0, status: result.account.status, productType: 'business_savings', businessId: result.business.id, createdAt: timestamp(result.account.created_at).toISOString() } });
   }
 

@@ -92,7 +92,7 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   await recipient.request('/api/session');
   const registration = await recipient.request('/api/auth/register', { name: 'Smoke Recipient', email: `smoke-${randomUUID()}@greenlink.demo`, password, confirmPassword: password,business:{legalName:'Smoke Trading Pte. Ltd.',registrationNumber:'SMOKE'+randomUUID().replace(/-/g,'').slice(0,16),country:'SG',legalForm:'company',industry:'Business services',registeredAddress:'1 Test Business Road, Singapore 000001'} }, 'POST', 201);
   await reviewer.login('reviewer@greenlink.demo');
-  await reviewer.request(`/api/business/applications/${registration.business.id}/review`,{decision:'approve',version:registration.business.version,reason:'Business registration checked for isolated project smoke.',verificationConfirmed:true,authorizationPassword:password});
+  assert.equal(registration.business.status,'approved');
   const target = registration.account || (await recipient.request('/api/dashboard')).accounts[0];
   const held = await alex.request('/api/transfers', { fromAccountId: source.id, toAccountNumber: target.number, amount: '2000.00', description: 'Review smoke transfer', authorizationPassword: password, requestId: randomUUID() });
   assert.equal(held.transaction.status, 'pending_review');

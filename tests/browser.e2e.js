@@ -5,7 +5,7 @@ const { readdirSync, readFileSync, writeFileSync } = require('node:fs');
 const { createFixture, accountNamed, totalBalance } = require('./dft-helpers');
 const { launchChrome } = require('./chrome');
 
-const routes = { overview:'/dashboard',business:'/business',onboarding:'/business-onboarding', accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules' };
+const routes = { overview:'/dashboard',business:'/business',accounts:'/accounts', transfers:'/transfers', payments:'/payments', activity:'/activity', schedules:'/scheduled-payments', notifications:'/notifications', fraud:'/fraud-monitoring', rules:'/fraud-rules' };
 const snapshot = page => page.evaluate("fetch('/api/dashboard').then(response => response.json())");
 const text = (page, selector) => page.evaluate(`document.querySelector(${JSON.stringify(selector)})?.textContent`);
 const exists = selector => `!!document.querySelector(${JSON.stringify(selector)})`;
@@ -76,8 +76,9 @@ test('wholesale bank staff use an operations workspace without consumer or compa
     await page.waitFor(exists('[data-bank-operations]'),'bank staff workspace');
     assert.equal(await page.evaluate('!!document.querySelector(".nav-items [data-nav=accounts],.nav-items [data-nav=payments],.balance-card")'),false);
     await layout(page,'wholesale staff mobile workspace');
-    await page.click('[data-bank-operations] [data-nav=onboarding]');await page.waitFor('location.pathname==="/business-onboarding" && document.body.textContent.includes("No applications awaiting review")','bank staff application queue');
-    await layout(page,'wholesale staff mobile onboarding queue');await page.screenshot(resolve('test-results','wholesale-bank-operations-mobile.png'));
+    assert.equal(await page.evaluate('!!document.querySelector("[data-nav=onboarding],[data-review-business]")'),false);
+    await page.click('[data-bank-operations] [data-nav=fraud]');await page.waitFor('location.pathname==="/fraud-monitoring"','bank staff fraud monitoring');
+    await layout(page,'wholesale staff mobile fraud monitoring');await page.screenshot(resolve('test-results','wholesale-bank-operations-mobile.png'));
   });
 });
 
@@ -94,14 +95,12 @@ test('desktop registration, savings management, authorized money movement and ac
     await page.click('[data-input="password"]'); await submit(page, '#auth-form'); await page.waitFor(exists('.balance-card'), 'registered dashboard');
     assert.equal(totalBalance(await snapshot(page)), 0);
     assert.equal(await page.evaluate('!!document.querySelector("[data-nav=fraud], [data-nav=rules]")'), false);
-    assert.match(await text(page,'#main-content'),/Business onboarding awaiting bank review/);
+    assert.equal((await snapshot(page)).business.status,'approved');
+    assert.equal(await page.evaluate('!!document.querySelector("[data-nav=onboarding]")'),false);
     await nav(page,'business');assert.match(await text(page,'#main-content'),/Browser Trading Pte\. Ltd\./);
-    await logout(page);await login(page,'reviewer@greenlink.demo');await nav(page,'onboarding');
-    await page.waitFor(exists('[data-review-business]'),'pending business review');await page.click('[data-review-business]');
-    await page.fill('#business-review-reason','Company registration and authorized contact verified for browser testing.');
-    await page.click('#business-verification-confirmed');await page.fill('#authorizationPassword','Greenlink123!');await submit(page,'#business-review-form');
-    await page.waitFor('!document.querySelector("#modal").open && !document.querySelector("[data-review-business]")','business onboarding approved');
-    await logout(page);await login(page,'browser-customer@example.com');
+    assert.match(await text(page,'#main-content'),/Banking accessActive/);
+    assert.equal(await page.evaluate('!!document.querySelector("#business-profile-form,#business-review-form,[data-review-business]")'),false);
+    assert.equal(await page.evaluate('!!document.querySelector("[data-action=business-advisory],[data-action=business-news]")'),true);
     await nav(page, 'accounts'); await page.click('[data-action="new-account"]'); await page.fill('#account-name', 'Browser goal'); await submit(page, '#account-form');
     await page.waitFor('document.querySelector("#main-content h1")?.textContent === "Browser goal"', 'new account details');
     await page.click('[data-action="rename-account"]'); await page.fill('#account-name', 'Browser travel'); await submit(page, '#account-form');

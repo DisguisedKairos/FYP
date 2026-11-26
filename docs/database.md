@@ -119,7 +119,7 @@ erDiagram
 | `schema_migrations` | Installed migration names, normalized SQL checksums and timestamps |
 | `legacy_imports`, `legacy_service_records` | Import provenance and archived historical records, never current payment authorization |
 
-Foreign keys prevent orphaned records. Unique indexes protect normalized email, registration/account numbers, idempotency keys, settlement order and schedule occurrences. Check constraints enforce supported money ranges and transaction states. Account ownership is checked by the migration 005 trigger. Indexes support owned account/history reads, settled ledger statements, business review queues and due/outbox jobs. Historical imported accounts can have a null business link until legitimate onboarding; new registrations create a legal business link.
+Foreign keys prevent orphaned records. Unique indexes protect normalized email, registration/account numbers, idempotency keys, settlement order and schedule occurrences. Check constraints enforce supported money ranges and transaction states. Account ownership is checked by the migration 005 trigger. Indexes support owned account/history reads, settled ledger statements, historical business status lookups and due/outbox jobs. Historical imported accounts can retain a null business link and remain financially restricted; new registrations create a legal business link. Historical business review records and schema constraints are retained even though the onboarding workflow is removed.
 
 ## Verify and inspect
 
