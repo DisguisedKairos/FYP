@@ -88,3 +88,13 @@ test('Company period parser grounds supported user dates and cash flow evidence 
  assert.throws(()=>company.requestedPeriod('Acme last 999 days',{now}),e=>e.status===400);
  assert.equal(relevanceIssue('Show transaction history and cash flow with Harbour Supplies',[{tool:'get_company_activity'}]),null);
 });
+
+
+pg('Vague monthly trends use the configured window before parsing strict dates',async t=>{
+ const now=()=>Date.parse('2026-11-26T04:00:00Z'),f=await fixture(t,{http:false,now}),user=(await actors(f.db)).alex;
+ for(const phrase of ['past few months','past a few months','last few months']){
+  const r=await company.assistantDashboard(f.db,user,{},'Show my transaction trends over the '+phrase,{now,defaultMonths:6});
+  assert.equal(r.status,'ready');assert.equal(r.period.from,'2026-06-01');assert.equal(r.period.to,'2026-11-26');assert.deepEqual(r.viewDefinition.period,{kind:'months',months:6});assert.equal(r.months.length,6);
+ }
+ await assert.rejects(company.assistantDashboard(f.db,user,{},'Show transaction trends from 31/02/2026 to 01/03/2026',{now}),e=>e.status===400);
+});

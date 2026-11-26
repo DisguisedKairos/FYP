@@ -208,3 +208,25 @@ pg('Assistant detects false reassurance against actual projected shortfalls', as
   assert.equal(response.narrativeWithheld, true); assert.match(response.narrativeIssue, /shortfall/);
   assert.deepEqual(await balances(f.db), before);
 });
+
+
+test('Sanctions uncertainty is allowed while affirmative clearance remains blocked',()=>{
+ const options={evidence,results:[{tool:'scan_counterparty_news',value:{}}],requireCitations:true};
+ for(const reply of ["I can't certify that these companies are compliant or safe to pay [E1].","I can\u2019t certify compliance or that a company is safe to pay; verify its identity independently [E1].","We cannot confirm that this company is sanctions-free [E1]."])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ["This company is safe to pay [E1].","I can't certify that these companies are safe to pay, but this company is safe to pay [E1].","I cannot confirm its identity and this company is safe to pay [E1].","We cannot confirm that this company is sanctions-free; the other company is cleared [E1]."])assert.match(narrativeIssue(reply,null,options),/clearance/,reply);
+});
+
+test('Receipt questions require receipt evidence while explicit summaries may use dashboards',()=>{
+ for(const message of ['Show my recent transactions','Find my transactions containing PUB','Show transactions from 1 November to 19 November 2026']){
+  assert.match(relevanceIssue(message,[{tool:'get_company_activity'}]),/search_transactions/);
+  assert.equal(relevanceIssue(message,[{tool:'search_transactions'}]),null);
+ }
+ for(const message of ['Show a dashboard of my recent transactions','Show my transaction trends over the past few months','Summarize my transaction history with a chart'])assert.equal(relevanceIssue(message,[{tool:'get_company_activity'}]),null);
+});
+
+
+test('Payment safety uncertainty accepts typographic negation without allowing a later guarantee',()=>{
+ const options={evidence,requireCitations:true};
+ for(const reply of ["I can\u2019t guarantee any payment is fraud-free [E1].","I can\u2019t provide a live stock price or guarantee that a payment is fraud-free [E1].","That does not establish whether it is fraud-free [E1].","The check does not establish that this payment is fraud-free [E1]."])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ["This payment is fraud-free [E1].","I can\u2019t guarantee any payment is fraud-free; I guarantee the next payment [E1].","The check does not establish whether it is fraud-free; this transaction is definitely safe [E1].","I cannot guarantee any payment is fraud-free until tomorrow [E1]."])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
+});

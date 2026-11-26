@@ -98,6 +98,9 @@ function assistantResult(data,viewDefinition){
 }
 async function assistantDashboard(db,user,{company},message,{now=Date.now,defaultMonths=3}={}){
   if(company!==undefined && (typeof company!=='string' || !normalize(company) || !normalize(message).includes(normalize(company))))throw new HttpError(400,'Use a company name from your message.');
+  // A vague trend window uses the operator's configured preference. Normalize
+  // it before the strict date parser so it cannot become an invalid range.
+  message=message.replace(/\b(?:past|last)\s+(?:a\s+)?few\s+months\b/gi,'past '+defaultMonths+' months');
   if(!Object.keys(requestedPeriod(message,{now})).length && /\b(?:transaction trends?|past few months|monthly trends?)\b/i.test(message))message+=' over the past '+defaultMonths+' months';
   const data=await dashboard(db,user,new URLSearchParams({...company?{company}:{scope:'all'},...requestedPeriod(message,{now}),pageSize:'10'}),{now});
   return assistantResult(data,data.status==='ready'?definition(data,message):null);

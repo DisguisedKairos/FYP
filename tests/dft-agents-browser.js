@@ -415,3 +415,17 @@ test('Rules arriving during another insights form edit initialize a valid previe
  await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
  assert.deepEqual(page.errors,[]);
 });
+
+
+test('Recent transaction replies display the entire bounded receipt list with its full-history action',async t=>{
+ const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ const account=(await f.db.query("SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email='jamie@greenlink.demo' ORDER BY a.id LIMIT 1")).rows[0];
+ for(let i=0;i<24;i++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill',$3,-100,'Browser Receipt Supplier','pending_review',now(),now())",[randomUUID(),account.id,'Browser receipt '+i]);
+ await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','Show my recent transactions');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('document.querySelectorAll(".from-assistant").length===1 && document.querySelector("#assistant-form").getAttribute("aria-busy")==="false"');
+ const shown=await page.evaluate('[...document.querySelectorAll(".from-assistant .assistant-items > li strong")].map(n=>n.textContent)');
+ assert.equal(shown.filter(t=>t.startsWith('Browser receipt ')).length,20);
+ assert.match(await page.evaluate('document.querySelector(".from-assistant").textContent'),/showing 20.*Open Activity/);
+ assert.equal(await page.evaluate('document.querySelector(".from-assistant [data-assistant-action]").textContent.includes("View matching transactions")'),true);
+ assert.deepEqual(page.errors,[]);
+});

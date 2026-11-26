@@ -271,3 +271,49 @@ pg('Bill drafts hand off only valid billing references without creating financia
   assert.deepEqual(await financialSnapshot(f.db),before);
   assert.equal(Number((await f.db.query('SELECT count(*) FROM payment_bindings')).rows[0].count),0);
 });
+
+
+pg('Assistant corrects an aggregate-only answer and displays every receipt in its bounded search',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).jamie,account=(await f.db.query('SELECT id FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ for(let i=0;i<24;i++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill',$3,-100,'Receipt Supplier','pending_review',now(),now())",[randomUUID(),account.id,'Receipt check '+i]);
+ const before=await financialSnapshot(f.db);let calls=0;
+ const model=fakeModel(async(messages,_tools,options)=>{
+  if(++calls===1)return {tool_calls:[{function:{name:'get_company_activity',arguments:{}}}]};
+  if(calls===2)return {content:'Review the retrieved activity [E1].'};
+  if(calls===3){assert.equal(options.requireTool,true);assert.match(messages.at(-1).content,/search_transactions/);return {tool_calls:[{function:{name:'search_transactions',arguments:{}}}]};}
+  return {content:'The matching receipts are shown with their statuses. Open Activity for the remaining records [E2].'};
+ });
+ const agent=createAgents({db:f.db,model}),r=await agent.execute(user,'assistant',{message:'Show my recent transactions'});
+ assert.equal(calls,4);assert.equal(r.narrativeWithheld,undefined);assert.ok(r.steps.some(s=>s.tool==='search_transactions'));
+ const saved=await agent.detail(user,r.runId),search=saved.steps.find(s=>s.tool==='search_transactions').result;
+ assert.equal(search.transactions.length,20);assert.ok(search.total>20);assert.match(search.items[0].detail,/showing 20.*Open Activity/);
+ assert.deepEqual(r.items,search.items);assert.equal(r.items.filter(i=>i.title?.startsWith('Receipt check')).length,20);
+ assert.deepEqual(await financialSnapshot(f.db),before);
+});
+
+pg('A final wording repair remains available after the tool-correction rounds are exhausted',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;let calls=0;
+ const model=fakeModel(async()=>{
+  if(++calls===1)return {tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+  if(calls===2)return {content:'Your balance can cover it [E1].'};
+  if(calls===3)return {tool_calls:[{function:{name:'check_payment_funds',arguments:{}}}]};
+  if(calls===4)return {content:'Please provide the source for SGD 10 [E2].'};
+  return {content:'Please specify the owned source account so the proposed payment can be checked [E2].'};
+ });
+ const r=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'Can I afford SGD 10?'});
+ assert.equal(calls,5);assert.equal(r.narrativeWithheld,undefined);assert.ok(r.items.some(i=>/source/i.test(i.title)));assert.doesNotMatch(r.reply,/SGD 10/);
+});
+
+
+pg('Repeated wording errors get bounded repairs and cannot leak unsupported numbers',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).jamie;let calls=0;
+ const model=fakeModel(async()=>{
+  if(++calls===1)return {tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+  if(calls===2)return {content:'The balance is SGD 123 [E1].'};
+  if(calls===3)return {content:'There are five accounts [E1].'};
+  return {content:'Review your owned account balances in the details shown [E1].'};
+ });
+ const r=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'Show my balance'});
+ assert.equal(calls,4);assert.equal(r.narrativeWithheld,undefined);assert.doesNotMatch(r.reply,/123|five/);
+ const repairs=(await f.db.query("SELECT count(*)::int AS n FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'phase'='narrative_repair'")).rows[0].n;assert.equal(repairs,2);
+});

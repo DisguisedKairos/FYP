@@ -6,7 +6,7 @@ function references(runId, results) {
   return results.map((result, i) => ({ id: `E${i + 1}`, runId, step: i + 1, tool: result.tool, label: LABELS[result.tool] || 'Banking evidence' }));
 }
 function narrativeIssue(reply, report, { results = [], evidence = [], requireCitations = false } = {}) {
-  const plain = reply.replace(/[*_`]/g, '');
+  const plain = reply.replace(/[*_`]/g, '').replace(/[\u2018\u2019]/g, "'");
   const executionClaims=plain.replace(/\bno\s+(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[no execution]');
   if (/\b(?:I|we)\s+(?:have\s+)?(?:sent|executed|approved|rejected|cancelled|canceled|settled|debited|credited|changed the rule)\b|\b(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b/i.test(executionClaims)) return 'An agent claimed an action outside its authority.';
   if (/\b(?:risk\s+|model\s+|combined\s+)?score\s*:?\s*\d+\s*(?:\/|out of)\s*(?!100\b)\d+/i.test(plain)) return 'Invalid risk-score scale.';
@@ -20,12 +20,14 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const quantities=qualitative.replace(/\b(?:(?:choose|select|pick|specify|provide|give|name|use)\s+(?:just\s+)?one|(?:which|each) one)\b/gi,'[choice]');
   if (/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/i.test(quantities)) return 'Written numerical claims must be read from authoritative tool facts instead.';
   if (/\b(?:password|passcode|otp|pin|recovery code|api key|access token)\b/i.test(plain)) return 'Security credentials do not belong in agent interpretations.';
-  if(results.some(r=>['scan_counterparty_news','assess_counterparty_risk'].includes(r.tool))&&/\b(?:sanctions[- ]free|(?:is|are) (?:fully compliant|not sanctioned|cleared)|no (?:sanctions|compliance) issues|safe to (?:pay|deal|transact))\b/i.test(plain))return 'Name-based public research cannot establish sanctions clearance or permission to pay.';
+  const clearanceClaims=plain.replace(/\b(?:I|we)\s+(?:cannot|can't|can not)\s+(?:certify|confirm|establish|guarantee|determine|conclude)\s+(?:(?:compliance|sanctions clearance)\s+or\s+)?(?:that\s+)?(?:a|the|this|that|these|those)\s+compan(?:y|ies)\s+(?:is|are)\s+(?:(?:fully compliant|compliant|not sanctioned|sanctions[- ]free|cleared|safe to pay)(?:\s+(?:or|and)\s+)?)+/gi,'[unverified clearance]');
+  if(results.some(r=>['scan_counterparty_news','assess_counterparty_risk'].includes(r.tool))&&/\b(?:sanctions[- ]free|(?:is|are) (?:fully compliant|not sanctioned|cleared)|no (?:sanctions|compliance) issues|safe to (?:pay|deal|transact))\b/i.test(clearanceClaims))return 'Name-based public research cannot establish sanctions clearance or permission to pay.';
   if (/https?:\/\/|www\./i.test(plain)) return 'External destinations are not banking evidence.';
   const claims = plain
     .replace(/\b(?:none|no company|no payment|no transaction)\s+can\s+be\s+(?:called|considered)\s+(?:definitely|certainly)\s+safe\b/gi,'[qualified uncertainty]')
     .replace(/\bdoes not establish\s+(?:fraud\s+or\s+)?guaranteed[ -]loss(?:es)?\b/gi,'[qualified uncertainty]')
-    .replace(/\b(?:cannot|can't|can not)\s+(?:provide (?:a )?live stock (?:price|quote)\s+or\s+)?guarantee(?: that)?\s+(?:(?:this|the)\s+(?:payment|transaction)|it)\s+(?:is\s+)?fraud[ -]free(?=\s*(?:[.!?;]|\[E\d+\]|$))/gi,'[qualified uncertainty]')
+    .replace(/\b(?:cannot|can't|can not)\s+(?:provide (?:a )?live stock (?:price|quote)\s+or\s+)?guarantee(?: that)?\s+(?:(?:a|any|this|the)\s+(?:payment|transaction)|it)\s+(?:is\s+)?fraud[ -]free(?=\s*(?:[.!?;]|\[E\d+\]|$))/gi,'[qualified uncertainty]')
+    .replace(/\b(?:does not|do not|cannot|can't)\s+establish\s+(?:whether|that)\s+(?:(?:a|any|this|the)\s+(?:payment|transaction)|it)\s+is\s+fraud[ -]free(?=\s*(?:[.!?;]|\[E\d+\]|$))/gi,'[qualified uncertainty]')
     .replace(/\b(?:no|not|without)\s+(?:(?:a|any|supported|exact)\s+)*(?:(?:fraud\s+probabilit(?:y|ies)|probabilit(?:y|ies)\s+of\s+fraud)\s+or\s+)?guaranteed[ -](?:money[ -])?loss(?:es)?(?:\s+estimate)?\b/gi,'[qualified uncertainty]')
     .replace(/\b(?:not|neither)\s+(?:payment\s+)?authorization\s+(?:or|nor)\s+(?:a\s+)?guarantee\b/gi,'[qualified uncertainty]')
     .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment)\s+)?guarantees?\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
@@ -83,7 +85,9 @@ function relevanceIssue(message, results) {
   if (/\b(?:inflow|outflow)\b/i.test(message) && !has(['get_finance_report','get_company_activity','open_saved_dashboard']) && !planned)return 'The requested completed inflow and outflow were not retrieved.';
   if (/\bcash.?flow\b/i.test(financialMessage) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report','check_payment_funds'])) return 'The requested cash flow evidence was not retrieved.';
   if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity']) && !covered && !planned) return 'The requested scheduled-payment evidence was not retrieved.';
-  if (/\b(?:history|recent transactions|find.*transaction|search.*transaction|(?:show|list|retrieve|get)\b.*\btransactions?|transactions?\b.*\b(?:from|between|on|last|yesterday|today))\b/i.test(message) && !has(['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report'])) return 'The requested transaction evidence was not retrieved.';
+  const receiptList=/\b(?:history|recent transactions?|find.*transactions?|search.*transactions?|(?:show|list|retrieve|get)\b.*\btransactions?|transactions?\b.*\b(?:from|between|on|last|yesterday|today))\b/i.test(message);
+  const summaryRequest=/\b(?:dashboard|chart|trends?|inflow|outflow|cash.?flow|summari[sz]e|summary|finance|financial|activity)\b/i.test(message);
+  if (receiptList && !has(summaryRequest?['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report']:['search_transactions'])) return 'Call search_transactions for the requested owned receipt list; an aggregate activity dashboard does not replace transaction history.';
   return null;
 }
 module.exports = { DRAFT_INTENT, references, narrativeIssue, relevanceIssue };

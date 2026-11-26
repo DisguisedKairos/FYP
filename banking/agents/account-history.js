@@ -32,7 +32,7 @@ async function balances(db,user,message,{now=Date.now}={}){
 async function search(db,user,args,message,{now=Date.now}={}){
   await assertActor(db,user);
   const range=rangeFor(message,now),filters={...args,...(range?{from:range.from,to:range.to}:{})};
-  const result=await history.list(db,user,new URLSearchParams({...filters,pageSize:'15'}));
+  const result=await history.list(db,user,new URLSearchParams({...filters,pageSize:'20'}));
   const period=range?{from:range.from,to:range.to,timeZone:'Asia/Singapore',dateBasis:'Receipt date'}:null;
   return {total:result.pagination.total,totals:result.totals,period,transactions:result.transactions,
     items:[...(period?[{title:'Transaction period',detail:period.from+' to '+period.to+' (inclusive, SGT); receipt dates'}]:[]),
