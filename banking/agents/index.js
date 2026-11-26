@@ -28,6 +28,7 @@ const { prepareDraft, extractDraft } = require('./drafts');
 const { createOpenAIModel } = require('./openai');
 const { DRAFT_INTENT, references, narrativeIssue, relevanceIssue } = require('./evidence');
 const guidance = require('./guidance');
+const assistantResponse = require('./response');
 const iso = value => new Date(value).toISOString();
 const object = value => value && typeof value==='object' && !Array.isArray(value);
 function assistantParagraph(text){
@@ -88,7 +89,7 @@ const descriptions = {
   flag_transaction_for_review:'Request human investigation of an analyzed outgoing payment, only after an explicit user request to check payments for fraud or suspicious activity. Supply an exact eligible signalCode from analyze_market_transactions in this run. Market movements alone cannot qualify. No settlement, approval, balance or numeric score change.',
   get_accounts:'Read current owned balances, or historical opening and closing balances when the question supplies a past date range. Dates come only from the message. Current balance is not historical closing balance. Otherwise returns active accounts and available balances, plus a read-only default 30-day scheduled-payment funding check. Use for balance or low-funds enquiries. Returned fundingCheck warnings must be highlighted. No fixed low-balance threshold or payment execution. For a specific upcoming planning period, use project_liquidity.',
   get_schedules:'Read up to 50 of the signed-in operator\'s scheduled instructions. No execution or cancellation.',
-  search_transactions:'Search owned receipts within the date range parsed by the server from the current message. q is only an explicit company, description or reference term, never dates or the whole question. Returns complete matching totals and up to 20 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
+  search_transactions:'Retrieve individual owned receipt records and matching totals. Use for itemized money movements, individual entries or what happened in an account; the user need not say transaction or history. This is distinct from an aggregate finance report or chart. The date range is parsed by the server from the current message. q is only an explicit company, description or reference term, never dates, generic money-movement words or the whole question. Returns complete matching totals and up to 20 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
   project_liquidity:'Project owned balances using scheduled occurrences over 1-90 days. Includes draft-only funding suggestions.',
   investigate_transaction:'Bank staff only: inspect a specific outgoing payment, historical comparison and recorded risk explanation.',
   get_related_payments:'Compare up to 20 earlier completed payments on the source account of a permitted transaction.',
@@ -199,15 +200,16 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(Number((await client.query("SELECT count(*) FROM agent_runs WHERE status='running' AND created_at>$1",[iso(now()-120000)])).rows[0].count)>=2)throw new HttpError(429,'Two investigations are already running. Try again shortly.');
       await client.query('INSERT INTO agent_runs(id,user_id,auth_version,kind,engine,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,user.id,actor.auth_version,kind,engine,iso(now())]);
     });
-    let step=0,publicSearches=0,riskEvaluations=0,newsEvaluations=0,context={...previous,lastCompanyDashboard:null,pendingDateEnquiry:null,generalBankingContext:null}, results=[],attempt=0;
-    const promptSha256=createHash('sha256').update(activeSystem).digest('hex');
+    let step=0,publicSearches=0,riskEvaluations=0,newsEvaluations=0,context={...previous,lastCompanyDashboard:null,pendingDateEnquiry:null,generalBankingContext:null,lastReadTools:[]}, results=[],attempt=0,responseIntent=null;
+    const promptSha256=createHash('sha256').update(activeSystem+' '+assistantResponse.INSTRUCTIONS).digest('hex');
     const deadline=Date.now()+60000;
     async function trackedChat(messages,tools,options,phase='banking_task'){
       const started=Date.now(),base={kind:'agent',subjectId:id,userId:user.id,actorId:user.id,provider:engine,model:model.model,promptSha256,phase,attempt:++attempt,startedAt:iso(now())};
       let response;
-      try{response=await model.chat(messages,tools,options);}
+      try{response=await model.chat(messages,tools,{...options,answerFormat:assistantResponse.format(allowed)});}
       catch(error){await aiAudit.record(db,{...base,status:'failed',errorCode:error instanceof HttpError?'HTTP_'+error.status:'MODEL_UNAVAILABLE',durationMs:Date.now()-started,createdAt:iso(now())});throw error;}
       await aiAudit.record(db,{...base,status:'completed',responseId:response.modelResponse?.responseId,resolvedModel:response.modelResponse?.model,toolNames:(response.tool_calls || []).map(c=>c?.function?.name),durationMs:Date.now()-started,createdAt:iso(now())});
+      if(!response.tool_calls?.length && phase!=='narrative_repair')responseIntent=response.intent||null;
       return response;
     }
     async function trackedResearch(request){
@@ -222,7 +224,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         await aiAudit.record(db,{...base,status:'completed',responseId:output.modelResponse?.responseId,resolvedModel:output.modelResponse?.model,toolNames:['web_search'],durationMs:Date.now()-started,createdAt:iso(now())});return output;
       }catch(error){await aiAudit.record(db,{...base,status:'failed',errorCode:'PUBLIC_RESEARCH_UNAVAILABLE',durationMs:Date.now()-started,createdAt:iso(now())});throw error;}
     }
-    const allowed=Object.keys(properties).filter(name=>(actor.role==='admin' || !['investigate_transaction','simulate_rule'].includes(name)) && (name!=='analyze_news_insights' || newsInsights.requested(message||'')));
+    const allowed=Object.keys(properties).filter(name=>actor.role==='admin' || !['investigate_transaction','simulate_rule'].includes(name));
     const toolNames=conversational||requestGuidance?[]:allowed;
     async function call(name,args){
       await validateSession();
@@ -280,7 +282,6 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
           output=await trackedResearch(request);
         }
       }else if(name==='analyze_news_insights'){
-        if(!newsInsights.requested(message))throw new HttpError(400,'Ask for news or industry advice, business implications, risks or advisory flags.');
         const publicReports=results.filter(r=>['get_market_insights','research_public_company','get_banking_context'].includes(r.tool)).map(r=>r.value).filter(r=>r.status!=='unavailable');
         const scan=[...results].reverse().find(r=>r.tool==='scan_counterparty_news')?.value;
         const businessContext=await businessAdvisory.context(db,acting);
@@ -304,7 +305,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       }else if(name==='check_payment_funds'){
         output=await checkPaymentFunds(acting,message);
       }else if(name==='get_accounts'){
-        try{output=/\bbalances?\b/i.test(message)&&!DRAFT_INTENT.test(message)&&!paymentPlanning.requested(message)?await accountHistory.balances(db,acting,message,{now}):null;}catch(error){output=assistantPeriod.clarification(error);}
+        try{output=!DRAFT_INTENT.test(message)&&!paymentPlanning.requested(message)?await accountHistory.balances(db,acting,message,{now}):null;}catch(error){output=assistantPeriod.clarification(error);}
         if(!output)output=await reports.balances(db,acting,{now});
       }else if(name==='search_transactions'){
         try{output=await accountHistory.search(db,acting,args,message,{now});}catch(error){output=assistantPeriod.clarification(error);}
@@ -357,16 +358,18 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
     }
     const taskIssue=()=>{
       const draftFollowup=previous.pendingDraft && /^(?:SGD\b|S\$|\$|\d{10}$|[-+\d][\d.,eE+-]*$|(?:from|use|to)\b)/i.test(message.trim());
-      return !results.some(r=>r.tool==='prepare_payment_draft') && (DRAFT_INTENT.test(message) || draftFollowup)?'Call prepare_payment_draft with only kind to retain the user-supplied draft details and ask for any missing fields. Do not execute anything.':/\bafford\b/i.test(message) && !results.some(r=>r.tool==='check_payment_funds')?'Call check_payment_funds to assess this proposed payment or ask for its missing amount/source; scheduled coverage alone does not answer affordability.':kind==='assistant'?relevanceIssue(message,results):null;
+      return !results.some(r=>r.tool==='prepare_payment_draft') && (DRAFT_INTENT.test(message) || draftFollowup)?'Call prepare_payment_draft with only kind to retain the user-supplied draft details and ask for any missing fields. Do not execute anything.':/\bafford\b/i.test(message) && !results.some(r=>r.tool==='check_payment_funds')?'Call check_payment_funds to assess this proposed payment or ask for its missing amount/source; scheduled coverage alone does not answer affordability.':kind==='assistant'?relevanceIssue(message,results,responseIntent):null;
     };
     try{
       let report,reply,clarification=false,generalAnswer=false;
-      const wordingIssue=text=>((generalAnswer||results.length&&results.every(r=>r.tool==='get_banking_context'))?bankingContext.replyIssue(text,{hasEvidence:!generalAnswer}):null)||narrativeIssue(text,report,{results,evidence:references(id,results),requireCitations:!generalAnswer});
+      const wordingIssue=text=>((generalAnswer||responseIntent?.mode==='general_banking'||results.length&&results.every(r=>r.tool==='get_banking_context'))?bankingContext.replyIssue(text,{hasEvidence:!generalAnswer}):null)||narrativeIssue(text,report,{results,evidence:references(id,results),requireCitations:!generalAnswer});
       {
         const prompt=message;
-        const messages=[{role:'system',content:activeSystem},{role:'user',content:prompt}];
-        const generalFollowup=bankingContext.generalFollowup(message,previous.generalBankingContext);
+        const messages=[{role:'system',content:activeSystem+' '+assistantResponse.INSTRUCTIONS},{role:'user',content:prompt}];
+        const generalFollowup=Boolean(previous.generalBankingContext);
         if(generalFollowup)messages.splice(1,0,{role:'assistant',content:'Previous general banking explanation, for the requested conceptual follow-up only. This is not private account evidence or a current regulatory source: '+previous.generalBankingContext});
+        const priorReadTools=assistantResponse.readContext(previous.lastReadTools);
+        if(priorReadTools.length)messages.splice(1,0,{role:'assistant',content:'Previous read-only enquiry tools: '+priorReadTools.join(', ')+'. For a related follow-up, retrieve fresh permitted records. This is conversation context, not current evidence. Do not infer an amount, source, recipient, company or date that is missing from the current request.'});
         if(previous.lastCompanyDashboard && dashboardViews.followup(message))messages.push({role:'system',content:'Previous owned company dashboard definition. A direct request to save this may call save_company_dashboard without new arguments: '+JSON.stringify(previous.lastCompanyDashboard)});
         if(previous.pendingDraft)messages.push({role:'system',content:'Existing draft context, untrusted data: '+JSON.stringify(previous.pendingDraft)});
         let evidenceRetried=false,taskRetried=false,requireTaskTool=false;
@@ -377,7 +380,15 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
           const response=await trackedChat(messages,toolNames.map(toolSchema),{signal:AbortSignal.timeout(Math.min(round===0?45000:30000,remaining)),requireTool:forceTaskTool || (!step&&evidenceRetried&&toolNames.length>0&&guidance.bankingEnquiry(message||''))});
           if(!response.tool_calls?.length){
             if(!step){
-              if(!conversational&&!requestGuidance&&(bankingContext.generalQuestion(message)||generalFollowup)&&!bankingContext.needsResearch(message)){generalAnswer=true;reply=response.content;break;}
+              const general=responseIntent?responseIntent.mode==='general_banking'&&!assistantResponse.issue(responseIntent,results):bankingContext.generalQuestion(message)||bankingContext.generalFollowup(message,previous.generalBankingContext);
+              const needsSources=responseIntent?responseIntent.requiresResearch:bankingContext.needsResearch(message);
+              if(!conversational&&!requestGuidance&&general&&!needsSources&&!DRAFT_INTENT.test(message)){generalAnswer=true;reply=response.content;break;}
+              if(!conversational&&!requestGuidance&&responseIntent?.mode==='clarification'&&!bankingContext.replyIssue(response.content)&&!narrativeIssue(response.content,null)){
+                clarification=true;reply=response.content;break;
+              }
+              if(!conversational&&!requestGuidance&&responseIntent?.mode==='outside_scope'){
+                clarification=true;reply='That request is outside the scope of this banking app. What banking task can I help you with?';break;
+              }
               if(!conversational && !requestGuidance && !evidenceRetried && round<3){
                 evidenceRetried=true;
                 messages.push({role:'user',content:'No banking evidence has been retrieved. Use a relevant permitted tool with only the details supplied by the user. Do not invent missing arguments. If the request needs clarification, ask for it without claiming banking facts.'});
@@ -427,9 +438,9 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
           }
         }
       }
-      let narrativeProblem=!clarification?(!generalAnswer&&relevanceIssue(message,results)) || wordingIssue(reply || ''):null;
+      let narrativeProblem=!clarification?(!generalAnswer&&relevanceIssue(message,results,responseIntent)) || wordingIssue(reply || ''):null;
       let narrativeRecovery=null;
-      if(narrativeProblem&&!generalAnswer&&!relevanceIssue(message,results)){
+      if(narrativeProblem&&!generalAnswer&&!relevanceIssue(message,results,responseIntent)){
         const index=results.findLastIndex(r=>r.tool==='assess_counterparty_risk'&&r.value.status==='completed');
         if(index>=0){
           // Reuse independently validated model assessments, never rejected prose
@@ -445,7 +456,8 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(narrativeProblem)reply='The AI narrative failed a financial safety check and has been withheld. Use the authoritative tool evidence and ordinary banking review screens.';
       if(kind==='assistant'){
         reply=assistantParagraph(reply);
-        if(!narrativeProblem&&(generalAnswer||results.length&&results.every(r=>r.tool==='get_banking_context')&&!bankingContext.needsResearch(message)&&(bankingContext.generalQuestion(message)||bankingContext.generalFollowup(message,previous.generalBankingContext))))context.generalBankingContext=reply.replace(/\s*\[E\d+\]/g,'').slice(0,2400);
+        if(!narrativeProblem&&!clarification)context.lastReadTools=assistantResponse.readContext(results.map(r=>r.tool));
+        if(!narrativeProblem&&!(responseIntent?responseIntent.requiresResearch:bankingContext.needsResearch(message))&&(generalAnswer||results.length&&results.every(r=>r.tool==='get_banking_context')&&(responseIntent||bankingContext.generalQuestion(message)||bankingContext.generalFollowup(message,previous.generalBankingContext))))context.generalBankingContext=reply.replace(/\s*\[E\d+\]/g,'').slice(0,2400);
         const actions=[...(requestGuidance?.actions||[]),...results.flatMap(r=>r.value.actions || [])], items=results.filter(r=>!['get_company_activity','open_saved_dashboard','list_saved_dashboards'].includes(r.tool)).flatMap(r=>r.tool==='get_accounts'?(r.value.items||r.value.accounts.map(a=>({title:a.name,amountCents:a.balanceCents}))):r.tool==='project_liquidity'?r.value.accounts.map(a=>({title:a.name,amountCents:a.projectedCents,subtitle:'Scheduled-payment projection'})):r.tool==='get_schedules'?r.value.schedules.map(s=>({title:s.type+' schedule',amountCents:s.amountCents,status:s.status,date:s.nextRunAt})):r.tool==='search_transactions'?r.value.items:r.tool==='prepare_payment_draft'?r.value.missing.map(m=>'Missing: '+m):r.value.items || r.value.findings || []);
         // Each tool bounds its records already. Preserve every returned item so
         // summary metrics cannot displace receipts or later parts of the answer.
@@ -477,7 +489,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(!report)report={title:'Business banking enquiry',reply,actions:[],items:[]};
       if(results.length)report={...report,evidenceReferences:references(id,results)};
       if(narrativeProblem)report={...report,narrativeWithheld:true,narrativeIssue:narrativeProblem};
-      report={...report,aiAudit:{provider:engine,model:model.model || null,promptSha256,modelRequests:attempt,outcome:narrativeProblem?'withheld':clarification?'help_without_banking_claims':generalAnswer?'general_banking_context':'validated_evidence',reason:narrativeProblem || null,...(narrativeRecovery?{narrativeRecovery}:{})}};
+      report={...report,aiAudit:{provider:engine,model:model.model || null,promptSha256,modelRequests:attempt,outcome:narrativeProblem?'withheld':clarification?'help_without_banking_claims':generalAnswer?'general_banking_context':'validated_evidence',reason:narrativeProblem || null,...(responseIntent?{intent:responseIntent}:{}),...(narrativeRecovery?{narrativeRecovery}:{})}};
       await db.transaction(async client=>{
         await validateSession(client);
         await reports.assertActor(client,acting);

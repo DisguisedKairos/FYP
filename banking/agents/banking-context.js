@@ -36,6 +36,7 @@ function replyIssue(reply,{hasEvidence=false}={}){
  if(/\b(?:is|are|was|were)\s+(?:fully compliant|sanctions[- ]free|sanctioned|insolvent|creditworthy|solvent|cleared|safe to pay)\b/i.test(reply))return 'General background cannot certify an actual company or a payment.';
  if(!hasEvidence&&/\[E\d+\]/.test(reply))return 'A general explanation must not invent references to account evidence.';
  if(/\b(?:I|we)\s+(?:(?:have|just)\s+)?(?:checked|retrieved|reviewed|found|scanned|analy[sz]ed)\b[^.!?]*\b(?:your|owned|records|transactions?|payments?)\b/i.test(reply))return 'A general explanation cannot claim to have inspected private records.';
+ if(/\b(?:you|your (?:business|company))\s+(?:currently\s+)?(?:have|hold|owe|can afford|can cover|can pay)\b/i.test(reply))return 'A general explanation cannot assert an actual financial position or payment capacity.';
  if(/\b(?:your|our|my)\s+(?:(?:current|available|opening|closing|projected|business|company|account)\s+){0,3}(?:balances?|accounts?|transactions?|receipts?|payments?|funds?|liquidity|cash[ -]?flow|interest rates?|rates?|product terms?)\s+(?:is|are|was|were|has|have|shows?|totals?|contains?|will)\b/i.test(reply))return 'A general explanation cannot assert facts about an actual account.';
  return null;
 }

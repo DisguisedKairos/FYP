@@ -46,7 +46,7 @@ test('OpenAI assistant reads owned evidence and records the configured provider 
  const agentModel=adapter(async(url,options)=>{
   if(url.pathname.includes('/models/'))return {id:MODEL};
   const body=JSON.parse(options.body);
-  return body.input.some(item=>item.type==='function_call_output')?response([text('Review the account balances in the supplied evidence [E1].')]):response([{type:'function_call',name:'get_accounts',call_id:'call_accounts',arguments:'{}'}]);
+  return body.input.some(item=>item.type==='function_call_output')?response([text(JSON.stringify({mode:'banking_evidence',requiresResearch:false,requiredTools:['get_accounts'],reply:'Review the account balances in the supplied evidence [E1].'}))]):response([{type:'function_call',name:'get_accounts',call_id:'call_accounts',arguments:'{}'}]);
  });
  const f=await fixture(t,{agentModel}),client=f.client();await client.login();const before=await financialSnapshot(f.db);
  const result=await client.request('/api/assistant/messages',{method:'POST',body:{message:'What is my balance?'}});

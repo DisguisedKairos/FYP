@@ -24,7 +24,7 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
     try{const data=await request('models/'+encodeURIComponent(model),null,AbortSignal.timeout(5000));return {...status,available:data.id===model,reason:data.id===model?null:'The configured model is unavailable.'};}
     catch{return {...status,reason:'Check OpenAI API credentials, model access and connection.'};}
   }
-  async function chat(messages,tools,{signal,maxOutputTokens=1800,requireTool=false}={}){
+  async function chat(messages,tools,{signal,maxOutputTokens=1800,requireTool=false,answerFormat}={}){
     if(!Number.isInteger(maxOutputTokens)||maxOutputTokens<1800||maxOutputTokens>4000)throw new HttpError(400,'Invalid model output limit.');
     const input=[],pending=[];
     for(const [index,message] of messages.entries()){
@@ -47,7 +47,7 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
       const required=new Set(fn.parameters.required || []);
       return {type:'function',name:fn.name,description:fn.description,strict:true,parameters:{...fn.parameters,properties:Object.fromEntries(Object.entries(fn.parameters.properties).map(([key,value])=>[key,required.has(key)?value:{...value,type:[value.type,'null'],...(value.enum?{enum:[...value.enum,null]}:{})} ])),required:Object.keys(fn.parameters.properties)}};
     });
-    const data=await request('responses',{model,input,tools:schemas,store:false,include:['reasoning.encrypted_content'],...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{}),parallel_tool_calls:false,...(requireTool?{tool_choice:'required'}:{}),max_output_tokens:maxOutputTokens},signal || AbortSignal.timeout(45000));
+    const data=await request('responses',{model,input,tools:schemas,store:false,include:['reasoning.encrypted_content'],...(/^gpt-[56]/.test(model)?{reasoning:{effort:'low'}}:{}),parallel_tool_calls:false,...(requireTool?{tool_choice:'required'}:{}),...(answerFormat?{text:{format:answerFormat}}:{}),max_output_tokens:maxOutputTokens},signal || AbortSignal.timeout(45000));
     const invalid=()=>new HttpError(503,'OpenAI returned an invalid, refused or incomplete response. Retry the request.');
     if(data.status!=='completed' || data.incomplete_details || typeof data.model!=='string' || !(data.model===model || data.model.startsWith(model+'-')) || !Array.isArray(data.output) || data.output.length>30)throw invalid();
     let content='';const calls=[];
@@ -66,7 +66,8 @@ function createOpenAIModel({model=process.env.OPENAI_MODEL || 'gpt-6-luna',apiKe
       }else throw invalid();
     }
     if(content.length>12000 || calls.length>4 || (!content.trim() && !calls.length))throw invalid();
-    return {role:'assistant',content,...(calls.length?{tool_calls:calls,responseItems:data.output}:{}),modelResponse:{provider:'openai',model:data.model,responseId:typeof data.id==='string'?data.id:null}};
+    const parsed=answerFormat&&!calls.length?require('./response').parse(content,answerFormat.schema.properties.requiredTools.items.enum):{content};
+    return {role:'assistant',...parsed,...(calls.length?{tool_calls:calls,responseItems:data.output}:{}),modelResponse:{provider:'openai',model:data.model,responseId:typeof data.id==='string'?data.id:null}};
   }
 
   async function research(publicRequest,{signal}={}){

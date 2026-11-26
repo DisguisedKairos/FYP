@@ -68,8 +68,12 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   if (results.some(r => r.tool === 'prepare_payment_draft' && r.value.complete === false) && /\b(?:draft|payment form)\s+(?:is\s+)?ready\b/i.test(plain)) return 'Required draft details are still missing.';
   return null;
 }
-function relevanceIssue(message, results) {
+function relevanceIssue(message, results, intent) {
   const tools = new Set(results.map(r => r.tool));
+  // The production adapter validates a structured interpretation of the whole
+  // request. Tool handlers still enforce ownership, inputs and action consent.
+  // Lexical checks below remain for controlled/legacy adapters without metadata.
+  if(intent)return require('./response').issue(intent,results);
   if(tools.has('get_banking_context')&&require('./banking-context').generalQuestion(message))return null;
   if(tools.has('get_banking_context'))message=require('./banking-context').withoutGeneralClauses(message);
   const newsAdvice=require('../news-insights').requested(message);

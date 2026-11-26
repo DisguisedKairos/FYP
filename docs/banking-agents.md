@@ -138,6 +138,8 @@ The audit reuses agent_runs, agent_tool_calls, fraud_assessments, fraud_screenin
 
 ## Company activity dashboards
 
+Presentation questions are examples rather than required commands. You can reword them naturally, for example “How much have I got available right now?” or “Put that in everyday words for me.” The model selects the appropriate evidence tools by meaning. Include real company names and valid dates when needed; the assistant asks for genuinely missing details rather than requiring a particular phrase.
+
 The assistant can generate an owned transaction dashboard for a named company or biller using get_company_activity. Ask "Generate a dashboard for transaction activity with Harbour Supplies for the last 30 days" to display the charts directly in chat. Ambiguous names return choices inside the reply. The dashboard shows completed incoming/outgoing/net amounts, payment statuses, monthly activity and paginated receipts. Request another period in chat to change its Singapore date range. See [Company activity](company-activity.md) for matching and access limits.
 
 ## Company payment readiness in chat
