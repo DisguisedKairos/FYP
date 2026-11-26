@@ -7,6 +7,8 @@ function references(runId, results) {
 }
 function narrativeIssue(reply, report, { results = [], evidence = [], requireCitations = false } = {}) {
   const plain = reply.replace(/[*_`]/g, '').replace(/[\u2018\u2019]/g, "'");
+  const preview=results.find(r=>r.tool==='simulate_rule')?.value;
+  if(preview?.assessed===0&&!/\b(?:no eligible|no (?:valid |recorded |eligible )?assessments|insufficient (?:eligible )?(?:history|data|coverage)|not enough (?:eligible )?(?:history|data|assessments))\b/i.test(plain))return 'There are no eligible assessments in the rule preview; explicitly state insufficient coverage instead of implying measured rule impact.';
   const executionClaims=plain.replace(/\bno\s+(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[no execution]');
   if (/\b(?:I|we)\s+(?:have\s+)?(?:sent|executed|approved|rejected|cancelled|canceled|settled|debited|credited|changed the rule)\b|\b(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b/i.test(executionClaims)) return 'An agent claimed an action outside its authority.';
   if (/\b(?:risk\s+|model\s+|combined\s+)?score\s*:?\s*\d+\s*(?:\/|out of)\s*(?!100\b)\d+/i.test(plain)) return 'Invalid risk-score scale.';
@@ -70,10 +72,23 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
 }
 function relevanceIssue(message, results, intent) {
   const tools = new Set(results.map(r => r.tool));
-  // The production adapter validates a structured interpretation of the whole
-  // request. Tool handlers still enforce ownership, inputs and action consent.
-  // Lexical checks below remain for controlled/legacy adapters without metadata.
-  if(intent)return require('./response').issue(intent,results);
+  // Semantic interpretation chooses tools; it cannot redefine an explicit
+  // financial period or substitute a different customer-facing output.
+  if(intent){
+    const interpreted=require('./response').issue(intent,results);
+    if(interpreted||intent.mode!=='banking_evidence')return interpreted;
+    const chart=/\b(?:dashboard|chart|graph)\b/i.test(message)&&/\b(?:my|our)\b/i.test(message)&&/\b(?:transactions?|activity|inflows?|outflows?|cash[ -]?flow)\b/i.test(message)&&!require('../dashboard-views').saveIntent(message)&&!/\b(?:saved|bookmarked)\b/i.test(message);
+    if(chart&&!tools.has('get_company_activity')&&!tools.has('open_saved_dashboard'))return 'Retrieve the requested owned dashboard/chart, not only a receipt list or written summary.';
+    if(!chart&&/\b(?:show|list|retrieve|find|search|get)\b[^.!?]*\b(?:my|our)\s+(?:recent\s+)?transactions?\b|\b(?:my|our)\s+transaction history\b/i.test(message)&&!tools.has('search_transactions'))return 'Retrieve the requested individual receipt list using search_transactions.';
+    if(/\b(?:download(?:able)?|export|pdf|csv)\b/i.test(message)&&/\b(?:finance|financial)\s+(?:activity\s+)?reports?\b/i.test(message)&&!tools.has('get_finance_report'))return 'Generate the requested downloadable finance report; account balances do not provide that output.';
+    const coverageRequest=/\b(?:scheduled|upcoming|coming due)\b/i.test(message)&&/\b(?:cover|enough|sufficient|funding|shortfalls?|short|afford)\b/i.test(message)&&!DRAFT_INTENT.test(message);
+    if(coverageRequest&&!results.some(r=>r.value?.paymentReadiness)){
+      let days;try{days=require('./reports').requestedHorizon(message);}catch(error){return error.message;}
+      const coverage=[...results].reverse().find(r=>r.value?.fundingCheck)?.value.fundingCheck;
+      if(days!==undefined&&(!coverage||typeof coverage.available!=='boolean'||coverage.days!==days))return 'Check the requested '+days+'-day scheduled-payment period with project_liquidity; a default or different horizon does not answer it.';
+    }
+    return null;
+  }
   if(tools.has('get_banking_context')&&require('./banking-context').generalQuestion(message))return null;
   if(tools.has('get_banking_context'))message=require('./banking-context').withoutGeneralClauses(message);
   const newsAdvice=require('../news-insights').requested(message);

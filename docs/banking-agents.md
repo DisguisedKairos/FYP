@@ -41,7 +41,7 @@ The model chooses approved read/draft tools and gives qualitative interpretation
 
 ## Presentation questions
 
-Updated 26 November 2026. Use the [current nine-login Neon guide](../data/testing/neon/README.md). Sign in as `logistics-business@greenlink.demo` for the customer questions; use `reviewer-tester@greenlink.demo` only for administrator tasks. The administrator does not own the customer's deposits or private charts.
+Updated 27 November 2026. Use the [current nine-login Neon guide](../data/testing/neon/README.md). Sign in as `logistics-business@greenlink.demo` for the customer questions; use `reviewer-tester@greenlink.demo` only for administrator tasks. The administrator does not own the customer's deposits or private charts.
 
 A read-only check of the current database confirmed logistics operating account **1099100101**, logistics reserve **1099100102**, and technology recipient **1099100201**. Confirm these in Business accounts before presenting. The former `108880...` feature-tour accounts are not the current presentation setup. Other industry logins must use their own accounts and recorded companies.
 
@@ -54,7 +54,7 @@ Copy only the question into Ask GLDB. Use a fresh conversation for unrelated que
 | Company search | Find my transactions containing "GLDB Demo Straits Carrier Pte. Ltd.". | Existing logistics counterparty receipts. |
 | Historical balances | Show my opening and closing account balances from 2026-11-01 to 2026-11-25. | Historical balances for that Singapore date range, not today's balance. |
 | Scheduled instructions | List my scheduled payments. | Current instructions, or an honest empty list. |
-| Upcoming obligations | Can I cover my scheduled payments over the next 7 days? | Seven-day scenario and any source-account shortfall; no guessed future income. |
+| Upcoming obligations | Can I cover my scheduled payments over the next 7 days? | Displayed seven-day period, included schedule occurrences and any source-account shortfall; no guessed future income. |
 | Finance downloads | Generate a downloadable finance report from 2026-11-01 to 2026-11-25. | Check the displayed period; download CSV and PDF. |
 | Cash flow | Summarize my inflow and outflow this month. | Completed external flows, distinct from current balances. |
 | Proposed company payment | Can I pay SGD 10.00 from 1099100101 to GLDB Demo Straits Carrier Pte. Ltd. by tomorrow? | Read-only funding check; no transfer is created. |
@@ -91,8 +91,8 @@ Chat prepares forms; it never submits, approves or settles them. Opening/closing
 
 For administrator demonstrations, sign out of the customer account and sign in as `reviewer-tester@greenlink.demo`:
 
-1. Copy an existing outgoing transaction ID from Fraud monitoring, then ask **Investigate transaction ACTUAL_TRANSACTION_ID and explain its recorded risk reasons.** Replace `ACTUAL_TRANSACTION_ID` before sending; a fabricated, incoming or inaccessible ID is not a valid positive demonstration.
-2. Ask **Preview the high_value fraud rule with a proposed threshold of SGD 9,500 over the last 30 days without changing the live rule.** The preview replays supported recorded assessment snapshots; no eligible snapshots means insufficient coverage, not measured fraud accuracy.
+1. Copy an existing outgoing transaction ID from Fraud monitoring, then ask **Investigate transaction {TRANSACTION_ID} and explain its recorded risk reasons.** Replace `{TRANSACTION_ID}` before sending; a copied placeholder requests clarification. The fact cards show the receipt, recorded scores or an explicit missing assessment, earlier-payment counts and reasons. An incoming or inaccessible ID is not a valid positive demonstration.
+2. Ask **Preview the high_value fraud rule with a proposed threshold of SGD 9,500 over the last 30 days without changing the live rule.** Inspect its period, proposed threshold, eligible/skipped assessments and before/after decision counts. No eligible snapshots means insufficient coverage; it does not establish that a proposed threshold is safe or measure fraud accuracy.
 3. Ask **Check bank-wide reconciliation exceptions.** Customer questions remain limited to their owned accounts.
 4. Open **AI audit** using the administrator navigation. It shows permitted structured model/tool activity, not hidden model reasoning or other users' private conversations.
 

@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const response=require('../banking/agents/response'),{createOpenAIModel}=require('../banking/agents/openai');
 const {createAgents}=require('../banking/agents'),{fixture}=require('./dft-helpers');
-const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','project_liquidity','analyze_news_insights'];
+const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','project_liquidity','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments'];
 const answer=(mode,reply,requiredTools=[],requiresResearch=false)=>response.parse(JSON.stringify({mode,reply,requiredTools,requiresResearch}),tools);
 const call=(name,args={})=>({role:'assistant',content:'',tool_calls:[{function:{name,arguments:args}}]});
 const provider=chat=>({mode:'openai',model:'gpt-6-luna',inspect:async()=>({available:true}),chat});
@@ -29,6 +29,62 @@ test('Semantic task checks require every interpreted tool and current sources; e
  assert.deepEqual(response.readContext(['get_finance_report','prepare_payment_draft','get_finance_report','flag_transaction_for_review','get_banking_context']),['get_finance_report']);
  assert.deepEqual(response.readContext({tool:'get_accounts'}),[]);
  assert.deepEqual(response.readContext(['search_transactions','get_company_activity','assess_counterparty_risk','project_liquidity']),[]);
+});
+
+test('A model interpretation cannot substitute a default period or summary for the requested presentation output',()=>{
+ const {relevanceIssue}=require('../banking/agents/evidence');
+ const interpreted=names=>answer('banking_evidence','Review the records below.',names).intent;
+ const accounts={tool:'get_accounts',value:{fundingCheck:{available:true,days:30,occurrenceCount:0,warnings:[]}}};
+ assert.match(relevanceIssue('Can I cover my scheduled payments over the next 7 days?',[accounts],interpreted(['get_accounts'])),/7|period|horizon/);
+ assert.equal(relevanceIssue('Can I cover my scheduled payments over the next 7 days?',[{...accounts,value:{fundingCheck:{...accounts.value.fundingCheck,days:7}}}],interpreted(['get_accounts'])),null);
+ assert.match(relevanceIssue('Generate a downloadable finance report from 2026-11-01 to 2026-11-25.',[accounts],interpreted(['get_accounts'])),/finance report/);
+ const grouped={tool:'get_company_activity',value:{status:'ready'}};
+ assert.match(relevanceIssue('Show my recent transactions.',[grouped],{mode:'banking_evidence',requiresResearch:false,requiredTools:['get_company_activity']}),/receipt|search_transactions/);
+ assert.match(relevanceIssue('Show a dashboard of my transactions.',[{tool:'search_transactions',value:{}}],interpreted(['search_transactions'])),/dashboard|chart/);
+ assert.equal(relevanceIssue('Show my current balances and explain the general liquidity context.',[accounts],interpreted(['get_accounts'])),null);
+ assert.equal(relevanceIssue('What is a downloadable finance report?',[],answer('general_banking','A finance report summarizes recorded activity.').intent),null);
+ assert.equal(relevanceIssue('Save my transaction dashboard.',[{tool:'save_company_dashboard',value:{saved:true}}],{mode:'banking_evidence',requiresResearch:false,requiredTools:['save_company_dashboard']}),null);
+ assert.equal(relevanceIssue('Show my saved transaction dashboards.',[{tool:'list_saved_dashboards',value:{views:[]}}],{mode:'banking_evidence',requiresResearch:false,requiredTools:['list_saved_dashboards']}),null);
+});
+
+pg('A presentation liquidity answer displays its checked period and schedule count even when nothing is due',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);
+ const agents=createAgents({db:f.db,model:provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','The checked schedule scenario is shown below [E1].',['project_liquidity']):call('project_liquidity',{days:7}))});
+ const result=await agents.execute(user,'assistant',{message:'Can I cover my scheduled payments over the next 7 days?'});
+ assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ assert.ok(result.items.some(item=>item.title==='Scheduled-payment projection period'&&item.value==='7 days'));
+ assert.ok(result.items.some(item=>item.title==='Scheduled occurrences included'&&item.value==='0'));
+ assert.ok(result.items.some(item=>item.subtitle==='Scheduled-payment projection'&&typeof item.amountCents==='number'));
+});
+
+pg('Staff presentation replies expose recorded scores, comparison counts and rule-preview coverage in fact cards',async t=>{
+ const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1")).rows[0];
+ const id=(await f.db.query('SELECT id FROM transactions WHERE amount_cents<0 ORDER BY requested_at DESC LIMIT 1')).rows[0].id;
+ for(const [name,args,message,reply,titles] of [
+  ['investigate_transaction',{transactionId:id},'Investigate transaction '+id+' and explain its recorded risk reasons.','The recorded receipt and available assessment details are shown below [E1].',['Recorded model risk score','Recorded combined risk score','Earlier completed outgoing payments']],
+  ['get_related_payments',{transactionId:id},'Compare earlier completed payments related to transaction '+id+'.','The earlier completed payments on the same source account are shown below [E1].',['Earlier completed payments shown']],
+  ['simulate_rule',{ruleId:'high_value',threshold:9500,days:30},'Preview the high_value fraud rule at SGD 9,500 over the last 30 days without changing the live rule.','There are no eligible assessments in the inspected period, so the preview has insufficient coverage [E1].',['Rule preview period','Eligible assessments','Skipped assessments','Historical decisions changed','Proposed rule threshold']],
+ ]){
+  const agents=createAgents({db:f.db,model:provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence',reply,[name]):call(name,args))});
+  const result=await agents.execute(user,'assistant',{message});assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+  for(const title of titles)assert.ok(result.items.some(item=>item.title===title),'Missing '+title);
+ }
+});
+
+test('An empty rule preview must state insufficient coverage instead of implying a tested safe threshold',()=>{
+ const {narrativeIssue}=require('../banking/agents/evidence');
+ const options={results:[{tool:'simulate_rule',value:{assessed:0}}],evidence:[{id:'E1'}],requireCitations:true};
+ assert.match(narrativeIssue('The preview shows no decision changes in the assessed records [E1].',null,options),/eligible|coverage/);
+ assert.equal(narrativeIssue('There are no eligible assessments in the inspected period, so the preview has insufficient coverage [E1].',null,options),null);
+});
+
+pg('Copied legacy presentation placeholders ask staff for an actual outgoing receipt instead of making an invalid lookup',async t=>{
+ const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1")).rows[0];
+ const agents=createAgents({db:f.db,model:provider(async(_messages,schemas)=>{assert.deepEqual(schemas,[]);return answer('clarification','Choose an actual outgoing receipt.');})});
+ for(const placeholder of ['ACTUAL_TRANSACTION_ID','{TRANSACTION_ID}']){
+  const result=await agents.execute(user,'assistant',{message:'Investigate transaction '+placeholder+' and explain its recorded risk reasons.'});
+  assert.equal(result.clarification,true);assert.match(result.reply,/actual permitted receipt ID/);assert.ok(result.actions.some(a=>a.page==='fraud'));assert.deepEqual(result.steps,[]);
+ }
 });
 
 test('OpenAI uses the structured format alongside function calling and validates the final response',async()=>{

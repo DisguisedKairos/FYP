@@ -179,4 +179,42 @@ async function reconciliation(db,user,{now=Date.now}={}) {
       evidence:[...discrepancies.map(a=>({type:'account',id:a.accountId,label:'Balance discrepancy'})),...failedSchedules.map(s=>({type:'schedule',id:s.id,label:'Schedule exception'}))],actions:[]};
   },{isolation:'REPEATABLE READ',readOnly:true});
 }
-module.exports={liquidity,balances,fundingCoverage,investigation,simulation,reconciliation,assertActor,candidateRule,horizon,requestedHorizon};
+function assistantItems(name,value){
+  if(name==='investigate_transaction'){
+    const score=number=>Number.isFinite(number)&&number>=0&&number<=100?number+' / 100':'Not recorded';
+    return [
+      {title:'Reviewed outgoing payment',amountCents:value.transaction.amountCents,status:value.transaction.status,date:value.transaction.requestedAt,detail:value.transaction.counterparty+'; receipt '+value.transaction.id},
+      {title:'Recorded model risk score',value:score(value.assessment.modelScore),detail:value.assessment.modelVersion||'No recorded model identity'},
+      {title:'Recorded combined risk score',value:score(value.assessment.combinedScore),detail:'Historical recorded assessment; no new score was calculated.'},
+      {title:'Recorded decision',value:value.assessment.decision==='unavailable'?'Not recorded':value.assessment.decision},
+      {title:'Earlier completed outgoing payments',value:String(value.history.priorCompletedOutgoing)},
+      {title:'Earlier payments to this payee',value:String(value.history.samePayeeCount)},
+      ...(value.history.priorCompletedOutgoing?[{title:'Earlier payment average',amountCents:value.history.averageCents},{title:'Earlier payment maximum',amountCents:value.history.maximumCents}]:[]),
+      ...value.findings,
+    ];
+  }
+  if(name==='get_related_payments')return [
+    {title:'Earlier completed payments shown',value:String(value.payments.length),detail:'Up to 20 payments completed before the selected payment on the same source account.'},
+    ...value.payments.map(payment=>({title:payment.description,amountCents:payment.amountCents,date:payment.completedAt,detail:payment.counterparty+'; receipt '+payment.id})),
+  ];
+  if(name==='simulate_rule')return [
+    {title:'Rule preview period',value:value.days+' days',date:value.generatedAt},
+    {title:'Eligible assessments',value:String(value.assessed),detail:value.assessed?'Recorded eligible snapshots only; this is not a fraud-accuracy measurement.':'No eligible snapshots; the effect of the proposed rule cannot be established.'},
+    {title:'Skipped assessments',value:String(value.skipped),detail:'Archived or unverifiable assessments are excluded.'},
+    {title:'Historical decisions changed',value:String(value.changed),detail:'Live policy and banking records are unchanged.'},
+    {title:'Proposed rule threshold',...(value.rule.id==='high_value'?{amountCents:Math.round(value.candidate.threshold*100)}:{value:String(value.candidate.threshold)}),detail:value.rule.id},
+    {title:'Proposed rule action',value:value.candidate.action,detail:value.candidate.enabled?'Enabled in this preview':'Disabled in this preview'},
+    ...['allow','review','block'].map(decision=>({title:'Historical '+decision+' decisions',value:String(value.before[decision])+' → '+String(value.after[decision]),detail:'Current policy → proposed policy'})),
+    ...(value.truncated?[{title:'Preview coverage limit',detail:'Only the latest 1,000 assessments were inspected.'}]:[]),
+    ...value.changes.map(change=>({title:'Historical decision change',amountCents:change.amountCents,detail:change.assessmentId+'; '+change.before+' → '+change.after})),
+  ];
+  if(name==='reconcile_accounts')return [
+    {title:'Accounts checked',value:String(value.accountsChecked),detail:value.scope},
+    ...value.findings,
+    ...value.discrepancies.map(row=>({title:'Account balance discrepancy: '+row.name,amountCents:row.differenceCents,detail:'Stored balance minus completed ledger balance; account '+row.accountId})),
+    ...value.failedSchedules.map(row=>({title:'Schedule exception',status:row.status,date:row.nextRunAt,detail:row.id+'; '+row.reason})),
+    ...value.notificationExceptions.map(row=>({title:'Notification exception',status:row.status,date:row.createdAt,detail:row.id+'; attempts '+row.attempts})),
+  ];
+  return value.items||value.findings||[];
+}
+module.exports={liquidity,balances,fundingCoverage,investigation,simulation,reconciliation,assertActor,candidateRule,horizon,requestedHorizon,assistantItems};

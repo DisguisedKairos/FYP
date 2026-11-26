@@ -22,4 +22,11 @@ function collect(results){
   if(payment?.paymentReadiness)return payment.fundingWarnings||[];
   return [...(coverage?.warnings||[]),...(payment?.fundingWarnings||[])];
 }
-module.exports={projectionWarnings,draftWarnings,collect};
+function projectionItems(projection){
+  return [
+    {title:'Scheduled-payment projection period',value:projection.days+' days',detail:projection.fundingCheck.basis,date:projection.generatedAt},
+    {title:'Scheduled occurrences included',value:String(projection.fundingCheck.occurrenceCount),detail:'Active instructions within the checked period, including overdue occurrences.'},
+    ...projection.accounts.map(a=>({title:a.name,amountCents:a.projectedCents,subtitle:'Scheduled-payment projection'})),
+  ];
+}
+module.exports={projectionWarnings,draftWarnings,collect,projectionItems};
