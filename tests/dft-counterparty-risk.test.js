@@ -124,7 +124,10 @@ test('Risk cards explain fictional inputs and historical exposure without exposi
  const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const source=fs.readFileSync(path.join(__dirname,'../public/js/counterparty-risk.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
  const context={esc,fullDate:v=>v,money:v=>'SGD '+v/100};vm.runInNewContext(source+';globalThis.render=counterpartyRiskHtml;',context);
- const html=context.render({counterpartyRisk:report});assert.match(html,/Fictional company and scenario/);assert.match(html,/not losses/);assert.match(html,/Insufficient evidence/);assert.match(html,/SGD 100/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|<button|data-action|View AI audit/);
+ const html=context.render({counterpartyRisk:report});assert.match(html,/Fictional company and scenario/);assert.match(html,/not losses/);assert.match(html,/Insufficient evidence/);assert.match(html,/SGD 100/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|<button|data-action|View AI audit|<details/);
+ assert.match(html,/Why this assessment/);assert.match(html,/Fictional case; identity remains unverified/);
+ report.assessments[0].reputation.reasons=[{}, {description:'  '}];
+ const partial=context.render({counterpartyRisk:report});assert.doesNotMatch(partial,/<li>\s*<\/li>|undefined/);
 });
 
 pg('Recorded payment reviews and pending requests remain distinct from completed cash exposure',async t=>{

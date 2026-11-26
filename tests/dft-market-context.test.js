@@ -84,3 +84,29 @@ pg('Stale context and mismatched historical snapshots cannot qualify a market re
  const row=(await f.db.query('SELECT t.*,a.user_id,f.input_json FROM transactions t JOIN accounts a ON a.id=t.account_id JOIN fraud_assessments f ON f.id=t.id WHERE t.id=$1',[id])).rows[0];row.input_json={...row.input_json,userId:'someone_else'};
  assert.deepEqual(marketRisk.eligibleSignals(row,context),[]);assert.equal(Number((await f.db.query('SELECT count(*) FROM fraud_cases')).rows[0].count),0);assert.equal((await client.request('/api/fraud/cases')).status,403);
 });
+
+
+pg('Recent market fraud checks retain existing open and closed human-review statuses without creating new signals or cases',async t=>{
+ const f=await fixture(t,{now:()=>NOW,agentModel:marketModel({flag:false}),marketContext:{get:async()=>contextFixture(NOW)}});
+ const reviewer=(await f.db.query("SELECT id FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];
+ let client;
+ for(const status of ['open','in_review','closed']){
+  const paid=await payment(f,{amount:'1.00',description:'Ordinary supplier invoice '+status});client=paid.client;
+  const screeningId=randomUUID(),caseId=randomUUID();
+  await f.db.query('INSERT INTO fraud_screenings(id,transaction_id,detector_version,evidence_json,created_at) VALUES($1,$2,$3,$4,$5)',[screeningId,paid.id,'controlled-prior-review',{flagged:true,signals:[{code:'prior_investigation'}]},new Date(NOW)]);
+  await f.db.query('INSERT INTO fraud_cases(id,transaction_id,screening_id,status,assigned_to,outcome,review_reason,resolved_at,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$9)',[caseId,paid.id,screeningId,status,status==='open'?null:reviewer.id,status==='closed'?'inconclusive':null,status==='closed'?'PRIVATE-STAFF-REVIEW-NOTE':null,status==='closed'?new Date(NOW):null,new Date(NOW)]);
+ }
+ const owner=(await f.db.query("SELECT id,role,auth_version FROM users WHERE email='jamie@greenlink.demo'")).rows[0];
+ const before={money:await financial(f.db),cases:(await f.db.query('SELECT * FROM fraud_cases ORDER BY id')).rows};
+ const analysis=await marketRisk.analyze(f.db,owner,{context:contextFixture(NOW),now:()=>NOW});
+ assert.equal(analysis.transactions.length,3);assert.equal(analysis.reviewSummary.openPaymentCount,2);assert.equal(analysis.reviewSummary.closedPaymentCount,1);
+ assert.ok(analysis.transactions.every(t=>t.eligibleSignals.length===0),'An existing case is not a new market-based signal.');
+ assert.equal(analysis.items.filter(i=>i.detail?.includes('existing human investigation remains open')).length,2);
+ assert.ok(analysis.items.some(i=>i.detail?.includes('earlier human review is closed')));
+ assert.ok(analysis.items.filter(i=>i.amountCents).every(i=>i.date===new Date(NOW).toISOString()));
+ assert.doesNotMatch(JSON.stringify(analysis),/PRIVATE-STAFF-REVIEW-NOTE|assigned_to|screening_id/);
+ const response=await request(client,'Check my recent transactions for fraud using daily market trends');
+ assert.equal(response.status,200,JSON.stringify(response.data));assert.equal(response.data.narrativeWithheld,undefined);assert.match(response.data.reply,/investigations remain open/);
+ assert.deepEqual(response.data.steps.map(s=>s.tool),['analyze_market_transactions']);assert.ok(!response.data.items.some(i=>i.title==='Matching transactions'));
+ assert.equal(await financial(f.db),before.money);assert.deepEqual((await f.db.query('SELECT * FROM fraud_cases ORDER BY id')).rows,before.cases);
+});

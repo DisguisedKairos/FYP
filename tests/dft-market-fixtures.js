@@ -19,7 +19,7 @@ function marketModel(config={}){
    const selected=data.transactions.find(t=>t.eligibleSignals.length)||data.transactions[0];
    if(selected&&config.flag!==false&&(selected.eligibleSignals.length||config.signalCode))return {role:'assistant',content:'',tool_calls:[{function:{name:'flag_transaction_for_review',arguments:{transactionId:selected.id,signalCode:config.signalCode||selected.eligibleSignals[0].code}}}]};
   }
-  return {role:'assistant',content:last.tool_name==='flag_transaction_for_review'?(data.reviewRequested?'I have referred the suspicious payment for independent human review ['+evidenceId+'].':'A human already reviewed this case; this request did not reopen it ['+evidenceId+'].'):'Review the dated public context and verify payment purposes independently; this limited check cannot establish safety ['+evidenceId+'].'};
+  return {role:'assistant',content:last.tool_name==='flag_transaction_for_review'?(data.reviewRequested?'I have referred the suspicious payment for independent human review ['+evidenceId+'].':'A human already reviewed this case; this request did not reopen it ['+evidenceId+'].'):data.transactions?.some(t=>t.humanReview?.open)?'Existing human investigations remain open; finding no additional signal does not clear them ['+evidenceId+'].':'Review the dated public context and verify payment purposes independently; this limited check cannot establish safety ['+evidenceId+'].'};
  }};
 }
 module.exports={contextFixture,marketModel};

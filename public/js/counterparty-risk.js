@@ -1,7 +1,8 @@
 import {esc,fullDate,money} from './core.js';
 const levels={elevated:'Elevated review concern',review:'Review recommended',insufficient_evidence:'Insufficient evidence'};
 function dimension(label,value){
- return '<section class="counterparty-risk-dimension"><h4>'+esc(label)+': '+esc(levels[value.level])+'</h4><p>'+esc(value.summary)+'</p><details><summary>Basis for this assessment</summary><ul>'+value.reasons.map(r=>'<li>'+esc(r.description)+(r.source==='fictional_scenario'?' <strong>Fictional scenario input.</strong>':'')+'</li>').join('')+'</ul></details></section>';
+ const reasons=(Array.isArray(value.reasons)?value.reasons:[]).filter(r=>typeof r?.description==='string' && r.description.trim());
+ return '<section class="counterparty-risk-dimension"><h4>'+esc(label)+': '+esc(levels[value.level])+'</h4><p>'+esc(value.summary)+'</p>'+(reasons.length?'<p class="chart-note">Why this assessment</p><ul class="counterparty-risk-reasons">'+reasons.map(r=>'<li>'+esc(r.description)+(r.source==='fictional_scenario'?' <strong>Fictional scenario input.</strong>':'')+'</li>').join('')+'</ul>':'')+'</section>';
 }
 export function counterpartyRiskHtml(message){
  const report=message.counterpartyRisk;if(!report)return '';

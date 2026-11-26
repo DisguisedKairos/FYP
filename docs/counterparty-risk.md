@@ -63,3 +63,5 @@ Setup inserts deterministic, fictional historical receipts and adjusts only the 
 tests/dft-counterparty-risk.test.js covers seeding, exact monetary totals, ownership, CSRF, provider schemas, unsafe/invented assessments, model outages, current-session checks and escaped report rendering. The PostgreSQL permission suite denies runtime writes to the scenario table. Controlled adapters are tests only; live evaluation uses the configured OpenAI model. Manual cases SECTOR-01 through SECTOR-11 are in the [assistant checklist](assistant-testing.md).
 
 Assessment request metadata uses the existing admin-only AI audit with phase counterparty_risk_evaluation. Raw model reasoning is not stored.
+
+Assessment cards show the cited factual reasons directly under **Why this assessment**, without a collapsed section. Empty reason entries are omitted. These are the permitted source facts supporting the qualitative grade, not the model's hidden reasoning. Fictional or unverified company labels can correctly return insufficient evidence for reputation or financial reliability.

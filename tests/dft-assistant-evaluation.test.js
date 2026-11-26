@@ -230,3 +230,23 @@ test('Payment safety uncertainty accepts typographic negation without allowing a
  for(const reply of ["I can\u2019t guarantee any payment is fraud-free [E1].","I can\u2019t provide a live stock price or guarantee that a payment is fraud-free [E1].","That does not establish whether it is fraud-free [E1].","The check does not establish that this payment is fraud-free [E1]."])assert.equal(narrativeIssue(reply,null,options),null,reply);
  for(const reply of ["This payment is fraud-free [E1].","I can\u2019t guarantee any payment is fraud-free; I guarantee the next payment [E1].","The check does not establish whether it is fraud-free; this transaction is definitely safe [E1].","I cannot guarantee any payment is fraud-free until tomorrow [E1]."])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
 });
+
+
+test('A market fraud check already supplies the payment set; a separate requested receipt list still requires search',()=>{
+ const market=[{tool:'analyze_market_transactions',value:{transactions:[]}}];
+ assert.equal(relevanceIssue('Check my recent transactions for fraud using daily market trends',market),null);
+ assert.match(relevanceIssue('Check my recent transactions for fraud using daily market trends',[{tool:'get_daily_market_context'},{tool:'search_transactions'}]),/analyze_market_transactions/);
+ assert.match(relevanceIssue('Show my recent transactions and check them for fraud using daily market trends',market),/search_transactions/);
+ assert.equal(relevanceIssue('Show my recent transactions and check them for fraud using daily market trends',[...market,{tool:'search_transactions'}]),null);
+ assert.match(relevanceIssue('Show my recent transactions',[{tool:'get_daily_market_context'}]),/search_transactions/);
+});
+
+test('Market narratives must distinguish an existing open human investigation from no additional signal',()=>{
+ const results=[{tool:'analyze_market_transactions',value:{transactions:[{humanReview:{status:'in_review',open:true},eligibleSignals:[]}]}}];
+ const options={results,evidence,requireCitations:true};
+ assert.equal(narrativeIssue('Existing human investigations remain open; no additional signal does not clear them [E1].',null,options),null);
+ assert.equal(narrativeIssue('The fraud case remains open; the market check cannot establish safety [E1].',null,options),null);
+ assert.match(narrativeIssue('No open human investigations were found [E1].',null,options),/contradicts/);
+ assert.match(narrativeIssue('No payment-specific signal qualified for human review; safety is not established [E1].',null,options),/existing human investigation/);
+ assert.equal(narrativeIssue('The earlier human review is closed; this check cannot establish safety [E1].',null,{...options,results:[{tool:'analyze_market_transactions',value:{transactions:[{humanReview:{status:'closed',open:false}}]}}]}),null);
+});

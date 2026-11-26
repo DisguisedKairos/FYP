@@ -39,6 +39,12 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const staffActionClaim = /\b(?:I|we)\s+(?:(?:have|successfully|just|now|already)\s+)*(?:notified|alerted|contacted|emailed|messaged)\b|\b(?:case|ticket|investigation|review request)\s+(?:(?:has|have|been|was|is|now|successfully|already)\s+){0,5}(?:created|opened|queued|submitted)\b|\b(?:staff|bank|reviewers?|compliance team)\s+(?:(?:has|have|been|was|were|is|are|now|successfully|already)\s+){0,5}(?:notified|alerted|contacted)\b/i.test(staffClaims);
   if (staffActionClaim && !results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested)) return 'A staff notification or investigation was claimed without a successful permitted review receipt.';
   if(/\b(?:I|we)\s+(?:(?:have|successfully|just|now)\s+)*(?:saved|bookmarked)\b|\b(?:dashboard|view)\s+(?:(?:has|have|been|was|is|now|successfully|privately)\s+){0,5}(?:saved|bookmarked)\b|^\s*(?:saved|bookmarked)\b/i.test(plain) && !results.some(r=>r.tool==='save_company_dashboard' && r.value.saved))return 'A saved dashboard was claimed without a successful save receipt.';
+  const openMarketReview=results.some(r=>r.tool==='analyze_market_transactions' && r.value?.transactions?.some(t=>t.humanReview?.open));
+  if(openMarketReview){
+    if(/\bno\s+(?:open|existing|active|ongoing|pending|outstanding)\s+(?:(?:human|payment|fraud|bank)\s+){0,2}(?:reviews?|investigations?|cases?)\b|\ball\s+(?:earlier\s+|existing\s+)?(?:reviews?|investigations?|cases?)\s+(?:are|have been)\s+closed\b/i.test(plain))return 'The narrative contradicts an existing open human investigation.';
+    const reviewReceipt=results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested);
+    if(!reviewReceipt && !/\b(?:existing|open|ongoing|already|awaiting|under|pending|remain(?:s|ing)?)\b.{0,80}\b(?:reviews?|reviewers?|investigat\w*|cases?)\b|\b(?:reviews?|investigations?|cases?)\b.{0,60}\b(?:open|ongoing|pending|active)\b/i.test(plain))return 'Mention that the retrieved existing human investigation remains open; no additional signal does not clear it.';
+  }
   const assessments = [report, ...results.map(r => r.value)].filter(Boolean).map(r => r.assessment).filter(Boolean);
   if (assessments.some(a => a.decision === 'allow') && /\b(?:high[ -]risk|flagged|blocked|held|rejected)\b/i.test(plain)) return 'The narrative conflicts with the recorded allow decision.';
   if (assessments.some(a => ['review', 'block'].includes(a.decision)) && /\b(?:approved|allowed|cleared|safe to (?:pay|send))\b/i.test(plain)) return 'The narrative conflicts with the recorded review or block decision.';
@@ -76,6 +82,8 @@ function relevanceIssue(message, results) {
   const covered=coverage && typeof coverage.available==='boolean' && (coverage.available===false || coverage.occurrenceCount>0 || emptyScheduleCoverage) && (requestedDays===undefined || coverage.days===requestedDays);
   const currentPayment=has(['check_payment_funds']) && !/\b(?:scheduled|upcoming|future|projection|liquidity|next|weekly|monthly)\b/i.test(message);
   if(require('../dashboard-views').saveIntent(message) && (/\b(?:dashboard|view|summary)\b/i.test(message) || require('../dashboard-views').followup(message)) && !has(['save_company_dashboard']) && !results.some(r=>r.tool==='get_company_activity' && r.value?.status && r.value.status!=='ready'))return 'The requested dashboard was not saved.';
+  const fraudCheck=require('../market-risk').fraudIntent(message);
+  if(fraudCheck && /\b(?:fraud(?:ulent)?|scams?|suspicious)\b/i.test(message) && /\b(?:market|daily news|scam alerts?|exchange rates?|forex)\b/i.test(message) && !has(['analyze_market_transactions']))return 'Call analyze_market_transactions to check the permitted payments; public context and a receipt list alone do not analyze them for fraud.';
   if (/\b(?:market|daily news|scam alerts?|exchange rates?|forex)\b/i.test(message) && !has(['get_daily_market_context','analyze_market_transactions','get_market_insights','research_public_company','scan_counterparty_news'])) return 'The requested dated market or scam context was not retrieved.';
   if (/\btransaction trends?\b|\bmonthly trends?\b/i.test(message) && !has(['get_company_activity','open_saved_dashboard','get_business_profile']))return 'The requested private transaction trends were not retrieved.';
   if (/\b(?:insufficient funds|low (?:on )?(?:funds|balance)|enough (?:money|funds)|sufficient funds)\b/i.test(message) && !has(['get_accounts','project_liquidity','prepare_payment_draft','check_payment_funds','get_finance_report'])) return 'The requested funding evidence was not retrieved.';
@@ -85,9 +93,11 @@ function relevanceIssue(message, results) {
   if (/\b(?:inflow|outflow)\b/i.test(message) && !has(['get_finance_report','get_company_activity','open_saved_dashboard']) && !planned)return 'The requested completed inflow and outflow were not retrieved.';
   if (/\bcash.?flow\b/i.test(financialMessage) && !has(['project_liquidity','get_company_activity','open_saved_dashboard','get_finance_report','check_payment_funds'])) return 'The requested cash flow evidence was not retrieved.';
   if (!DRAFT_INTENT.test(message) && /\b(?:scheduled|upcoming)\b/i.test(message) && !has(['get_schedules', 'project_liquidity']) && !covered && !planned) return 'The requested scheduled-payment evidence was not retrieved.';
+  const marketFraudCheck=fraudCheck && has(['analyze_market_transactions']);
+  const explicitReceiptList=/\b(?:show|list|retrieve|get)\b.*\btransactions?\b|\b(?:also|and)\s+(?:search|find)\b.*\btransactions?\b|\b(?:receipts?|transaction history)\b|\btransactions?\b.*\b(?:from|between|on|last|yesterday|today)\b/i.test(message);
   const receiptList=/\b(?:history|recent transactions?|find.*transactions?|search.*transactions?|(?:show|list|retrieve|get)\b.*\btransactions?|transactions?\b.*\b(?:from|between|on|last|yesterday|today))\b/i.test(message);
   const summaryRequest=/\b(?:dashboard|chart|trends?|inflow|outflow|cash.?flow|summari[sz]e|summary|finance|financial|activity)\b/i.test(message);
-  if (receiptList && !has(summaryRequest?['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report']:['search_transactions'])) return 'Call search_transactions for the requested owned receipt list; an aggregate activity dashboard does not replace transaction history.';
+  if (receiptList && (!marketFraudCheck || explicitReceiptList) && !has(summaryRequest?['search_transactions','get_company_activity','open_saved_dashboard','get_finance_report']:['search_transactions'])) return 'Call search_transactions for the requested owned receipt list; an aggregate activity dashboard does not replace transaction history.';
   return null;
 }
 module.exports = { DRAFT_INTENT, references, narrativeIssue, relevanceIssue };

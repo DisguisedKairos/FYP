@@ -10,7 +10,7 @@ function model(){return {mode:'openai',model:'controlled-insights-browser',inspe
  return {role:'assistant',content:(calls.some(c=>c.tool_name==='save_company_dashboard')?'Your dashboard is saved privately':'Review the retrieved context and its stated scope')+' [E'+calls.length+'].'};
 }};}
 async function login(page,email='alex@greenlink.demo'){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=1280){const f=await fixture(t,{agentModel:model()}),page=await launchChrome(t,{width,height:1000,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page);return {f,page};}
+async function open(t,width=1280,{email='alex@greenlink.demo',...options}={}){const f=await fixture(t,{agentModel:model(),...options}),page=await launchChrome(t,{width,height:1000,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page,email);return {f,page};}
 async function ask(page,value){if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',value);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+'&&!document.querySelector("#assistant-form button[type=submit]").disabled');}
 test('A chart can be added in chat, customized on its own page and refreshed weekly without financial actions',async t=>{
  const {f,page}=await open(t);
@@ -100,4 +100,33 @@ test('Customized charts page through every company and open matching transaction
  await page.click(root+' [data-custom-command="prev"]');
  await page.waitFor('document.querySelector('+JSON.stringify(root+' [data-custom-paging]')+')?.textContent.includes("Page 1")');
  assert.deepEqual(page.errors,[]);
+});
+
+
+test('Company-risk reasons are visible without expanding sections and never render empty bullets',async t=>{
+ const risk=require('../banking/counterparty-risk'),grader=model();
+ grader.chat=async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'The recorded label does not verify company reliability; use independent identity checks [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'assess_counterparty_risk',arguments:{}}}]};
+ grader.assessCounterparties=async input=>risk.validateEvaluation({tool_calls:[{function:{name:'submit_counterparty_assessment',arguments:{assessments:input.companies.map(c=>{
+  const dimension=d=>{const facts=c.facts.filter(f=>f.impacts.includes(d)),fact=facts.find(f=>f.severity==='elevated')||facts.find(f=>f.severity==='review')||facts[0];return {level:fact.severity==='context'?'insufficient_evidence':fact.severity,evidenceIds:[fact.id],summary:'The supplied records require independent verification and do not establish safety.'};};
+  return {companyKey:c.companyKey,reputation:dimension('reputation'),financial:dimension('financial'),checks:['verify_legal_identity']};
+ })}}}]},input);
+ const {f,page}=await open(t,1280,{email:'jamie@greenlink.demo',agentModel:grader}),client=f.client();await client.login('jamie@greenlink.demo');
+ const source=(await client.dashboard()).accounts[0];assert.equal((await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'VISIBLE-RISK-REASONS',amount:'1.00',requestId:require('node:crypto').randomUUID()}})).status,200);
+ await ask(page,'Evaluate the reputation and financial risks of interacting with companies recorded in my transactions');
+ await page.waitFor('!!document.querySelector(".counterparty-risk-reasons li")');
+ const reasons=await page.evaluate('Array.from(document.querySelectorAll(".from-assistant:last-child .counterparty-risk-reasons li")).map(el=>({text:el.innerText.trim(),visible:el.getClientRects().length>0,hiddenInDetails:!!el.closest("details:not([open])")}))');
+ assert.ok(reasons.length>=2);assert.ok(reasons.every(r=>r.text&&r.visible&&!r.hiddenInDetails));
+ assert.equal(await page.evaluate('!!document.querySelector(".from-assistant:last-child [data-ai-audit-id]")'),false);assert.deepEqual(page.errors,[]);
+});
+
+test('Market fraud cards show an existing open review without an unnecessary history list',async t=>{
+ const {contextFixture,marketModel}=require('./dft-market-fixtures'),instant=Date.parse('2026-11-26T09:30:00Z'),{randomUUID}=require('node:crypto');
+ const {f,page}=await open(t,1280,{email:'jamie@greenlink.demo',now:()=>instant,agentModel:marketModel({flag:false}),marketContext:{get:async()=>contextFixture(instant)}}),client=f.client();await client.login('jamie@greenlink.demo');
+ const source=(await client.dashboard()).accounts[0],paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'EXISTING-REVIEW-CARD',amount:'1.00',requestId:randomUUID()}});assert.equal(paid.status,200);
+ const screeningId=randomUUID();await f.db.query('INSERT INTO fraud_screenings(id,transaction_id,detector_version,evidence_json,created_at) VALUES($1,$2,$3,$4,$5)',[screeningId,paid.data.transaction.id,'controlled-browser-existing-review',{flagged:true,signals:[{code:'prior_investigation'}]},new Date(instant)]);
+ await f.db.query('INSERT INTO fraud_cases(id,transaction_id,screening_id,created_at,updated_at) VALUES($1,$2,$3,$4,$4)',[randomUUID(),paid.data.transaction.id,screeningId,new Date(instant)]);
+ await ask(page,'Check my recent transactions for fraud using daily market trends');
+ const reply=await page.evaluate('document.querySelector(".from-assistant:last-child").innerText');
+ assert.match(reply,/Existing human investigations remain open/);assert.match(reply,/An existing human investigation remains open/);assert.match(reply,/No additional supported signal/);assert.match(reply,/26 Nov SGT/);
+ assert.doesNotMatch(reply,/Matching transactions|View matching transactions/);assert.deepEqual(page.errors,[]);
 });

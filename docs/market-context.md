@@ -2,6 +2,8 @@
 
 Ask GLDB Assistant **Check my transactions for fraud using daily market trends**. It can read the latest five permitted outgoing payments, compare recorded pre-payment patterns with recent official scam topics, and request an independent human investigation for supported concerns. A specific outgoing transaction ID can also be supplied. Customers can inspect only their own payments; bank administrators retain their existing bank-wide access.
 
+The check also reads existing human-investigation status for those payments. Open and in-progress reviews remain visible even when no additional signal qualifies; closed reviews are shown separately. This status does not become a new signal or create a case. Payment dates identify the checked records. A fraud-check question alone does not require a separate full transaction-history search; an explicitly requested receipt list still does.
+
 The configured OpenAI model chooses the permitted tools and whether to request review. Fixed checks constrain which payment-specific signals qualify; they are eligibility controls, not a simulated AI risk model. The existing Python/OpenAI numeric screening engine and financial rules remain authoritative for payment scoring and authorization.
 
 ## Official public sources
