@@ -59,9 +59,9 @@ The original native credentials under `data/testing/` and legacy Neon feature-to
 
 ## Industry business demo accounts
 
-Eight fictional businesses have separate customer logins, operating/reserve accounts and monthly recorded activity across logistics, technology, manufacturing, wholesale trade, hospitality, construction, healthcare and energy. See the [login table and walkthrough](data/testing/neon/README.md#industry-business-demo-accounts).
+Eight industry businesses have separate customer logins, operating/reserve accounts and monthly recorded activity across logistics, technology, manufacturing, wholesale trade, hospitality, construction, healthcare and energy. See the [login table and walkthrough](data/testing/neon/README.md#industry-business-demo-accounts).
 
-In **Business profile > Customize industry news**, choose the company's operating markets, activities and priorities. Then click **Ask for an industry briefing**. The assistant retrieves real industry news, explains its conditional relevance to that business and offers sector-specific next checks with source links. Saved preferences are private to that business. Fictional company names are excluded from industry search queries, and news cannot authorize payments or create staff cases.
+In **Business profile > Customize industry news**, choose the company's operating markets, activities and priorities. Then click **Ask for an industry briefing**. The assistant retrieves real industry news, explains its conditional relevance to that business and offers sector-specific next checks with source links. Saved preferences are private to that business. Private company details are excluded from industry search queries, and news cannot authorize payments or create staff cases.
 
 Prepare these optional accounts with `npm run db:migrate` followed by `npm run demo:industries`. Reruns preserve changed passwords, preferences and banking records. Details: [company-specific briefings](docs/assistant-insights.md#company-specific-industry-briefings).
 
@@ -191,7 +191,7 @@ Ask **Show current news for my industry, explain the business implications and a
 
 ### Sector company risk examples
 
-The dedicated sector login is retired in the hosted roster. In an owner-controlled isolated sector fixture, sign in with that fixture's current credentials. Ask **Evaluate reputation and money risk of interacting with my demo companies across sectors**. The dedicated portfolio contains eight fictional sectors with scenario flags and historical receipts; OpenAI generates separate reputation/financial grades and the database supplies exact exposure totals. Fictional companies are excluded from live web research. Setup: `npm run db:migrate` then `npm run demo:companies`. See [company names, scenarios and safeguards](docs/counterparty-risk.md). Existing changed credentials remain unchanged on rerun.
+The dedicated sector login is retired in the hosted roster. In an owner-controlled isolated sector fixture, sign in with that fixture's current credentials. Ask **Evaluate reputation and money risk of interacting with my demo companies across sectors**. The dedicated portfolio contains eight industry sectors with scenario flags and historical receipts; OpenAI generates separate reputation/financial grades and the database supplies exact exposure totals. Recorded names can be researched on demand; a name match does not verify legal identity. Setup: `npm run db:migrate` then `npm run demo:companies`. See [company names, scenarios and safeguards](docs/counterparty-risk.md). Existing changed credentials remain unchanged on rerun.
 
 
 testing for MR

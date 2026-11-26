@@ -23,7 +23,7 @@ for(const file of ['banking/market-context.js','banking/market-risk.js','tests/d
 for(const name of ['banking/ai-audit.js','public/js/ai-audit.js','tests/dft-ai-audit.test.js'])REQUIRED_FILES.add(name);
 for(const file of ['banking/company-activity.js','public/js/company-charts.js','public/js/assistant.js','public/js/assistant-dashboards.js','tests/dft-company-activity.test.js','tests/dft-assistant-dashboards-browser.js','docs/company-activity.md'])REQUIRED_FILES.add(file);
 for(const file of ['banking/dashboard-views.js','database/migrations/010_saved_dashboard_views.sql','tests/dft-dashboard-views.test.js'])REQUIRED_FILES.add(file);
-for(const file of ['banking/business-advisory.js','banking/industry-profiles.js','database/migrations/013_business_advisory_profiles.sql','public/js/business-advisory.js','scripts/seed-industry-businesses.js','tests/dft-industry-businesses.test.js'])REQUIRED_FILES.add(file);
+for(const file of ['banking/business-advisory.js','banking/industry-profiles.js','database/migrations/013_business_advisory_profiles.sql','database/migrations/014_record_labels.sql','database/migrations/015_legacy_funding_labels.sql','public/js/business-advisory.js','scripts/seed-industry-businesses.js','tests/dft-industry-businesses.test.js'])REQUIRED_FILES.add(file);
 const MAX_FILES = 10000;
 const MAX_ENTRY_BYTES = 16 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 32 * 1024 * 1024;

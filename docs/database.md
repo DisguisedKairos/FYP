@@ -143,4 +143,8 @@ The provisioning tests verify fresh setup, repeat setup with retained data, rest
 
 Migration 007 adds private agent run reports and append-only tool evidence. It changes no existing financial rows. See [banking agents](banking-agents.md) for retention and permissions.
 
-Migration 012 adds operator-maintained fictional counterparty scenario inputs. Runtime has SELECT only on demo_counterparties. See [sector portfolio setup](counterparty-risk.md).
+Migration 012 adds operator-maintained counterparty case inputs. Runtime has SELECT only on demo_counterparties. See [sector portfolio setup](counterparty-risk.md).
+
+Migration 014 normalizes legacy presentation wording in operator-provisioned transaction descriptions, company case inputs and unverified address labels. It stores the original text in new audit entries. Balances, transaction amounts, settlement timestamps, company identities, credentials and prior audit entries are retained. It does not create payments or verify company identities; rerunning the label update makes no further changes.
+
+Migration 015 applies the same audited description cleanup to older operator-owned funding receipts. Original receipt references stay unchanged.

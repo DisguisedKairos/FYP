@@ -14,7 +14,7 @@ Updated 26 November 2026 (Singapore). **55 assigned cases. All results start as 
 
 **Browser / viewport:** _fill in_
 
-**Accounts:** Business = logistics-business@greenlink.demo; Recipient = technology-business@greenlink.demo; Staff/Reviewer = reviewer-tester@greenlink.demo. Sector means the owner-prepared fictional portfolio in an isolated database. Maker/reviewer separation, Empty, Pending, Rejected, Profile and MFA cases also require isolated fixtures; their old hosted logins are retired.
+**Accounts:** Business = logistics-business@greenlink.demo; Recipient = technology-business@greenlink.demo; Staff/Reviewer = reviewer-tester@greenlink.demo. Sector means the owner-prepared case portfolio in an isolated database. Maker/reviewer separation, Empty, Pending, Rejected, Profile and MFA cases also require isolated fixtures; their old hosted logins are retired.
 
 **Current setup:** The hosted app has eight industry customer logins and one administrator. Do not try retired feature logins. Ask the owner for an isolated slot for fixture-only cases and record Blocked until it is available. Synthetic sector flags are scenario inputs, not real allegations or sanctions findings. Only chat questions go into the assistant; UI instructions are performed in the named screens.
 
@@ -808,7 +808,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 > Evaluate reputation and money risk of interacting with my demo companies across sectors.
 
-**Expected:** Eight fictional sector companies appear with separate configured-AI reputation/financial grades, case basis and independent checks; demo provenance remains visible.
+**Expected:** Eight sector companies appear with separate configured-AI reputation/financial grades, case basis and independent checks; demo provenance remains visible.
 
 **Status:** Not run
 
@@ -880,7 +880,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 > Scan my counterparties for sanctions and news.
 
-**Expected:** Fictional names are excluded from live public searches with a clear explanation; no invented public news or real sanctions listing.
+**Expected:** Recorded names are searched within the owned and bounded scope; missing coverage stays explicit, with no invented public news or confirmed sanctions identity.
 
 **Status:** Not run
 
@@ -928,7 +928,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 **Role:** Sector (isolated fixture customer) | **Effect:** Owner setup
 
-**Setup:** Sector login; owner-prepared permitted payment with an open review plus fictional scenario input
+**Setup:** Sector login; owner-prepared permitted payment with an open review plus unverified scenario input
 
 **Question or steps:**
 

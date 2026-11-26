@@ -45,7 +45,7 @@ Updated 26 November 2026. Use the [current nine-login Neon guide](../data/testin
 
 A read-only check of the current database confirmed logistics operating account **1099100101**, logistics reserve **1099100102**, and technology recipient **1099100201**. Confirm these in Business accounts before presenting. The former `108880...` feature-tour accounts are not the current presentation setup. Other industry logins must use their own accounts and recorded companies.
 
-Copy only the question into Ask GLDB. Use a fresh conversation for unrelated questions; keep the save-chart follow-up in the same conversation as the chart. Current hosted customer records contain fictional company labels, so they cannot establish real-world company reputation or sanctions status. Public-company research below is a separate lookup, not a claim that the customer has paid that company.
+Copy only the question into Ask GLDB. Use a fresh conversation for unrelated questions; keep the save-chart follow-up in the same conversation as the chart. Current hosted customer records contain unverified company labels, so they cannot establish real-world company reputation or sanctions status. Public-company research below is a separate lookup, not a claim that the customer has paid that company.
 
 | Feature | Customer question | What to show |
 | --- | --- | --- |
@@ -70,7 +70,7 @@ Copy only the question into Ask GLDB. Use a fresh conversation for unrelated que
 | Counterparty interaction risk | Evaluate reputation and financial risk of interacting with companies recorded in my transactions. | Owned cash-flow exposure, supported reasons and unknowns. Missing reputation evidence is not clearance or a tool failure. |
 | Reconciliation | Check my accounts for reconciliation exceptions. | Owned discrepancies or an explicit no-exception result; no balance repair. |
 
-For the sanctions/news scan, ask **Scan news for companies this account deals with, including sanctions and compliance issues.** This is conditional on having eligible real-company labels in recent owned receipts. The current logistics account has fictional counterparty labels, which are excluded from public research. Show its coverage explanation, then use the industry-news or DBS public-profile question to demonstrate live public research. Do not invent transactions or claim that missing sanctions evidence clears a company.
+For the sanctions/news scan, ask **Scan news for companies this account deals with, including sanctions and compliance issues.** The assistant selects up to five safe recorded company names from recent owned external receipts, including the current logistics counterparties. Names are searched as recorded; a receipt or similarly named search result does not verify legal identity. Missing public coverage remains explicit and does not clear a company. Industry news and named public-company profiles remain available separately.
 
 For payment-form demonstrations, the current logistics login can ask these complete drafts. Inspect the form, then cancel unless you intend to authorize an actual instruction:
 
@@ -143,4 +143,4 @@ The scan_counterparty_news tool selects up to five owned recent external counter
 
 For current news in the operator's industry, get_market_insights accepts the industry topic and uses only a mapped generic sector from the owned profile. The analyze_news_insights tool analyzes the sourced public summaries retrieved in the same run, returning business implications, independent checks and chat-only advisory flags. It cannot create payment flags or staff cases. See [news advice, source limits and example questions](assistant-insights.md#industry-news-advice-and-advisory-flags).
 
-Migration 012 brings the schema to **31 tables and twelve migrations**, adding fictional scenario inputs. The assess_counterparty_risk tool generates separate reputation/financial interaction grades with the configured OpenAI model and owned receipt totals. It cannot clear companies or execute payments. See [sector cases, demo login and prompts](counterparty-risk.md).
+Migration 012 brings the schema to **31 tables and twelve migrations**, adding unverified scenario inputs. The assess_counterparty_risk tool generates separate reputation/financial interaction grades with the configured OpenAI model and owned receipt totals. It cannot clear companies or execute payments. See [sector cases, demo login and prompts](counterparty-risk.md).

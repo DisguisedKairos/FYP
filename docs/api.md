@@ -100,7 +100,7 @@ Creation also accepts presentation/refreshCadence. Definitions support period ki
 
 The assistant also accepts ordinary counterparty-news/sanctions questions through POST /api/agents/assistant. scan_counterparty_news has only an optional exact company label from the message; the server validates it against owned recent completed receipts and otherwise selects at most five names. Its report returns counterpartyScan coverage/limits/status and publicResearch source cards. It is on-demand research, not a sanctions clearance or financial action. No new endpoint, migration or credential is required.
 
-For reputation/financial interaction risk, POST /api/agents/assistant may use assess_counterparty_risk with an optional exact owned company name from the question. counterpartyRisk contains current source scope, omitted-company count, separate qualitative model grades, supported explanations/checks and authoritative cash-flow exposure. Fictional inputs stay labelled, runtime cannot edit them, and no financial action is available. See [sector risk workflow](counterparty-risk.md).
+For reputation/financial interaction risk, POST /api/agents/assistant may use assess_counterparty_risk with an optional exact owned company name from the question. counterpartyRisk contains current source scope, omitted-company count, separate qualitative model grades, supported explanations/checks and authoritative cash-flow exposure. Operator-entered case inputs retain their provenance, runtime cannot edit them, and no financial action is available. See [sector risk workflow](counterparty-risk.md).
 
 
 ## Company industry news preferences

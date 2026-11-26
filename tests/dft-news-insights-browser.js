@@ -59,5 +59,5 @@ test('Missing public-company evidence shows a coverage explanation without inven
  await page.waitFor('!!document.querySelector(".news-insights-unavailable")&&!document.querySelector("#assistant-form button[type=submit]").disabled');
  const text=await page.evaluate('document.querySelector(".news-insights-unavailable").textContent');assert.match(text,/No sourced news advice available/);assert.match(text,/No news-based flags were generated/);assert.match(text,/does not establish company safety/);
  assert.equal(await page.evaluate('document.querySelectorAll("[data-news-flag]").length'),0);assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
- assert.equal(searches,0);assert.equal(assessments,0);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
+ assert.equal(searches,2);assert.equal(assessments,0);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
 });

@@ -16,7 +16,7 @@ async function seedSectorCompanies(db,{now=Date.now}={}){
   if(!created&&!(await client.query("SELECT 1 FROM audit_log WHERE target_user_id=$1 AND event_type='operator.sector_demo_seeded' AND metadata->>'fixture'=$2 LIMIT 1",[user.id,FIXTURE])).rowCount)throw new Error('The demonstration email is already used by an unrelated identity; no records were changed.');
   if(user.role!=='customer')throw new Error('The sector-demo identity must remain a business operator.');
   let business=(await client.query('SELECT * FROM businesses WHERE primary_user_id=$1',[user.id])).rows[0];
-  if(!business&&created)business=await businesses.create(client,user,{legalName:'GLDB Demo Sector Portfolio Pte. Ltd.',registrationNumber:'GLDB-DEMO-SECTOR-PORTFOLIO',country:'SG',legalForm:'company',industry:'Wholesale business services',registeredAddress:'1 Fictional Demo Lane, Singapore 000001'},{now:()=>now()-100*86400000,status:'approved'});
+  if(!business&&created)business=await businesses.create(client,user,{legalName:'GLDB Demo Sector Portfolio Pte. Ltd.',registrationNumber:'GLDB-DEMO-SECTOR-PORTFOLIO',country:'SG',legalForm:'company',industry:'Wholesale business services',registeredAddress:'Address verification pending'},{now:()=>now()-100*86400000,status:'approved'});
   if(!business||business.registration_number&&business.registration_number!=='GLDB-DEMO-SECTOR-PORTFOLIO'||business.registrationNumber&&business.registrationNumber!=='GLDB-DEMO-SECTOR-PORTFOLIO')throw new Error('The sector-demo email is already used by another business; no records were changed.');
   if(business.status!=='approved')throw new Error('The demonstration business is no longer approved; operator review is required.');
   let account=(await client.query('SELECT * FROM accounts WHERE number=$1 FOR UPDATE',[NUMBER])).rows[0];
@@ -27,20 +27,20 @@ async function seedSectorCompanies(db,{now=Date.now}={}){
   async function receipt(suffix,amount,company,days,opening=false){
    const id=idFor(suffix),prior=(await client.query('SELECT account_id,amount_cents,counterparty FROM transactions WHERE id=$1',[id])).rows[0];
    if(prior){if(String(prior.account_id)!==String(account.id)||Number(prior.amount_cents)!==amount||prior.counterparty!==company)throw new Error('A sector-demo receipt identifier has different existing data.');return;}
-   await client.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq,payee) VALUES($1,$2,$3,$4,$5,$6,'completed',$7,false,$8,$8,$8,nextval('settlement_sequence'),$6)",[id,account.id,amount>0?'credit':'transfer',opening?'Fictional demonstration opening funds':'Fictional sector portfolio receipt',amount,company,opening?'DEMO-OPENING':'SECTOR-DEMO-'+suffix,date(days)]);
+   await client.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,reference,internal,created_at,requested_at,completed_at,settlement_seq,payee) VALUES($1,$2,$3,$4,$5,$6,'completed',$7,false,$8,$8,$8,nextval('settlement_sequence'),$6)",[id,account.id,amount>0?'credit':'transfer',opening?'Opening funds':'Counterparty receipt',amount,company,opening?'DEMO-OPENING':'SECTOR-DEMO-'+suffix,date(days)]);
    inserted++;delta+=amount;
   }
   await receipt('opening',25000000,'Demo opening funding',100,true);
-  for(const sample of cases){
-   const fixtureKey=FIXTURE+':'+sample.key,prior=(await client.query('SELECT * FROM demo_counterparties WHERE user_id=$1 AND company_key=$2',[user.id,key(sample.name)])).rows[0];
+  for(const businessCase of cases){
+   const fixtureKey=FIXTURE+':'+businessCase.key,prior=(await client.query('SELECT * FROM demo_counterparties WHERE user_id=$1 AND company_key=$2',[user.id,key(businessCase.name)])).rows[0];
    if(prior&&prior.fixture_key!==fixtureKey)throw new Error('An unrelated counterparty profile already uses this demo label.');
-   if(!prior){await client.query('INSERT INTO demo_counterparties(id,user_id,company,company_key,sector,flags_json,receipt_ids_json,fixture_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[idFor('profile:'+sample.key),user.id,sample.name,key(sample.name),sample.sector,JSON.stringify(sample.flags),JSON.stringify([idFor(sample.key+':paid-recent'),idFor(sample.key+':paid-earlier'),...(sample.receivedCents?[idFor(sample.key+':received')]:[])]),fixtureKey,date(100)]);newProfiles++;}
-   await receipt(sample.key+':paid-recent',-Math.floor(sample.paidCents/2),sample.name,3);
-   await receipt(sample.key+':paid-earlier',-(sample.paidCents-Math.floor(sample.paidCents/2)),sample.name,35);
-   if(sample.receivedCents)await receipt(sample.key+':received',sample.receivedCents,sample.name,7);
+   if(!prior){await client.query('INSERT INTO demo_counterparties(id,user_id,company,company_key,sector,flags_json,receipt_ids_json,fixture_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',[idFor('profile:'+businessCase.key),user.id,businessCase.name,key(businessCase.name),businessCase.sector,JSON.stringify(businessCase.flags),JSON.stringify([idFor(businessCase.key+':paid-recent'),idFor(businessCase.key+':paid-earlier'),...(businessCase.receivedCents?[idFor(businessCase.key+':received')]:[])]),fixtureKey,date(100)]);newProfiles++;}
+   await receipt(businessCase.key+':paid-recent',-Math.floor(businessCase.paidCents/2),businessCase.name,3);
+   await receipt(businessCase.key+':paid-earlier',-(businessCase.paidCents-Math.floor(businessCase.paidCents/2)),businessCase.name,35);
+   if(businessCase.receivedCents)await receipt(businessCase.key+':received',businessCase.receivedCents,businessCase.name,7);
   }
   if(delta)await client.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1',[account.id,delta]);
-  if(created||inserted||newProfiles)await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata,created_at) VALUES($1,$1,'operator.sector_demo_seeded',$2,$3)",[user.id,{fixture:FIXTURE,sampleFunds:true,fictionalCompanies:true,newProfiles,newReceipts:inserted},date(0)]);
+  if(created||inserted||newProfiles)await client.query("INSERT INTO audit_log(actor_id,target_user_id,event_type,metadata,created_at) VALUES($1,$1,'operator.sector_demo_seeded',$2,$3)",[user.id,{fixture:FIXTURE,generatedRecords:true,newProfiles,newReceipts:inserted},date(0)]);
   return {fixture:FIXTURE,email:EMAIL,companies:cases.length,newProfiles,newReceipts:inserted,existingCredentialsPreserved:!created};
  });
 }

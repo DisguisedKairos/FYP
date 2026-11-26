@@ -14,9 +14,9 @@ function reply(input){
  return {role:'assistant',tool_calls:[{function:{name:'submit_counterparty_assessment',arguments:{assessments:input.companies.map(c=>({companyKey:c.companyKey,reputation:dimension(c,'reputation'),financial:dimension(c,'financial'),checks:['verify_legal_identity','consult_compliance']}))}}}],modelResponse:{provider:'openai',model:MODEL,responseId:'resp_counterparty_risk'}};
 }
 const controlled=()=>({mode:'openai',model:MODEL,inspect:async()=>({available:true}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'Review the scenario distinctions and recorded exposure before arranging independent checks [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'assess_counterparty_risk',arguments:{}}}]},assessCounterparties:async input=>risk.validateEvaluation(reply(input),input)});
-const simpleInput=()=>({checkedAt:new Date(0).toISOString(),period:{days:90},totalCompanyCount:1,omittedCompanyCount:0,scope:'Owned scope',companies:[{companyKey:'C1',company:'GLDB Demo Example Pte. Ltd.',sector:'Technology',demo:true,exposure:{paidCents:10000,receivedCents:0,netOutflowCents:10000,pendingOutgoingCents:0,completedPaidUnderReviewCents:0,completedCount:1,openReviewCount:0},facts:[{id:'C1-F0',description:'Fictional case; identity remains unverified.',severity:'context',impacts:['reputation','financial'],source:'fictional_scenario'}]}]});
+const simpleInput=()=>({checkedAt:new Date(0).toISOString(),period:{days:90},totalCompanyCount:1,omittedCompanyCount:0,scope:'Owned scope',companies:[{companyKey:'C1',company:'GLDB Demo Example Pte. Ltd.',sector:'Technology',demo:true,exposure:{paidCents:10000,receivedCents:0,netOutflowCents:10000,pendingOutgoingCents:0,completedPaidUnderReviewCents:0,completedCount:1,openReviewCount:0},facts:[{id:'C1-F0',description:'Operator case; identity remains unverified.',severity:'context',impacts:['reputation','financial'],source:'operator_case_input'}]}]});
 async function financial(db){return {accounts:(await db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,transactions:(await db.query('SELECT id,amount_cents,status FROM transactions ORDER BY id')).rows,rules:(await db.query('SELECT * FROM fraud_rules ORDER BY id')).rows,cases:(await db.query('SELECT * FROM fraud_cases ORDER BY id')).rows};}
-test('Sector fixtures are distinct fictional inputs across different industries without stored AI verdicts',()=>{
+test('Sector fixtures are distinct case inputs across different industries without stored AI verdicts',()=>{
  assert.equal(cases.length,8);assert.equal(new Set(cases.map(c=>c.sector)).size,8);
  for(const c of cases){assert.match(c.name,/^GLDB Demo /);assert.ok(Number.isSafeInteger(c.paidCents));assert.doesNotMatch(JSON.stringify(c),/"(?:riskScore|probability|assessment|verdict)"\s*:/);}
  assert.ok(cases.some(c=>!c.flags.length));assert.ok(cases.some(c=>c.flags.some(f=>f.code==='possible_name_match')));
@@ -49,7 +49,7 @@ test('Configured OpenAI risk evaluation uses only a strict private function sche
  }});
  assert.equal((await model.assessCounterparties(input)).status,'completed');assert.equal(captured.store,false);assert.equal(captured.tool_choice,'required');assert.equal(captured.max_output_tokens,4000);assert.equal(captured.tools.length,1);assert.equal(captured.tools[0].type,'function');assert.equal(captured.tools[0].strict,true);assert.equal(captured.tools[0].parameters.properties.assessments.items.additionalProperties,false);
 });
-pg('Sector setup is idempotent, preserves existing accounts and reconciles every sample cent',async t=>{
+pg('Sector setup is idempotent, preserves existing accounts and reconciles every recorded cent',async t=>{
  const f=await fixture(t,{http:false}),before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
  const first=await seedSectorCompanies(f.db),owner=await actor(f.db);
  assert.equal(first.newProfiles,8);assert.ok(first.newReceipts>16);
@@ -67,16 +67,16 @@ pg('Sector setup refuses an unrelated pre-existing identity and leaves its recor
 pg('Owned sector preparation calculates cash exposure while preserving demo provenance and company privacy',async t=>{
  const f=await fixture(t,{http:false});await seedSectorCompanies(f.db);const owner=await actor(f.db);
  const prepared=await risk.prepare(f.db,owner,{},'Evaluate reputation and financial risk of my demo companies');assert.equal(prepared.companies.length,8);assert.ok(prepared.companies.every(c=>c.demo));
- const logistics=prepared.companies.find(c=>c.sector==='Logistics');assert.equal(logistics.exposure.paidCents,2400000);assert.equal(logistics.exposure.receivedCents,400000);assert.equal(logistics.exposure.netOutflowCents,2000000);assert.ok(logistics.facts.some(f=>f.source==='fictional_scenario'&&f.severity==='review'));
+ const logistics=prepared.companies.find(c=>c.sector==='Logistics');assert.equal(logistics.exposure.paidCents,2400000);assert.equal(logistics.exposure.receivedCents,400000);assert.equal(logistics.exposure.netOutflowCents,2000000);assert.ok(logistics.facts.some(f=>f.source==='operator_case_input'&&f.severity==='review'));
  const other=(await f.db.query("SELECT * FROM users WHERE email='jamie@greenlink.demo'")).rows[0];
  await assert.rejects(risk.prepare(f.db,other,{company:logistics.company},'Evaluate company risk for '+logistics.company),e=>e.status===404);
  await assert.rejects(risk.prepare(f.db,owner,{company:logistics.company},'Evaluate a different company risk'),e=>e.status===400);
  const body=JSON.stringify(prepared);assert.doesNotMatch(body,/1099007001|authorizationPassword|password_hash|accountNumber/);
 });
-pg('Fictional companies are never included in live sanctions/news requests',async t=>{
+pg('Recorded company labels are eligible for bounded news searches without claiming verified identity',async t=>{
  const f=await fixture(t,{http:false});await seedSectorCompanies(f.db);const owner=await actor(f.db),scan=await news.prepare(f.db,owner,{},'Scan my counterparties for sanctions and news');
- assert.equal(scan.companies.length,0);assert.equal(scan.fictionalCompaniesExcluded,8);assert.deepEqual(news.requestsFor(scan),[]);
- assert.throws(()=>publicResearch.requestFor('company',{companyName:cases[0].name},'Research '+cases[0].name),e=>e.status===400);
+ assert.equal(scan.companies.length,5);assert.equal(scan.totalCompanyCount,8);assert.equal(scan.omittedCompanyCount,3);assert.equal(news.requestsFor(scan).length,2);assert.ok(scan.companies.every(name=>cases.some(c=>c.name===name)));assert.match(scan.scope,/does not verify legal identity/);
+ assert.match(publicResearch.requestFor('company',{companyName:cases[0].name},'Research '+cases[0].name).query,/Distinguish similarly named companies/);
 });
 
 pg('Company full-stop variants resolve one owned company and cannot broaden a name or merge ambiguous records',async t=>{
@@ -97,7 +97,7 @@ pg('Tester scenario-versus-recorded-review question returns a private advisory w
  const f=await fixture(t,{agentModel:controlled()});await seedSectorCompanies(f.db);const client=f.client();await client.login(EMAIL,PASSWORD);const before=await financial(f.db);
  const result=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Explain whether the company concerns are hypothetical scenario flags or recorded open payment reviews.'}});
  assert.equal(result.status,200);assert.equal(result.data.narrativeWithheld,undefined);assert.equal(result.data.counterpartyRisk.assessments.length,8);
- assert.ok(result.data.counterpartyRisk.assessments.every(c=>c.demo&&c.reputation.reasons.some(f=>f.source==='fictional_scenario')));
+ assert.ok(result.data.counterpartyRisk.assessments.every(c=>c.demo&&c.reputation.reasons.some(f=>f.source==='operator_case_input')));
  assert.deepEqual(await financial(f.db),before);
 });
 pg('Assistant evaluates both risk dimensions with current ownership, CSRF and audit while leaving money and cases untouched',async t=>{
@@ -119,13 +119,13 @@ pg('Authorization revoked during AI company evaluation prevents a completed repo
  const result=await client.request('/api/agents/assistant',{method:'POST',body:{message:'Evaluate reputation risk of my demo companies'}});
  assert.ok([401,409].includes(result.status));assert.equal((await f.db.query("SELECT count(*)::int AS n FROM agent_runs WHERE status='completed' AND user_id=$1",[owner.id])).rows[0].n,0);
 });
-test('Risk cards explain fictional inputs and historical exposure without exposing actions or unsafe HTML',()=>{
+test('Risk cards explain unverified inputs and historical exposure without exposing actions or unsafe HTML',()=>{
  const report=risk.validateEvaluation(reply(simpleInput()),simpleInput());report.assessments[0].company='<img src=x onerror=alert(1)>';
  const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path'),esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
  const source=fs.readFileSync(path.join(__dirname,'../public/js/counterparty-risk.js'),'utf8').replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,'');
  const context={esc,fullDate:v=>v,money:v=>'SGD '+v/100};vm.runInNewContext(source+';globalThis.render=counterpartyRiskHtml;',context);
- const html=context.render({counterpartyRisk:report});assert.match(html,/Fictional company and scenario/);assert.match(html,/not losses/);assert.match(html,/Insufficient evidence/);assert.match(html,/SGD 100/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|<button|data-action|View AI audit|<details/);
- assert.match(html,/Why this assessment/);assert.match(html,/Fictional case; identity remains unverified/);
+ const html=context.render({counterpartyRisk:report});assert.match(html,/Company concerns require verification/);assert.match(html,/not losses/);assert.match(html,/Insufficient evidence/);assert.match(html,/SGD 100/);assert.match(html,/&lt;img/);assert.doesNotMatch(html,/<img|<button|data-action|View AI audit|<details/);
+ assert.match(html,/Why this assessment/);assert.match(html,/Operator case; identity remains unverified/);
  report.assessments[0].reputation.reasons=[{}, {description:'  '}];
  const partial=context.render({counterpartyRisk:report});assert.doesNotMatch(partial,/<li>\s*<\/li>|undefined/);
 });

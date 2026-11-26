@@ -39,7 +39,7 @@ async function seedDemo(db, { now = Date.now } = {}) {
         VALUES($1,$2,$3,$4,$5,$6,'completed',$7,$8,$9,$9,$9,nextval('settlement_sequence'),$10,$11)`, [randomUUID(),accounts[key],type,description,cents,counterparty,reference,internal,date(days),payee,type === 'bill' ? payee : null]);
     }
     await client.query("UPDATE accounts a SET balance_cents=(SELECT COALESCE(sum(t.amount_cents),0) FROM transactions t WHERE t.account_id=a.id AND t.status='completed')");
-    await client.query("INSERT INTO audit_log(event_type,metadata) VALUES('operator.demo_seeded','{\"sampleFunds\":true}')");
+    await client.query("INSERT INTO audit_log(event_type,metadata) VALUES('operator.demo_seeded','{\"generatedRecords\":true}')");
     return { seeded: true };
   });
 }

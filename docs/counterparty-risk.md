@@ -2,7 +2,7 @@
 
 This guide describes the **isolated sector-portfolio fixture**. Its former hosted login is retired under the nine-login roster; do not use it for current Neon sign-in. The eight industry customers remain separate and do not inherit this private portfolio. Prepare this fixture only in an owner-controlled isolated database for SECTOR tests.
 
-One isolated fixture login owns eight fictional counterparty profiles and historical receipts:
+One isolated fixture login owns eight counterparty case profiles and historical receipts:
 
 | Field | Value |
 | --- | --- |
@@ -12,11 +12,11 @@ One isolated fixture login owns eight fictional counterparty profiles and histor
 | Business | GLDB Demo Sector Portfolio Pte. Ltd. |
 | Savings account | Sector demonstration savings |
 
-These are intentionally public demonstration credentials. Use this identity for the fictional portfolio only. Rerunning setup preserves a changed password, MFA settings and existing records.
+These are intentionally public demonstration credentials. Use this identity for the unverified portfolio only. Rerunning setup preserves a changed password, MFA settings and existing records.
 
 ## Companies and case inputs
 
-| Fictional company | Sector | Scenario to evaluate |
+| Unverified company | Sector | Scenario to evaluate |
 | --- | --- | --- |
 | GLDB Demo Harbor Freight Pte. Ltd. | Logistics | Incomplete ownership documents |
 | GLDB Demo Circuit Cloud Pte. Ltd. | Technology | Unresolved cyber incident and delivery disruption |
@@ -27,7 +27,7 @@ These are intentionally public demonstration credentials. Use this identity for 
 | GLDB Demo Lantern Hospitality Pte. Ltd. | Hospitality | Unverified adverse-media allegation and seasonal liquidity pressure |
 | GLDB Demo Cedar Advisory Pte. Ltd. | Professional services | Baseline case with no supplied adverse flag; safety remains unestablished |
 
-Every case input is fictional. No company in this table is claimed to appear in real news or on an actual sanctions list. Scenario flags are stored inputs, not stored AI scores or verdicts.
+Case inputs are operator-maintained and require independent verification. No company in this table is claimed to appear in real news or on an actual sanctions list. Scenario flags are stored inputs, not stored AI scores or verdicts.
 
 ## Ask the assistant
 
@@ -45,7 +45,7 @@ Grades are **Elevated review concern**, **Review recommended**, or **Insufficien
 
 Cards show exact completed paid/received/net cash flow, pending outgoing requests, and completed paid amounts associated with open payment reviews. Amounts come from the owned database snapshot over the last 90 days. Historical payments are not losses or predicted losses. Pending value is not reserved or booked as a loss. The report creates no payment, case, rule or balance change.
 
-Fictional names are excluded from live public-company news/sanctions research. For genuine public companies, use the existing sourced news workflow; legal-entity matching and applicable-jurisdiction checks still require a human reviewer. A recorded payment review concerns that payment and does not establish misconduct by the named company.
+Recorded company names can be submitted to live public-company news/sanctions research. Use the existing sourced news workflow; legal-entity matching and applicable-jurisdiction checks still require a human reviewer. A recorded payment review concerns that payment and does not establish misconduct by the named company.
 
 ## Operator setup
 
@@ -56,7 +56,7 @@ Apply the additive schema migration and existing runtime grants, then seed the d
 
 Use the project's ignored private runtime/migration configuration. Migration 012 adds the operator-maintained demo_counterparties table. The runtime role can read it; it cannot create or alter scenario flags or the registered historical-receipt IDs. Automatic fraud monitoring excludes only those operator-registered historical fixture IDs. New payments remain eligible even if their reference resembles a demo reference, and staff can explicitly inspect a historical fixture payment.
 
-Setup inserts deterministic, fictional historical receipts and adjusts only the dedicated account by newly inserted amounts. It verifies fixture provenance, refuses unrelated identities/account numbers and leaves existing customer balances and credentials intact. Reruns insert no duplicate receipts and do not top up spent funds.
+Setup inserts deterministic historical fixture receipts and adjusts only the dedicated account by newly inserted amounts. It verifies fixture provenance, refuses unrelated identities/account numbers and leaves existing customer balances and credentials intact. Reruns insert no duplicate receipts and do not top up spent funds.
 
 ## Verification
 
@@ -64,4 +64,4 @@ tests/dft-counterparty-risk.test.js covers seeding, exact monetary totals, owner
 
 Assessment request metadata uses the existing admin-only AI audit with phase counterparty_risk_evaluation. Raw model reasoning is not stored.
 
-Assessment cards show the cited factual reasons directly under **Why this assessment**, without a collapsed section. Empty reason entries are omitted. These are the permitted source facts supporting the qualitative grade, not the model's hidden reasoning. Fictional or unverified company labels can correctly return insufficient evidence for reputation or financial reliability.
+Assessment cards show the cited factual reasons directly under **Why this assessment**, without a collapsed section. Empty reason entries are omitted. These are the permitted source facts supporting the qualitative grade, not the model's hidden reasoning. Unverified company labels can correctly return insufficient evidence for reputation or financial reliability.

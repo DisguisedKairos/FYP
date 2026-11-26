@@ -59,7 +59,7 @@ test('PostgreSQL setup is repeatable, preserves records, and enforces restricted
   let report = await inspectDatabase(f.app);
   assert.equal(report.ready, true);
   assert.equal(report.tables, 32);
-  assert.equal(report.migrations.length, 13);
+  assert.equal(report.migrations.length, 15);
   assert.deepEqual(report.discrepancies, []);
   const savedViews=require('../banking/dashboard-views'),operator=(await f.app.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
   const saved=await savedViews.save(f.app,operator,{definition:{scope:'all',company:'',period:{kind:'rolling',days:90}}});

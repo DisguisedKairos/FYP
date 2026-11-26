@@ -7,7 +7,7 @@ For the current Neon-backed app, use the [nine-login table](../data/testing/neon
 
 ## Current Neon logins
 
-There are **nine usable logins: eight industry customers and one bank administrator**. The industry emails are logistics-business, technology-business, manufacturing-business, wholesale-business, hospitality-business, construction-business, healthcare-business and energy-business, all at `greenlink.demo`. Each owns a separate fictional business and its existing operating/reserve savings accounts.
+There are **nine usable logins: eight industry customers and one bank administrator**. The industry emails are logistics-business, technology-business, manufacturing-business, wholesale-business, hospitality-business, construction-business, healthcare-business and energy-business, all at `greenlink.demo`. Each owns a separate unverified business and its existing operating/reserve savings accounts.
 
 `reviewer-tester@greenlink.demo` is the only active administrator, for bank operations, independent payment review, fraud rules and AI audit. Use logistics for ordinary banking and technology for recipient/privacy comparisons. Retained credentials are unchanged. The former feature, sector and user-created logins are retired; banking and audit history remain. The owner-approved old monthly PUB test schedule has been cancelled.
 

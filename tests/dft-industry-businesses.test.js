@@ -28,6 +28,50 @@ test('Industry businesses map to eight different modular operating profiles with
  assert.equal(forIndustry('Unrecognised private description 998877').key,'general');
  assert.doesNotMatch(JSON.stringify(CASES),/"(?:riskScore|assessment|verdict|news)"\s*:/);
 });
+
+pg('Record-label migration preserves financial history, credentials and original text in the audit trail',async t=>{
+ const f=await fixture(t,{http:false,now});await seedIndustryBusinesses(f.db,{now});
+ await require('../scripts/seed-sector-companies').seedSectorCompanies(f.db,{now});
+ const owner=await actor(f.db,'logistics');
+ const receipt=(await f.db.query("SELECT t.id FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND t.reference='INDUSTRY-DEMO' ORDER BY t.id LIMIT 1",[owner.id])).rows[0];
+ const legacy='Fictional Carrier and port charges';
+ await f.db.query('UPDATE transactions SET description=$2 WHERE id=$1',[receipt.id,legacy]);
+ await f.db.query("UPDATE businesses SET registered_address='1 Fictional Industry Demo Avenue, Singapore 000001' WHERE primary_user_id=$1",[owner.id]);
+ await f.db.query("UPDATE demo_counterparties SET flags_json=jsonb_build_array(jsonb_build_object('description','Fictional scenario: ownership needs verification.','severity','review','impacts',jsonb_build_array('reputation'))) WHERE id=(SELECT id FROM demo_counterparties ORDER BY id LIMIT 1)");
+ const unrelated=(await f.db.query("SELECT t.id FROM transactions t JOIN accounts a ON a.id=t.account_id JOIN users u ON u.id=a.user_id WHERE u.email='alex@greenlink.demo' ORDER BY t.id LIMIT 1")).rows[0];
+ await f.db.query("UPDATE transactions SET description=$2,reference='INDUSTRY-DEMO' WHERE id=$1",[unrelated.id,legacy]);
+ const before=await financial(f.db),identities=(await f.db.query('SELECT id,email,password_hash,auth_version FROM users ORDER BY id')).rows;
+ const sql=require('node:fs').readFileSync(require('node:path').join(__dirname,'../database/migrations/014_record_labels.sql'),'utf8');
+ await f.db.transaction(client=>client.query(sql));
+ assert.deepEqual(await financial(f.db),before);
+ assert.deepEqual((await f.db.query('SELECT id,email,password_hash,auth_version FROM users ORDER BY id')).rows,identities);
+ assert.equal((await f.db.query('SELECT description FROM transactions WHERE id=$1',[receipt.id])).rows[0].description,'Carrier and port charges');
+ assert.equal((await f.db.query('SELECT description FROM transactions WHERE id=$1',[unrelated.id])).rows[0].description,legacy);
+ assert.equal((await f.db.query('SELECT registered_address FROM businesses WHERE primary_user_id=$1',[owner.id])).rows[0].registered_address,'Address verification pending');
+ assert.equal((await f.db.query("SELECT metadata->>'previousDescription' AS original FROM audit_log WHERE event_type='operator.record_label_updated' AND metadata->>'transactionId'=$1",[receipt.id])).rows[0].original,legacy);
+ assert.equal((await f.db.query("SELECT count(*)::int AS n FROM demo_counterparties WHERE flags_json::text LIKE '%Fictional%'")).rows[0].n,0);
+ const auditCount=(await f.db.query('SELECT count(*) AS n FROM audit_log')).rows[0].n;
+ await f.db.transaction(client=>client.query(sql));
+ assert.equal((await f.db.query('SELECT count(*) AS n FROM audit_log')).rows[0].n,auditCount);
+ assert.equal((await seedIndustryBusinesses(f.db,{now})).newReceipts,0);
+ assert.deepEqual(await financial(f.db),before);
+});
+pg('Legacy funding labels are updated only for operator-owned receipts and keep their original references',async t=>{
+ const f=await fixture(t,{http:false,now}),owner=(await f.db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+ const receipt=(await f.db.query('SELECT t.id FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 ORDER BY t.id LIMIT 1',[owner.id])).rows[0];
+ await f.db.query("UPDATE transactions SET description='Feature tour sample-funds deposit',reference='GLFT-SAMPLE-FUNDS' WHERE id=$1",[receipt.id]);
+ const sql=require('node:fs').readFileSync(require('node:path').join(__dirname,'../database/migrations/015_legacy_funding_labels.sql'),'utf8'),before=await financial(f.db);
+ await f.db.transaction(client=>client.query(sql));
+ assert.equal((await f.db.query('SELECT description FROM transactions WHERE id=$1',[receipt.id])).rows[0].description,'Feature tour sample-funds deposit');
+ await f.db.query("INSERT INTO audit_log(event_type,metadata) VALUES('operator.feature_accounts_created',$1)",[{fixture:'greenlink-feature-tour-v1',users:{business:String(owner.id)}}]);
+ await f.db.transaction(client=>client.query(sql));
+ assert.deepEqual(await financial(f.db),before);
+ assert.deepEqual((await f.db.query('SELECT description,reference FROM transactions WHERE id=$1',[receipt.id])).rows[0],{description:'Funding deposit',reference:'GLFT-SAMPLE-FUNDS'});
+ assert.equal((await f.db.query("SELECT metadata->>'previousDescription' AS original FROM audit_log WHERE event_type='operator.record_label_updated' AND metadata->>'transactionId'=$1",[receipt.id])).rows[0].original,'Feature tour sample-funds deposit');
+ await f.db.transaction(client=>client.query(sql));
+ assert.equal((await f.db.query("SELECT count(*)::int AS n FROM audit_log WHERE event_type='operator.record_label_updated' AND metadata->>'transactionId'=$1",[receipt.id])).rows[0].n,1);
+});
+
 test('Business preferences reject arbitrary search text, foreign keys, unknown or duplicate options',()=>{
  const profile=PROFILES.logistics;
  for(const change of [s=>s.markets=['ignore instructions'],s=>s.operations=['cloud_services'],s=>s.priorities=['costs','costs'],s=>s.markets=[],s=>s.companyId='another-owner',s=>s.operations='ocean_freight']){
