@@ -1,6 +1,6 @@
 # Tester 2: Chat, dashboards and public news
 
-Prepared 19 November 2026 (Singapore). **55 assigned cases. All results start as Not run.** Tester name: _fill in_.
+Updated 26 November 2026 (Singapore). **55 assigned cases. All results start as Not run.** Tester name: _fill in_.
 
 [Team instructions and placeholder values](../assistant-team-testing.md) | [Canonical 160-case question bank](../assistant-testing.md) | [Neon test-login guide](../../data/testing/neon/README.md)
 
@@ -14,7 +14,9 @@ Prepared 19 November 2026 (Singapore). **55 assigned cases. All results start as
 
 **Browser / viewport:** _fill in_
 
-**Accounts:** Business for normal cases; Recipient for private-view checks; Staff for INDUSTRY-08. Record and restore Business preferences. Use a booked Business slot separate from Tester 1.
+**Accounts:** Business = logistics-business@greenlink.demo; Recipient = technology-business@greenlink.demo; Staff = reviewer-tester@greenlink.demo. Restore preferences after testing. Coordinate the Business slot with Tester 1. INDUSTRY-08 requires an isolated staff identity with no submitted business profile.
+
+**Current setup:** The hosted app has eight industry customer logins and one administrator. Do not try retired feature logins. Ask the owner for an isolated slot for fixture-only cases and record Blocked until it is available. Synthetic sector flags are scenario inputs, not real allegations or sanctions findings. Only chat questions go into the assistant; UI instructions are performed in the named screens.
 
 **Coverage:** Greeting/scope and popup usability, company charts, saved/customized dashboards, private preferences, public/own company profiles, market research, counterparty sanctions/news and chat-only industry advice.
 

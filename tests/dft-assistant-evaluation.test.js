@@ -45,8 +45,37 @@ test('Explicit no-execution clauses are accepted without masking actual or quali
 
 test('Funding uncertainty accepts explicit negation while actual guarantees remain blocked',()=>{
  const options={evidence,requireCitations:true};
- for(const reply of ['This is not authorization or a guarantee [E1].','This is neither payment authorization nor a guarantee [E1].','There is no guarantee of funding [E1].','A projection comes without any guarantee [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
- for(const reply of ['This guarantees funding [E1].','There is no guarantee, but I guarantee the payment will succeed [E1].','This is not authorization or a guarantee; your payment is guaranteed [E1].'])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
+ for(const reply of ['This is not authorization or a guarantee [E1].','This is neither payment authorization nor a guarantee [E1].','There is no guarantee of funding [E1].','There are no guarantees of payment safety [E1].','A projection comes without any guarantee [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['This guarantees funding [E1].','There is no guarantee, but I guarantee the payment will succeed [E1].','There are no guarantees, but I guarantee payment safety [E1].','This is not authorization or a guarantee; your payment is guaranteed [E1].'])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
+});
+
+test('Clarification choices do not bypass checks on financial quantities or certainty',()=>{
+ const options={evidence,requireCitations:true};
+ for(const reply of ['Please choose one deadline option [E1].','Which one would you like a dashboard for [E1]?','Please select one for the dashboard [E1].',"I can't provide a live stock price or guarantee this payment is fraud-free. Verify the recipient independently [E1].",'The assessment reports qualitative concerns, not fraud probabilities or guaranteed losses [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['Please choose one account with a balance of one million [E1].','Which one has SGD 999999 [E1]?','Choose one hundred dollars [E1].',"I can't guarantee this payment is fraud-free, but I guarantee the next payment [E1].",'Not guaranteed losses; the payment is guaranteed [E1].'])assert.ok(narrativeIssue(reply,null,options),reply);
+});
+
+test('An affordability question requires the proposed payment check even with scheduled coverage',()=>{
+ const coverage={tool:'get_accounts',value:{fundingCheck:{available:true,occurrenceCount:1,days:30,warnings:[]}}};
+ for(const message of ['Can I afford SGD 10?','Can I afford a payment from Operating savings?']){
+  assert.match(relevanceIssue(message,[coverage]),/check_payment_funds/);
+  assert.equal(relevanceIssue(message,[{tool:'check_payment_funds',value:{complete:false,missing:['source']}}]),null);
+ }
+});
+
+test('A completed empty schedule check is valid coverage only for its checked horizon',()=>{
+ const result={tool:'get_accounts',value:{fundingCheck:{available:true,occurrenceCount:0,days:30,warnings:[]}}};
+ assert.equal(relevanceIssue('Show my balance and whether I have enough for upcoming scheduled payments.',[result]),null);
+ assert.ok(relevanceIssue('Can I cover scheduled payments over the next 7 days?',[result]));
+ assert.ok(relevanceIssue('Can I afford SGD 10?',[result]));
+ assert.ok(relevanceIssue('Can I cover upcoming bills?',[result]),'An empty schedule set does not establish that all bills are funded');
+ assert.ok(relevanceIssue('Can I cover scheduled payments?',[{...result,value:{fundingCheck:{available:true,days:30}}}]));
+});
+
+test('Refusing certainty about company safety and losses preserves genuine certainty checks',()=>{
+ const options={evidence,requireCitations:true};
+ for(const reply of ['No company can be called definitely safe, and the report does not establish fraud or guaranteed loss [E1].','There is no supported exact probability of fraud or guaranteed loss; verify each one independently [E1].','None can be called definitely safe [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['No company can be called definitely safe, but I guarantee the payment [E1].','The report does not establish fraud or guaranteed loss; this payment is definitely safe [E1].','This company has guaranteed losses [E1].'])assert.ok(narrativeIssue(reply,null,options),reply);
 });
 test('Assistant evaluation requires relevant tools for combined banking questions', () => {
   assert.ok(relevanceIssue('Check balances and cover upcoming payments', [{ tool: 'get_accounts' }]));

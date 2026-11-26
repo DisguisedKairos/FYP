@@ -88,3 +88,39 @@ pg('Guidance cannot bypass provider availability, session revocation or credenti
  const revoked=model(async()=>{await f.db.query('UPDATE users SET auth_version=auth_version+1 WHERE id=$1',[user.id]);return {content:'Hello.'};});
  await assert.rejects(createAgents({db:f.db,model:revoked}).execute(user,'assistant',{message:'Open Notifications, mark read and refresh.'}),e=>e.status===409);
 });
+
+pg('Capability questions stay in scope and explain separate payment authorization',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const agents=createAgents({db:f.db,model:model(async(_messages,tools)=>{calls++;assert.equal(tools.length,0);return {content:'Untrusted generated help.'};})});
+ for(const message of ['What can you help me with?','What can you do?','How can you help me?']){
+  const result=await agents.execute(user,'assistant',{message});
+  assert.equal(result.narrativeWithheld,undefined);assert.equal(result.clarification,true);
+  assert.match(result.reply,/balances.*draft/i);assert.doesNotMatch(result.reply,/outside the scope/);
+  assert.deepEqual(result.steps,[]);assert.deepEqual(result.actions,[]);
+ }
+ assert.equal(calls,3);
+});
+
+pg('Skipped affordability and partial draft tools receive one bounded corrective retrieval',async t=>{
+ const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT id,role,auth_version FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ for(const [message,target] of [['Can I afford SGD 10?','check_payment_funds'],['Transfer','prepare_payment_draft']]){
+  let calls=0;
+  const result=await createAgents({db:f.db,model:model(async(_messages,_tools,options)=>{
+   calls++;
+   if(calls===1)return {tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+   if(calls===2)return {content:'The scheduled coverage has no warnings [E1].'};
+   if(calls===3){assert.equal(options.requireTool,true);return {tool_calls:[{function:{name:target,arguments:target==='prepare_payment_draft'?{kind:'transfer'}:{}}}]};}
+   assert.equal(options.requireTool,false);
+   return {content:target==='prepare_payment_draft'?'Please provide the missing amount and recipient [E2].':'Please specify the owned source account before checking this payment [E2].'};
+  })}).execute(user,'assistant',{message});
+  assert.equal(calls,4);assert.equal(result.narrativeWithheld,undefined);
+  assert.deepEqual(result.steps.map(s=>s.tool),['get_accounts',target]);
+  assert.deepEqual(result.actions,[]);
+  if(target==='prepare_payment_draft'){
+   const context=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[result.runId])).rows[0].context_json;
+   assert.equal(context.pendingDraft.kind,'transfer');assert.equal(context.pendingDraft.amount,undefined);
+  }else assert.ok(result.items.some(item=>/source/.test(item.title)));
+ }
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+});

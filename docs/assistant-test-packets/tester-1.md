@@ -1,6 +1,6 @@
 # Tester 1: Banking, funding and finance reports
 
-Prepared 19 November 2026 (Singapore). **54 assigned cases. All results start as Not run.** Tester name: _fill in_.
+Updated 26 November 2026 (Singapore). **54 assigned cases. All results start as Not run.** Tester name: _fill in_.
 
 [Team instructions and placeholder values](../assistant-team-testing.md) | [Canonical 160-case question bank](../assistant-testing.md) | [Neon test-login guide](../../data/testing/neon/README.md)
 
@@ -14,7 +14,9 @@ Prepared 19 November 2026 (Singapore). **54 assigned cases. All results start as
 
 **Browser / viewport:** _fill in_
 
-**Accounts:** Business and Recipient; Empty for low-funds reads; Staff with no accounts for ACCT-05. Use separate browser profiles for sender/recipient.
+**Accounts:** Business = logistics-business@greenlink.demo; Recipient = technology-business@greenlink.demo. Use separate browser profiles. Empty and Staff-with-no-accounts cases require owner-prepared isolated fixtures; the hosted administrator is reviewer-tester@greenlink.demo.
+
+**Current setup:** The hosted app has eight industry customer logins and one administrator. Do not try retired feature logins. Ask the owner for an isolated slot for fixture-only cases and record Blocked until it is available. Synthetic sector flags are scenario inputs, not real allegations or sanctions findings. Only chat questions go into the assistant; UI instructions are performed in the named screens.
 
 **Coverage:** Accounts, history/search, finance CSV/PDF, affordability, automatic warnings, dated company-payment checks, payment drafts, normal payment/schedule handoffs and statements.
 

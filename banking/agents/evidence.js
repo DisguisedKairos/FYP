@@ -15,13 +15,20 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   let qualitative = plain.replace(/\[E\d+\]/g, '').replace(/^\s*\d+[.)]\s+/gm, '');
   if(!requireCitations)qualitative=qualitative.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
   if (/\d/.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead.';
-  if (/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/i.test(qualitative)) return 'Written numerical claims must be read from authoritative tool facts instead.';
+  // An imperative choice or interrogative pronoun is not a numerical bank fact.
+  // Keep quantities elsewhere (including later in the same sentence) screened.
+  const quantities=qualitative.replace(/\b(?:(?:choose|select|pick|specify|provide|give|name|use)\s+(?:just\s+)?one|(?:which|each) one)\b/gi,'[choice]');
+  if (/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/i.test(quantities)) return 'Written numerical claims must be read from authoritative tool facts instead.';
   if (/\b(?:password|passcode|otp|pin|recovery code|api key|access token)\b/i.test(plain)) return 'Security credentials do not belong in agent interpretations.';
   if(results.some(r=>['scan_counterparty_news','assess_counterparty_risk'].includes(r.tool))&&/\b(?:sanctions[- ]free|(?:is|are) (?:fully compliant|not sanctioned|cleared)|no (?:sanctions|compliance) issues|safe to (?:pay|deal|transact))\b/i.test(plain))return 'Name-based public research cannot establish sanctions clearance or permission to pay.';
   if (/https?:\/\/|www\./i.test(plain)) return 'External destinations are not banking evidence.';
   const claims = plain
+    .replace(/\b(?:none|no company|no payment|no transaction)\s+can\s+be\s+(?:called|considered)\s+(?:definitely|certainly)\s+safe\b/gi,'[qualified uncertainty]')
+    .replace(/\bdoes not establish\s+(?:fraud\s+or\s+)?guaranteed[ -]loss(?:es)?\b/gi,'[qualified uncertainty]')
+    .replace(/\b(?:cannot|can't|can not)\s+(?:provide (?:a )?live stock (?:price|quote)\s+or\s+)?guarantee(?: that)?\s+(?:(?:this|the)\s+(?:payment|transaction)|it)\s+(?:is\s+)?fraud[ -]free(?=\s*(?:[.!?;]|\[E\d+\]|$))/gi,'[qualified uncertainty]')
+    .replace(/\b(?:no|not|without)\s+(?:(?:a|any|supported|exact)\s+)*(?:(?:fraud\s+probabilit(?:y|ies)|probabilit(?:y|ies)\s+of\s+fraud)\s+or\s+)?guaranteed[ -](?:money[ -])?loss(?:es)?(?:\s+estimate)?\b/gi,'[qualified uncertainty]')
     .replace(/\b(?:not|neither)\s+(?:payment\s+)?authorization\s+(?:or|nor)\s+(?:a\s+)?guarantee\b/gi,'[qualified uncertainty]')
-    .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment)\s+)?guarantee\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
+    .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment)\s+)?guarantees?\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
   if (/\b(?:definitely|certainly|proven|confirmed)\s+(?:fraud|fraudulent|safe|legitimate)|\b(?:no|zero)\s+(?:fraud|risk)\b|\bfraud[ -]free\b|\bguarantee(?:d|s)?\b/i.test(claims)) return 'The interpretation overstates what the evidence establishes.';
   if (/\bno evidence of (?:fraud|anomalies)|\bany potential (?:obligations|payments|bills)\b/i.test(plain)) return 'The interpretation exceeds the scope of the retrieved banking checks.';
   if (/\b(?:allowed|approved|cleared)\b.{0,80}\bbecause\b.{0,100}\b(?:no prior|no completed|lack of|limited|new recipient|new payee)\b/i.test(plain)) return 'Missing payment history is a limitation, not a reason for authorizing a payment.';
@@ -58,11 +65,13 @@ function relevanceIssue(message, results) {
   if(/\b(?:sanctions?|compliance|regulatory|enforcement|news)\b/i.test(message)&&/\b(?:counterpart(?:y|ies)|suppliers?|business partners?|dealing|deal with|deals with|companies.*(?:account|transact)|account.*companies)\b/i.test(message)&&!tools.has('scan_counterparty_news'))return 'The requested owned-counterparty public research was not retrieved.';
   const planned=results.some(row=>row.tool==='check_payment_funds' && row.value?.paymentReadiness);
   if(require('../payment-planning').requested(message) && !planned)return 'The proposed dated payment and cash flow must be checked using check_payment_funds; a balance or general projection alone is insufficient.';
+  if(/\bafford\b/i.test(message) && !DRAFT_INTENT.test(message) && !tools.has('check_payment_funds'))return 'Check the proposed payment using check_payment_funds, including clarification of any missing amount or owned source; general scheduled coverage is insufficient.';
   const has = names => names.some(name => tools.has(name));
   const coverage=[...results].reverse().find(row=>row.value?.fundingCheck)?.value.fundingCheck;
   const duration=message.match(/\b(\d+)\s+(days?|weeks?|months?)\b/i),unit=duration?.[2]?.toLowerCase();
   const requestedDays=duration?Number(duration[1])*(unit.startsWith('week')?7:unit.startsWith('month')?30:1):/\b(?:years?|quarters?)\b|\b\d{4}-\d{2}-\d{2}\b/i.test(message)?0:/\bweeks?\b/i.test(message)?7:/\btomorrow\b/i.test(message)?1:undefined;
-  const covered=coverage && typeof coverage.available==='boolean' && (coverage.available===false || coverage.occurrenceCount>0) && (requestedDays===undefined || coverage.days===requestedDays);
+  const emptyScheduleCoverage=coverage?.occurrenceCount===0 && /\b(?:scheduled|schedules?)\b/i.test(message);
+  const covered=coverage && typeof coverage.available==='boolean' && (coverage.available===false || coverage.occurrenceCount>0 || emptyScheduleCoverage) && (requestedDays===undefined || coverage.days===requestedDays);
   const currentPayment=has(['check_payment_funds']) && !/\b(?:scheduled|upcoming|future|projection|liquidity|next|weekly|monthly)\b/i.test(message);
   if(require('../dashboard-views').saveIntent(message) && (/\b(?:dashboard|view|summary)\b/i.test(message) || require('../dashboard-views').followup(message)) && !has(['save_company_dashboard']) && !results.some(r=>r.tool==='get_company_activity' && r.value?.status && r.value.status!=='ready'))return 'The requested dashboard was not saved.';
   if (/\b(?:market|daily news|scam alerts?|exchange rates?|forex)\b/i.test(message) && !has(['get_daily_market_context','analyze_market_transactions','get_market_insights','research_public_company','scan_counterparty_news'])) return 'The requested dated market or scam context was not retrieved.';

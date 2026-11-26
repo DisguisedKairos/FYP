@@ -1,6 +1,6 @@
 # Tester 3: Fraud, permissions, audit and recovery
 
-Prepared 19 November 2026 (Singapore). **55 assigned cases. All results start as Not run.** Tester name: _fill in_.
+Updated 26 November 2026 (Singapore). **55 assigned cases. All results start as Not run.** Tester name: _fill in_.
 
 [Team instructions and placeholder values](../assistant-team-testing.md) | [Canonical 160-case question bank](../assistant-testing.md) | [Neon test-login guide](../../data/testing/neon/README.md)
 
@@ -14,7 +14,9 @@ Prepared 19 November 2026 (Singapore). **55 assigned cases. All results start as
 
 **Browser / viewport:** _fill in_
 
-**Accounts:** Business/Recipient for ownership checks; Staff, Maker and Reviewer in separate profiles; Sector for the fictional portfolio; Pending/Rejected/Profile for restrictions. Use a disposable MFA identity and fresh synthetic application for destructive credential/onboarding cases.
+**Accounts:** Business = logistics-business@greenlink.demo; Recipient = technology-business@greenlink.demo; Staff/Reviewer = reviewer-tester@greenlink.demo. Sector means the owner-prepared fictional portfolio in an isolated database. Maker/reviewer separation, Empty, Pending, Rejected, Profile and MFA cases also require isolated fixtures; their old hosted logins are retired.
+
+**Current setup:** The hosted app has eight industry customer logins and one administrator. Do not try retired feature logins. Ask the owner for an isolated slot for fixture-only cases and record Blocked until it is available. Synthetic sector flags are scenario inputs, not real allegations or sanctions findings. Only chat questions go into the assistant; UI instructions are performed in the named screens.
 
 **Coverage:** Daily market-assisted fraud review, eight-sector company risks, staff investigation/rule preview/reconciliation, admin-only audit, prompt-injection and ownership boundaries, retry/session recovery and independent banking/security decisions.
 
@@ -798,7 +800,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-01
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Use the sector demonstration login from counterparty-risk.md
 
@@ -816,7 +818,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-02
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Sector demo portfolio exists
 
@@ -834,7 +836,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-03
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Demo opening funding and historical receipts exist
 
@@ -852,7 +854,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-04
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Sector demo baseline exists
 
@@ -870,7 +872,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-05
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Sector demo portfolio exists
 
@@ -888,7 +890,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-06
 
-**Role:** Business | **Effect:** Owner setup
+**Role:** Sector (isolated fixture customer) | **Effect:** Owner setup
 
 **Setup:** Isolated provider-failure/current-session test
 
@@ -924,7 +926,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-08
 
-**Role:** Business | **Effect:** Owner setup
+**Role:** Sector (isolated fixture customer) | **Effect:** Owner setup
 
 **Setup:** Sector login; owner-prepared permitted payment with an open review plus fictional scenario input
 
@@ -942,7 +944,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-09
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Sector login
 
@@ -960,7 +962,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-10
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Sector login with eight seeded companies
 
@@ -978,7 +980,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 ### SECTOR-11
 
-**Role:** Business | **Effect:** Read
+**Role:** Sector (isolated fixture customer) | **Effect:** Read
 
 **Setup:** Record existing scenario flags and payment statuses before request
 

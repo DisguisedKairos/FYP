@@ -145,7 +145,7 @@ class Worksheet:
         paragraph(self.body, "GREEN LINK DIGITAL BANK", "Subtitle")
         paragraph(self.body, "Assistant test response worksheet", "Title")
         paragraph(self.body, title, "Heading1")
-        paragraph(self.body, f"{count} assigned cases | Prepared 19 November 2026 (Singapore)")
+        paragraph(self.body, f"{count} assigned cases | Updated 26 November 2026 (Singapore)")
         table = self.table(self.body)
         for label, tag, prompt in (
             ("Tester name", "tester_name", "Enter your name"),
@@ -161,6 +161,8 @@ class Worksheet:
         for instruction in (
             "Click inside the response fields to type or paste. Choose a result from each status dropdown. Save your own copy with your name. Keep the question and expected result unchanged.",
             "Record the assistant's actual response and exact error. For UI steps, describe what happened. Label each wording variant, role or follow-up separately; a case passes only when all required variants pass.",
+            "Only copy chat questions into the assistant. Carry out UI, download and job instructions in their named screens. Split wording variants into separate fresh chats unless a case explicitly requires a continuation.",
+            "The hosted roster has eight industry customers and one administrator. Business means logistics-business@greenlink.demo; Recipient means technology-business@greenlink.demo; Staff/Reviewer means reviewer-tester@greenlink.demo. Empty, Pending, Rejected, MFA, maker/reviewer separation and Sector scenarios require the owner's isolated fixtures, not retired hosted logins. Sector cases use only the fictional portfolio fixture.",
             "Leave Not run until tested. Use Blocked for missing data/access/owner setup. A refusal passes only an intentional negative test; an unexpected error is not a pass for a supported question.",
             "Use fresh placeholder values and booked account slots. Work in batches of 10-15 requests with no more than two simultaneous assistant runs. Follow owner-controlled setup for write/outage/security cases.",
             "Keep passwords, OTPs, recovery codes, cookies and API keys out of responses and screenshots. Store completed worksheets in the team's private results location.",

@@ -127,6 +127,21 @@ pg('Agentic public company research never sends retrieved private account facts 
  const audit=(await f.db.query("SELECT metadata FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'phase'='public_web_research'")).rows;assert.equal(audit.length,1);assert.equal(audit[0].metadata.status,'completed');
 });
 
+pg('Plain trade and interest-rate news briefs cannot invoke an advice-only tool',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ for(const [topic,message] of [['trade','Give me current trade news insights.'],['interest_rates','Give me current interest-rate news insights.']]){
+  let calls=0;
+  const provider=fake(async(_messages,tools)=>{
+   assert.ok(!tools.some(t=>t.function.name==='analyze_news_insights'));
+   return ++calls===1?{tool_calls:[{function:{name:'get_market_insights',arguments:{topic}}}]}:{content:'Review the dated public market sources and their coverage limitations before making business decisions [E1].'};
+  });
+  provider.research=async spec=>research.parseResponse(publicResponse(),model,spec);
+  const result=await createAgents({db:f.db,model:provider}).execute(user,'assistant',{message});
+  assert.equal(result.narrativeWithheld,undefined);assert.equal(result.publicResearch.length,1);
+  assert.equal(result.newsInsights,undefined);assert.equal(calls,2);
+ }
+});
+
 test('Saved chart names support straight and typographic quotes without treating question marks as delimiters',()=>{
  for(const message of ['Save this chart as "Supplier trends"','Save this chart as \u201cSupplier trends\u201d','Save this chart as \u2018Supplier trends\u2019'])assert.equal(views.messageOptions(message).title,'Supplier trends');
  assert.equal(views.messageOptions('Can I save this as ?Supplier trends?').title,undefined);
