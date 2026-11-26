@@ -34,6 +34,8 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
     .replace(/\b(?:not|neither)\s+(?:payment\s+)?authorization\s+(?:or|nor)\s+(?:a\s+)?guarantee\b/gi,'[qualified uncertainty]')
     .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment)\s+)?guarantees?\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
   if (/\b(?:definitely|certainly|proven|confirmed)\s+(?:fraud|fraudulent|safe|legitimate)|\b(?:no|zero)\s+(?:fraud|risk)\b|\bfraud[ -]free\b|\bguarantee(?:d|s)?\b/i.test(claims)) return 'The interpretation overstates what the evidence establishes.';
+  const newsAdvice=[...results].reverse().find(r=>r.tool==='analyze_news_insights')?.value;
+  if(newsAdvice?.status==='unavailable'&&!/\b(?:unavailable|no cited (?:public )?news|no searchable|insufficient (?:news|evidence)|cannot|can't|could not|couldn't|not available)\b/i.test(plain))return 'The sourced news advisory is unavailable; explain the coverage limitation without claiming advisory findings.';
   if (/\bno evidence of (?:fraud|anomalies)|\bany potential (?:obligations|payments|bills)\b/i.test(plain)) return 'The interpretation exceeds the scope of the retrieved banking checks.';
   if (/\b(?:allowed|approved|cleared)\b.{0,80}\bbecause\b.{0,100}\b(?:no prior|no completed|lack of|limited|new recipient|new payee)\b/i.test(plain)) return 'Missing payment history is a limitation, not a reason for authorizing a payment.';
   if (/\b(?:I|we)\s+(?:have\s+)?(?:flagged|referred)|\b(?:flag|review request)\s+(?:has been|was)\s+(?:created|submitted)/i.test(plain) && !results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested)) return 'A human review request was claimed without a successful permitted flag receipt.';
@@ -58,7 +60,11 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const projections = [report, ...results.filter(r => r.tool === 'project_liquidity').map(r => r.value)].filter(r => Array.isArray(r?.shortfalls));
   if (!results.some(r=>r.value?.paymentReadiness) && projections.some(r => r.shortfalls.length > 0) && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded)\b/i.test(fundingClaims)) return 'The narrative conflicts with a projected funding shortfall.';
   const checks = [report, ...results.filter(r => r.tool === 'reconcile_accounts').map(r => r.value)].filter(r => Array.isArray(r?.discrepancies));
-  if (checks.some(r => r.discrepancies.length || r.failedSchedules?.length) && /\b(?:no (?:issues|exceptions|discrepancies)|all (?:clear|balanced|reconciled)|everything (?:balances|reconciles))\b/i.test(plain)) return 'The narrative conflicts with recorded operational exceptions.';
+  const balanceExceptions=checks.some(r=>r.discrepancies.length),scheduleExceptions=checks.some(r=>r.failedSchedules?.length),notificationExceptions=checks.some(r=>r.notificationExceptions?.length);
+  if(balanceExceptions && /\b(?:no (?:(?:account|balance|ledger)\s+)*discrepancies|all (?:balanced|reconciled)|everything (?:balances|reconciles))\b/i.test(plain))return 'The narrative conflicts with recorded balance exceptions.';
+  if((balanceExceptions||scheduleExceptions||notificationExceptions) && /\b(?:no (?:issues|exceptions)|all clear|everything (?:is )?clear)\b/i.test(plain))return 'The narrative conflicts with recorded operational exceptions.';
+  if(scheduleExceptions && /\bno (?:schedule|scheduled payment) (?:issues|exceptions|failures)\b/i.test(plain) || notificationExceptions && /\bno (?:notification|delivery) (?:issues|exceptions|failures)\b/i.test(plain))return 'The narrative conflicts with recorded operational exceptions.';
+  if((scheduleExceptions||notificationExceptions) && !/\b(?:schedules?|notifications?|operational|exceptions?|overdue|retrying|undelivered|stuck)\b/i.test(plain))return 'Mention the recorded schedule or notification exceptions even when the ledger balances match.';
   if (results.some(r => r.tool === 'prepare_payment_draft' && r.value.complete === false) && /\b(?:draft|payment form)\s+(?:is\s+)?ready\b/i.test(plain)) return 'Required draft details are still missing.';
   return null;
 }

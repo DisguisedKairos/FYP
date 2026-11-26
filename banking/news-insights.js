@@ -29,7 +29,7 @@ function prepare(reports,{now=Date.now,gaps=[],businessContext=null}={}){
    parts.push({partId:'R'+(r+1)+'P'+(p+1),text:part.text,sources,kind:report.kind,title:report.title,checkedAt:report.checkedAt});characters+=part.text.length;
   }
  }
- if(!parts.length)throw new HttpError(409,'No cited public news is available to analyze. Retrieve news first; unavailable searches cannot be replaced with invented advice.');
+ if(!parts.length)throw Object.assign(new HttpError(409,'No cited public news is available to analyze. Retrieve news first; unavailable searches cannot be replaced with invented advice.'),{code:'NEWS_EVIDENCE_UNAVAILABLE'});
  return {checkedAt:new Date(now()).toISOString(),parts,omittedParts,coverageGaps:gaps.filter(g=>['counterparty_sanctions','counterparty_news'].includes(g)).slice(0,2),allowedActions:{...BASE_ACTIONS,...(actionOptions||{})},businessContext:businessContext?companyContext:null,scope:'Interpretation of retrieved public summaries only. Source dates and legal-entity identity need independent checks. Advisory flags appear only in chat; no payment, fraud score or staff case changes.'};
 }
 function evidenceChoices(input){
@@ -51,6 +51,10 @@ function evidenceChoices(input){
   const indexes=chunks.length<=4?chunks.map((_,i)=>i):[0,Math.floor(chunks.length/3),Math.floor(2*chunks.length/3),chunks.length-1];
   return [...new Set(indexes)].map(i=>chunks[i]);
  });
+}
+
+function unavailable({now=Date.now}={}){
+ return {status:'unavailable',checkedAt:new Date(now()).toISOString(),summary:'No cited public news is available for an advisory in this request. No news-based flags were generated. Verify the legal company names or request fresh sourced industry news.',insights:[],coverageGaps:[],omittedParts:0,actions:[],items:[],scope:'Missing public coverage does not establish company safety, misconduct or sanctions clearance. No news assessment or banking action was performed.'};
 }
 
 function validate(reply,input){
@@ -76,4 +80,4 @@ function validate(reply,input){
  });
  return {status:'completed',checkedAt:input.checkedAt,businessContext:input.businessContext,summary:body.summary.trim(),insights,omittedParts:input.omittedParts,coverageGaps:input.coverageGaps,scope:input.scope,modelResponse:reply.modelResponse,actions:[],items:[]};
 }
-module.exports={requested,industryRequest,prepare,evidenceChoices,validate,SYSTEM,TOOL,ACTIONS};
+module.exports={requested,industryRequest,prepare,evidenceChoices,unavailable,validate,SYSTEM,TOOL,ACTIONS};

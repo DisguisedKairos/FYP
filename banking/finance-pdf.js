@@ -5,6 +5,10 @@ async function pdf(report){
   if(report.transactions.length>2000)throw new HttpError(413,'PDF reports support up to 2,000 ledger entries. Choose a shorter period or download CSV.');
   // Loaded only for a requested PDF, so ordinary banking startup stays small.
   const PDFDocument=require('pdfkit'),chunks=[];
+  // PDFKit loads standard fonts dynamically. Name the report fonts explicitly
+  // so serverless tracing includes their shared glyph-data dependencies.
+  require('pdfkit/standard-fonts/Helvetica');
+  require('pdfkit/standard-fonts/HelveticaBold');
   const doc=new PDFDocument({size:'A4',margins:{top:78,left:42,right:42,bottom:44},info:{Title:report.title,Author:'Green Link Digital Bank - C300 FYP',CreationDate:new Date(report.generatedAt)}});
   let bytes=0,page=0,escapedCharacters=false;
   const result=new Promise((resolve,reject)=>{

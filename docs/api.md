@@ -83,6 +83,8 @@ The local Python model exposes `/internal/health`, `/internal/model` and `POST /
 
 Assistant continuation expiry returns HTTP 409 with `code: ASSISTANT_CONTEXT_EXPIRED`. Clients must discard the expired reference and allow an explicit fresh request; they must not reuse the previous draft context.
 
+After an owned-counterparty scan establishes a public-evidence gap, the assistant can complete with `newsInsights.status: "unavailable"` and an empty `insights` array. The response explains the coverage gap; no news assessment or advisory flags were generated. Skipped evidence retrieval, stale or invalid source records and invalid model output remain subject to validation. Missing coverage never establishes sanctions clearance or company safety.
+
 ## Assistant customization and saved-chart refresh
 
 Endpoints require the signed-in operator and existing origin/CSRF checks for writes. No user ID override is accepted.

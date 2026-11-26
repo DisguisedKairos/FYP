@@ -16,6 +16,25 @@ const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const actor=async db=>(await db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
 async function financial(db){return {accounts:(await db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,transactions:(await db.query('SELECT id,status,amount_cents FROM transactions ORDER BY id')).rows,cases:(await db.query('SELECT * FROM fraud_cases ORDER BY id')).rows,rules:(await db.query('SELECT * FROM fraud_rules ORDER BY id')).rows};}
 
+pg('Counterparty advice with no eligible public evidence returns a coverage explanation without invented analysis',async t=>{
+ const f=await fixture(t,{http:false,now});await require('../scripts/seed-industry-businesses').seedIndustryBusinesses(f.db,{now});
+ const user=(await f.db.query("SELECT * FROM users WHERE email='logistics-business@greenlink.demo'")).rows[0],before=await financial(f.db);let searches=0,assessments=0;
+ const model={mode:'openai',model:modelName,inspect:async()=>({available:true}),research:async()=>{searches++;throw Error('No public company was available to search');},assessNews:async()=>{assessments++;throw Error('No evidence may be assessed');},chat:async messages=>{
+  const tools=messages.filter(m=>m.role==='tool');
+  if(tools.some(m=>m.tool_name==='analyze_news_insights'))return {role:'assistant',content:'No cited news is available for this request, so no news advisory flags were generated. Verify the legal company names or ask for sourced industry news [E2].'};
+  return {role:'assistant',content:'',tool_calls:[{function:{name:tools.length?'analyze_news_insights':'scan_counterparty_news',arguments:{}}}]};
+ }};
+ const result=await createAgents({db:f.db,model,now}).execute(user,'assistant',{message:'Scan news for my counterparties and advise what concerns to flag.'});
+ assert.equal(result.narrativeWithheld,undefined);assert.equal(result.newsInsights.status,'unavailable');assert.deepEqual(result.newsInsights.insights,[]);assert.equal(searches,0);assert.equal(assessments,0);assert.deepEqual(await financial(f.db),before);
+});
+
+test('Unavailable news advice must be explained rather than described as completed findings',()=>{
+ const {narrativeIssue}=require('../banking/agents/evidence'),options={results:[{tool:'analyze_news_insights',value:{status:'unavailable'}}],evidence:[{id:'E1'}],requireCitations:true};
+ assert.match(narrativeIssue('Review the sourced news findings and advisory concerns [E1].',null,options),/unavailable/);
+ assert.equal(narrativeIssue('No cited news is available for this request. Verify the company identity before requesting sourced advice [E1].',null,options),null);
+ assert.match(narrativeIssue('No cited news is available, but this company is definitely safe [E1].',null,options),/overstates|clearance/);
+});
+
 test('News advice intent distinguishes public implications from private fraud checks and fictional sector cases',()=>{
  for(const text of ['Show current news for my industry and advise what to flag','What risks does the latest company news suggest?','Give me industry insights','Review news and recommendations for suppliers'])assert.equal(news.requested(text),true,text);
  for(const text of ['Hello','Show my balances','Check my transactions for fraud using daily market trends','Evaluate reputation and money risk of my demo companies across sectors','Show latest Singapore market news'])assert.equal(news.requested(text),false,text);

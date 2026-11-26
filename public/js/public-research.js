@@ -16,6 +16,7 @@ function counterpartyHtml(scan){
 }
 function newsInsightsHtml(report){
  if(!report)return '';
+ if(report.status==='unavailable')return '<section class="public-research-card news-insights news-insights-unavailable" aria-label="News advice coverage"><h3>No sourced news advice available</h3><p role="status">'+esc(report.summary)+'</p><p class="chart-note">Coverage checked '+esc(fullDate(report.checkedAt))+'.</p><p class="notice">'+esc(report.scope)+'</p></section>';
  const flags={watch:'Watch this development',human_review:'Consider human review',insufficient_evidence:'Insufficient evidence'},categories={compliance:'Compliance',reputation:'Reputation',cybersecurity:'Cybersecurity',liquidity:'Funding and liquidity',supply_chain:'Supply chain',market:'Market conditions'};
  const context=report.businessContext;
  const company=context?'<div class="notice"><strong>For '+esc(context.companyName)+'</strong><p>'+esc(context.planningProfile)+' &middot; '+context.markets.map(esc).join(', ')+'</p><p>Activities: '+context.operations.map(esc).join('; ')+'. Priorities: '+context.priorities.map(esc).join('; ')+'.</p><p class="chart-note">'+esc(context.configuration)+'</p></div>':'';

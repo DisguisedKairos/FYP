@@ -43,3 +43,21 @@ test('Business news preferences save on mobile and the briefing button opens a c
  assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);assert.deepEqual(page.errors,[]);
  await page.screenshot('test-results/industry-business-news-mobile.png');
 });
+
+test('Missing public-company evidence shows a coverage explanation without invented news flags on mobile',async t=>{
+ const {seedIndustryBusinesses,CASES,PASSWORD}=require('../scripts/seed-industry-businesses');let searches=0,assessments=0;
+ const model={...provider(),chat:async messages=>{
+  const calls=messages.filter(m=>m.role==='tool');
+  if(calls.some(m=>m.tool_name==='analyze_news_insights'))return {role:'assistant',content:'No cited news is available in this request, so no news advisory flags were generated. Verify the legal company names or ask for sourced industry news [E2].'};
+  return {role:'assistant',content:'',tool_calls:[{function:{name:calls.length?'analyze_news_insights':'scan_counterparty_news',arguments:{}}}]};
+ },research:async()=>{searches++;throw Error('No public company may be searched');},assessNews:async()=>{assessments++;throw Error('No sourced news may be assessed');}};
+ const f=await fixture(t,{now,agentModel:model});await seedIndustryBusinesses(f.db,{now});
+ const page=await launchChrome(t,{width:390,height:950,mobile:true});
+ await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',CASES[0].email);await page.fill('#password',PASSWORD);await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');await page.click('[data-action=assistant-toggle]');
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ await page.fill('#assistant-message','Scan news for my counterparties and advise what concerns to flag.');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('!!document.querySelector(".news-insights-unavailable")&&!document.querySelector("#assistant-form button[type=submit]").disabled');
+ const text=await page.evaluate('document.querySelector(".news-insights-unavailable").textContent');assert.match(text,/No sourced news advice available/);assert.match(text,/No news-based flags were generated/);assert.match(text,/does not establish company safety/);
+ assert.equal(await page.evaluate('document.querySelectorAll("[data-news-flag]").length'),0);assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+ assert.equal(searches,0);assert.equal(assessments,0);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
+});

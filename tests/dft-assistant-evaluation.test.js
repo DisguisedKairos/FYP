@@ -303,3 +303,30 @@ test('Presentation schedule punctuation preserves exact Singapore time and rejec
  }
  for(const clock of ['25:30.','09:60.','09:00.5','09:00..'])assert.throws(()=>extractDraft('Schedule a transfer of SGD 10.00 tomorrow at '+clock,{},accounts,[],{now}),e=>e.status===400);
 });
+
+pg('Evidence retrieved on the last planning round receives a bounded tool-free answer',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const responses=[{role:'assistant',content:'I need to retrieve the permitted records.'},tool('get_company_activity'),{role:'assistant',content:'Review the company summary [E1].'},tool('search_transactions'),{role:'assistant',content:'Review the matching receipt list and use Activity for the complete history [E2].'}];
+ const engine=model(async(_messages,tools)=>{calls++;if(calls===5)assert.deepEqual(tools,[]);return responses[calls-1];});
+ const before=await balances(f.db),result=await createAgents({db:f.db,model:engine}).execute(user,'assistant',{message:'Show my recent transactions.'});
+ assert.equal(calls,5);assert.equal(result.narrativeWithheld,undefined);assert.deepEqual(result.steps.map(s=>s.tool),['get_company_activity','search_transactions']);
+ assert.deepEqual(await balances(f.db),before);
+});
+
+pg('Bounded final answers cannot bypass missing evidence or run additional tools',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const incomplete=model(async()=>{calls++;return tool('get_accounts');});
+ await assert.rejects(createAgents({db:f.db,model:incomplete}).execute(user,'assistant',{message:'Show my recent transactions.'}),e=>e.status===422);assert.equal(calls,4);
+ const responses=[{role:'assistant',content:'I need the permitted records.'},tool('get_company_activity'),{role:'assistant',content:'Review the company summary [E1].'},tool('search_transactions'),tool('prepare_payment_draft',{kind:'transfer'})];let index=0;
+ await assert.rejects(createAgents({db:f.db,model:model(async()=>responses[index++])}).execute(user,'assistant',{message:'Show my recent transactions.'}),e=>e.status===422);
+ assert.equal((await f.db.query("SELECT count(*)::int AS n FROM agent_tool_calls WHERE tool_name='prepare_payment_draft'")).rows[0].n,0);
+});
+
+test('Reconciliation distinguishes matched ledger balances from operational exceptions',()=>{
+ const options={results:[{tool:'reconcile_accounts',value:{discrepancies:[],failedSchedules:[{}],notificationExceptions:[{}]}}],evidence,requireCitations:true};
+ assert.equal(narrativeIssue('No discrepancies were found in the ledger, but schedule and notification exceptions need review [E1].',null,options),null);
+ assert.equal(narrativeIssue('The balances are reconciled; operational exceptions still require investigation [E1].',null,options),null);
+ for(const text of ['No issues were found [E1].','No exceptions were found [E1].','No discrepancies were found [E1].','No schedule exceptions were found [E1].','No notification exceptions were found [E1].'])assert.match(narrativeIssue(text,null,options),/exceptions|operational/,text);
+ assert.match(narrativeIssue('No discrepancies were found; review the notification exceptions [E1].',null,{...options,results:[{tool:'reconcile_accounts',value:{discrepancies:[{}],failedSchedules:[],notificationExceptions:[{}]}}]}),/exceptions/);
+ assert.match(narrativeIssue('Everything is clear [E1].',null,{...options,results:[{tool:'reconcile_accounts',value:{discrepancies:[],failedSchedules:[],notificationExceptions:[{}]}}]}),/exceptions|operational/);
+});
