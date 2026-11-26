@@ -74,7 +74,8 @@ function createHostedApplication({ environment = process.env, databaseFactory = 
     if (!initialization) {
       initialization = (async () => {
         const settings = configuration(environment);
-        const db = databaseFactory({ connectionString: environment.DATABASE_URL, poolOptions: { max: 5, idleTimeoutMillis: 5000, allowExitOnIdle: true } });
+        // A suspended database can need longer than the local five-second handshake budget.
+        const db = databaseFactory({ connectionString: environment.DATABASE_URL, poolOptions: { max: 5, connectionTimeoutMillis: 15000, idleTimeoutMillis: 5000, allowExitOnIdle: true } });
         let riskClient;
         try {
           attachPool(db.pool);

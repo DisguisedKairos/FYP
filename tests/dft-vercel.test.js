@@ -86,6 +86,30 @@ test('Failed cold starts release their pool, redact errors and allow a later ret
   await app.closeResources(); assert.equal(closed, 2);
 });
 
+test('Hosted PostgreSQL startup tolerates a slow initial connection without replaying requests',{skip:!process.env.TEST_DATABASE_URL},async t=>{
+  const net=require('node:net'),{createDatabase}=require('../database');
+  const target=new URL(process.env.TEST_DATABASE_URL);assert.ok(['localhost','127.0.0.1'].includes(target.hostname));
+  const sockets=new Set();let app,connections=0,initializations=0,served=0;
+  const proxy=net.createServer(socket=>{
+    sockets.add(socket);connections++;let upstream;
+    const timer=setTimeout(()=>{
+      upstream=net.connect({host:target.hostname,port:Number(target.port||5432)},()=>{socket.pipe(upstream);upstream.pipe(socket);});
+      sockets.add(upstream);upstream.on('error',()=>socket.destroy());upstream.on('close',()=>{sockets.delete(upstream);socket.destroy();});
+    },6000);
+    socket.on('error',()=>{});socket.on('close',()=>{clearTimeout(timer);sockets.delete(socket);upstream?.destroy();});
+  });
+  await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(0,'127.0.0.1',resolve);});
+  t.after(async()=>{await app?.closeResources();for(const socket of sockets)socket.destroy();await new Promise(resolve=>proxy.close(resolve));});
+  const endpoint=new URL(target);endpoint.hostname='127.0.0.1';endpoint.port=String(proxy.address().port);
+  app=createHostedApplication({environment:environment(),databaseFactory:options=>createDatabase({connectionString:endpoint.href,poolOptions:options.poolOptions}),attachPool(){},applicationFactory:async({db})=>{
+    initializations++;assert.equal((await db.query('SELECT 1 AS ready')).rows[0].ready,1);
+    const inner=express();inner.get('/health',(_req,res)=>{served++;res.json({ok:true});});return {app:inner,closeResources:async()=>{}};
+  }});
+  const base=await listen(t,app),responses=await Promise.all([1,2].map(()=>fetch(base+'/health',{signal:AbortSignal.timeout(20000)})));
+  assert.ok(responses.every(r=>r.status===200),'A delayed database handshake must not fail at five seconds.');
+  assert.equal(initializations,1);assert.equal(connections,1);assert.equal(served,2);
+});
+
 test('Hosted routing retains login, banking authorization, private endpoint isolation and secure session cookies', async t => {
   const f = await fixture(t, { http: false });
   const { createApplication } = require('../app');
