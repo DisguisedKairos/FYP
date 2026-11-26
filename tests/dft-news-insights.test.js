@@ -16,6 +16,20 @@ const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const actor=async db=>(await db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
 async function financial(db){return {accounts:(await db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,transactions:(await db.query('SELECT id,status,amount_cents FROM transactions ORDER BY id')).rows,cases:(await db.query('SELECT * FROM fraud_cases ORDER BY id')).rows,rules:(await db.query('SELECT * FROM fraud_rules ORDER BY id')).rows};}
 
+for(const unavailable of [false,true])pg('Combined company and industry advice reuses scan coverage without a third search: '+(unavailable?'unavailable sources':'cited sources'),async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),model=provider();let searches=0,assessments=0;
+ const original=model.research;model.research=async request=>{searches++;if(unavailable)throw Error('Controlled search outage');return original(request);};
+ model.chat=async messages=>{
+  const names=messages.filter(m=>m.role==='tool').map(m=>m.tool_name),name=!names.includes('scan_counterparty_news')?'scan_counterparty_news':!names.includes('get_market_insights')?'get_market_insights':!names.includes('analyze_news_insights')?'analyze_news_insights':null;
+  return name?{role:'assistant',content:'',tool_calls:[{function:{name,arguments:name==='get_market_insights'?{topic:'industry'}:{}}}]}:{role:'assistant',content:unavailable?'No cited news is available for advice; verify company identity and retry later [E3].':'Review the sourced business implications and independent checks [E3].'};
+ };
+ const assess=model.assessNews;model.assessNews=async input=>{assessments++;assert.equal(input.parts.length,2,'Reused source parts must not be duplicated');return assess(input);};
+ const before=await financial(f.db),result=await createAgents({db:f.db,model,now}).execute(user,'assistant',{message:'Scan news for companies this account deals with, including sanctions and compliance issues, and give advice based on industry insights.'});
+ assert.equal(searches,2);assert.equal(assessments,unavailable?0:1);assert.equal(result.narrativeWithheld,undefined);
+ assert.equal(result.newsInsights.status,unavailable?'unavailable':'completed');assert.equal(result.publicResearch.length,unavailable?0:2);
+ assert.deepEqual(await financial(f.db),before);
+});
+
 pg('Counterparty advice with no eligible public evidence returns a coverage explanation without invented analysis',async t=>{
  const f=await fixture(t,{http:false,now});await require('../scripts/seed-industry-businesses').seedIndustryBusinesses(f.db,{now});
  const user=(await f.db.query("SELECT * FROM users WHERE email='logistics-business@greenlink.demo'")).rows[0],before=await financial(f.db);let searches=0,assessments=0;

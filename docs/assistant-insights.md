@@ -98,3 +98,5 @@ Tests: tests/dft-counterparty-news.test.js, tests/dft-assistant-insights.test.js
 References: [official OpenAI web search](https://developers.openai.com/api/docs/guides/tools-web-search) and [function calling](https://developers.openai.com/api/docs/guides/function-calling).
 
 For private reputation and financial interaction assessments, use the [sector portfolio and company-risk workflow](counterparty-risk.md). Recorded company names are eligible for sourced public research; neither a name match nor missing coverage verifies identity or clears a company.
+
+A counterparty scan already includes mapped industry news. If the assistant requests industry insights after that scan, the same current report is reused within the request. Shared source parts and public cards are deduplicated, and unavailable coverage is excluded from evidence rather than treated as a finding. The two-search limit, source freshness checks and identity restrictions stay in force.
