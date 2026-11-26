@@ -1,6 +1,6 @@
 # OpenAI configuration
 
-The default AI provider is OpenAI. Express uses the Responses API for the assistant and all banking insights. The private FastAPI gateway uses the same provider/model for structured fraud scoring. There is no alternate provider or simulated inference when OpenAI fails.
+The default AI provider is OpenAI. Express uses the Responses API for the assistant and its banking analyses. The private FastAPI gateway uses the same provider/model for structured fraud scoring. There is no alternate provider or simulated inference when OpenAI fails.
 
 ## Local setup
 

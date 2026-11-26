@@ -8,7 +8,6 @@ export const pages = {
   customDashboard: {path:'/custom-dashboard',label:'My dashboard',icon:'grid'},
   business: { path: '/business', label: 'Business profile', icon: 'wallet' },
   aiAudit: { path: '/ai-audit', label: 'AI audit log', icon: 'statement', admin: true },
-  agents: { path: '/banking-insights', label: 'Banking insights', icon: 'activity' },
   accounts: { path: '/accounts', label: 'Business accounts', icon: 'wallet' },
   transfers: { path: '/transfers', label: 'Transfers', icon: 'transfer' },
   payments: { path: '/payments', label: 'Business bills', icon: 'bill' },
@@ -137,7 +136,7 @@ export function clearBankingState() {
   cancelDashboardReads();ui.cancelReads?.();
   closeDialog(true);
   modal.replaceChildren();
-  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, funding: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, agentWorkspace:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
+  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, funding: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
   document.body.classList.remove('menu-open');
   ui.resetAssistant?.();
 }

@@ -6,7 +6,6 @@ import {dashboardControl} from './js/assistant-dashboards.js';
 import {aiAuditPage,loadAiAudit,showAiAudit,downloadAiAudit,cancelAiAudit,cancelAiAuditDetail} from './js/ai-audit.js';
 import { renderAssistant, toggleAssistant, closeAssistant, resetAssistant, sendAssistant, assistantAction, rememberAssistantInput, retryAssistant, clearAssistant, cancelAssistant } from './js/assistant.js';
 import {toggleAssistantSize} from './js/assistant-window.js';
-import { agentsPage, loadAgents, submitAgent, showAgentRun, openAgentDraft, selectAgentRule, investigateFromQueue, rememberAgentForm, restoreAgentForms } from './js/agents.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 import { loadFraudCases, runFraudScan, openFraudCase, claimFraudCase, submitFraudCaseReview, cancelFraudCases, cancelFraudCaseDetail } from './js/fraud-cases.js';
 import { app, modal, state, ui, api, money, accountById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, cancelDashboardReads, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
@@ -21,11 +20,8 @@ import {businessPage,onboardingPage,profileFromForm,submitBusiness,loadBusinessA
 Object.assign(ui,{ loadFunding, render, auth, connectionError, loadExtras, loadNotifications, loadHistory, loadAccountRecent, loadRuleAudit, cancelRuleAudit, loadAiAudit, cancelAiAudit, renderAssistant, resetAssistant, cancelAssistant, transactionDetails, endSession, navigateFraud: () => navigate('fraud'), cancelReads: () => { cancelBusinessAdvisory(); cancelCustomDashboard(); cancelFunding(); stopBackgroundReads(); cancelBusinessApplications(); cancelDashboardReads(); cancelHistoryReads(); ui.cancelRuleAudit?.(); ui.cancelAssistant?.(); ui.cancelFraudCases?.(); ui.cancelAiAudit?.(); } });
 Object.assign(extraViews,{ aiAudit: aiAuditPage, schedules: schedulesPage, notifications: notificationsPage, fraud: fraudPage, rules: rulesPage,business:businessPage,onboarding:onboardingPage });
 ui.loadBusinessApplications=loadBusinessApplications;
-ui.loadAgents=loadAgents;
 ui.loadFraudCases=loadFraudCases;
 ui.cancelFraudCases=cancelFraudCases;
-ui.restoreAgentForms=restoreAgentForms;
-extraViews.agents=agentsPage;
 extraViews.customDashboard=customDashboardPage;
 ui.loadCustomDashboard=loadCustomDashboard;
 ui.composeAssistant=text=>{if(!state.assistant?.open)toggleAssistant();rememberAssistantInput(text);renderAssistant();document.querySelector('#assistant-message')?.focus();};
@@ -83,10 +79,6 @@ document.addEventListener('submit',async event => {
         await authenticate(values); break;
       }
       case 'account-form': await submitAccount(form); break;
-      case 'agent-liquidity-form':
-      case 'agent-reconciliation-form':
-      case 'agent-fraud-form':
-      case 'agent-simulation-form': await submitAgent(form); break;
       case 'business-profile-form': await submitBusiness(form); break;
       case 'business-advisory-form': await submitBusinessAdvisory(form); break;
       case 'business-review-form': await submitBusinessReview(form); break;
@@ -133,9 +125,6 @@ document.addEventListener('click',async event => {
       return openFraudCase(control.dataset.fraudCase);
     }
     if (control.dataset.claimFraudCase) return claimFraudCase(control);
-    if (control.dataset.agentRun) { if(control.closest('#assistant-root'))closeAssistant({focus:false}); if(state.route.page!=='agents')navigate('agents'); return showAgentRun(control.dataset.agentRun); }
-    if (control.dataset.investigateTransaction) return investigateFromQueue(control.dataset.investigateTransaction);
-    if (control.dataset.agentDraft !== undefined) return openAgentDraft(control.dataset.agentDraft);
     if (control.dataset.assistantAction) return assistantAction(control.dataset.assistantAction);
     if (control.dataset.assistantSuggestion) return sendAssistant(control.dataset.assistantSuggestion);
     if (control.dataset.readNotification) { control.disabled = true; await markNotification(control.dataset.readNotification); return; }
@@ -160,7 +149,6 @@ document.addEventListener('click',async event => {
       case 'funding-refresh': await loadFunding({force:true}); break;
       case 'assistant-settings': closeAssistant({focus:false});navigate('customDashboard');break;
       case 'assistant-clear': clearAssistant(); break;
-      case 'agents-refresh': await loadAgents(); break;
       case 'fraud-scan': await runFraudScan(); break;
       case 'fraud-cases-retry': await loadFraudCases(); break;
       case 'fraud-cases-prev': await loadFraudCases({direction:-1}); break;
@@ -213,16 +201,13 @@ document.addEventListener('click',async event => {
 document.addEventListener('input',event => {
   if(event.target.id==='assistant-message')rememberAssistantInput(event.target.value);
   const form = event.target.closest('form');
-  if(form?.dataset.agentKind)rememberAgentForm(form);
   if (form?.id === 'history-filters') updateHistoryFilters(form,{debounce:event.target.type === 'search'});
   if (form?.id === 'money-form') state.moneyDraft[form.dataset.type] = Object.fromEntries(new FormData(form));
 });
 document.addEventListener('change',event => {
-  if(event.target.id==='agent-rule')return selectAgentRule(event.target.form);
   if (event.target.id === 'rule-audit-filter') return loadRuleAudit({ruleId:event.target.value,page:1});
   if (event.target.id === 'fraud-case-filter') return loadFraudCases({status:event.target.value});
   const form = event.target.closest('form');
-  if(form?.dataset.agentKind)rememberAgentForm(form);
   if (form?.id === 'history-filters') return updateHistoryFilters(form);
   if (form?.id === 'schedule-form' && event.target.name === 'type') return changeScheduleType(form);
   if (form?.id !== 'money-form') return;

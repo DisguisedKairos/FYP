@@ -48,7 +48,8 @@ function accountName(value) {
 function serveFrontend(app) {
   app.use(express.static(path.join(__dirname, 'public'), { dotfiles: 'deny', index: false, redirect: false }));
   app.get(['/assistant','/company-activity','/saved-dashboards'], (_req, res) => res.redirect(302, '/dashboard?chat=open'));
-  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/banking-insights', '/ai-audit', '/custom-dashboard']);
+  app.get('/banking-insights', (_req, res) => res.redirect(302, '/dashboard'));
+  const pages = new Set(['/', '/login', '/register', '/dashboard', '/business', '/business-onboarding', '/accounts', '/transfers', '/payments', '/activity', '/scheduled-payments', '/notifications', '/fraud-monitoring', '/fraud-rules', '/ai-audit', '/custom-dashboard']);
   app.use((req, res, next) => { if (['GET', 'HEAD'].includes(req.method) && pages.has(req.path)) return res.sendFile(path.join(__dirname, 'views', 'index.html')); next(); });
 }
 
@@ -221,12 +222,7 @@ async function createApplication(options = {}) {
   route('post', '/api/assistant/messages', req => runAgent(req, 'assistant'));
   route('get','/api/ai-audit',req=>{ledger.requireAdmin(req.banking.user);return require('./banking/ai-audit').list(db,req.banking.user,query(req),{now});});
   route('get','/api/ai-audit/:kind/:id',async req=>{ledger.requireAdmin(req.banking.user);return {record:await require('./banking/ai-audit').detail(db,req.banking.user,req.params.kind,req.params.id)};});
-  route('get', '/api/agents/status', async () => ({ agent: await agents.status() }));
-  route('get', '/api/agents/runs', async req => ({ runs: await agents.list(req.banking.user) }));
-  route('get', '/api/agents/runs/:id', async req => ({ run: await agents.detail(req.banking.user, req.params.id) }));
-  for (const kind of ['assistant','fraud_investigation','liquidity','rule_simulation','reconciliation']) {
-    route('post', `/api/agents/${kind}`, req => runAgent(req, kind));
-  }
+  route('post', '/api/agents/assistant', req => runAgent(req, 'assistant'));
   app.use('/api', (_req, res) => res.status(404).json({ error: 'API endpoint not found.' }));
   serveFrontend(app);
   app.use((_req, res) => res.status(404).json({ error: 'Endpoint not found.' }));

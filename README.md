@@ -26,7 +26,6 @@ Ask the assistant **Check my transactions for fraud using daily market trends** 
 | Operations | Durable notifications, independent payment review, versioned fraud rules, financial audit history and AI evaluation audit |
 | Fraud | OpenAI risk scores using authoritative historical aggregates, grounded explanation codes, automatic monitoring, human-review cases |
 | Market context | Dated ScamShield alerts, ECB reference FX changes and financial news; guarded AI requests for human investigation |
-| Banking insights | AI investigation, liquidity scenarios, historical rule comparisons and reconciliation findings |
 | Security | Scrypt hashes, role/ownership checks, CSRF/origin protection, durable limits, session revocation, TOTP/recovery codes |
 | Financial controls | Atomic settlement, integer cents, row locking, payload-bound request keys, replay protection and reconciled statements |
 

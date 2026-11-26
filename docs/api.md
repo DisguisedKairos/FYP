@@ -53,16 +53,9 @@ All routes require the existing session. POST routes additionally require CSRF a
 
 | Method | Path | Payload/result |
 | --- | --- | --- |
-| GET | `/api/agents/status` | OpenAI configuration/availability; no model credentials |
-| GET | `/api/agents/runs` | Latest 30 owned run summaries |
-| GET | `/api/agents/runs/:id` | Owned report and permitted tool evidence |
 | POST | `/api/agents/assistant` | `{message,previousRunId?,engine?}`; response has reply, authoritative fact cards, form-draft actions, run ID and tool names |
-| POST | `/api/agents/liquidity` | `{days?,engine?}`; owned 1-90 day scheduled-payment projection |
-| POST | `/api/agents/fraud_investigation` | Staff-only `{transactionId,engine?}`; recorded risk and history investigation |
-| POST | `/api/agents/rule_simulation` | Staff-only `{ruleId,threshold?,enabled?,action?,days?,engine?}`; historical comparison, no live changes |
-| POST | `/api/agents/reconciliation` | `{engine?}`; owned exceptions or staff operations scope |
 
-Reports return `{run:{id,kind,engine,status,report,steps,...}}`. Unsupported fields/tools fail closed. Raw messages are not stored; reports, tool evidence and structured draft context are retained in PostgreSQL. Follow [agent privacy, limits and walkthrough](banking-agents.md).
+The assistant returns its reply, permitted banking facts, run ID and tool names. The former Banking insights task, status and run-list/detail endpoints have been removed; they return 404. Historical evidence remains available through the administrator-only AI audit API. Unsupported fields/tools fail closed. Raw messages are not stored; reports, tool evidence and structured draft context are retained in PostgreSQL. Follow [agent privacy, limits and walkthrough](banking-agents.md).
 
 ## AI audit log (2.11.0)
 

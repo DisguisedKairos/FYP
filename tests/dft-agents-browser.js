@@ -46,17 +46,8 @@ test('Popup accepts value-free security help, blocks appended credentials and op
   assert.deepEqual(page.errors,[]);
 });
 
-test('Business users project liquidity, inspect reconciliation and build a multi-turn draft on mobile',async t=>{
+test('Business users build a multi-turn draft on mobile without an insights workspace',async t=>{
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
-  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');
-  assert.equal(await page.evaluate('!!document.querySelector("#agent-fraud-form,#agent-simulation-form")'),false);
-  await page.fill('#agent-days','14');
-  await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
-  assert.equal(await page.evaluate('document.querySelector("#agent-days").value'),'14');
-  assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/liquidity projection/);
-  assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
-  await page.click('#agent-reconciliation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Reconciliation and exception")');
-  await page.screenshot(path.resolve('test-results','agents-business-mobile.png'));
   await visit(page,f.baseUrl,'/assistant');
   await page.evaluate(`window.originalAgentFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))await new Promise(resolve=>{window.releaseAgentResponse=resolve;});return window.originalAgentFetch(...args);};`);
   await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
@@ -70,34 +61,13 @@ test('Business users project liquidity, inspect reconciliation and build a multi
   assert.equal(await page.evaluate('document.querySelector("#toAccountNumber").value'),'1020001001');
   assert.deepEqual(page.errors,[]);
 });
-test('Bank staff investigate payments and preview rules with persisted evidence and no policy changes',async t=>{
-  const {f,page}=await open(t,1280,'reviewer@greenlink.demo');
-  const client=f.client();await client.login();const source=(await client.dashboard()).accounts[0];
-  const paid=await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'AGENT-BROWSER',amount:'100.00',requestId:randomUUID()}});assert.equal(paid.status,200);
-  const policy=await f.riskClient.getRules();
-  const held=await client.request('/api/payments',{method:'POST',body:{fromAccountId:source.id,billerId:'pub',reference:'AGENT-QUEUE',amount:'10000.00',requestId:randomUUID()}});assert.equal(held.status,200);assert.equal(held.data.transaction.status,'pending_review');
-  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelectorAll("#agent-rule option").length===5');
-  await page.fill('#agent-transaction',paid.data.transaction.id);await page.click('#agent-fraud-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Fraud investigation brief")');
-  await visit(page,f.baseUrl,'/fraud-monitoring');await page.waitFor('!!document.querySelector("[data-investigate-transaction]")');
-  await page.waitFor('!!document.querySelector("[data-model-activity]")');
-  assert.match(await page.evaluate('document.querySelector("[data-model-activity]").textContent'),/AI model activity/);
-  assert.match(await page.evaluate('document.querySelector("[data-model-monitoring-status]").textContent'),/current configured model/);
-  await page.click('[data-investigate-transaction]');await page.waitFor('location.pathname==="/banking-insights" && document.querySelector("[data-agent-report]")?.textContent.includes("'+held.data.transaction.id+'")');
-  await page.waitFor('document.querySelectorAll("#agent-rule option").length===5 && !document.querySelector("#agent-simulation-form fieldset").disabled');
-  await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
-  assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/changed decisions/);
-  assert.equal(await page.evaluate('document.querySelector("#agent-threshold").value'),'50');
-  await page.waitFor('document.querySelectorAll("[data-agent-run]").length>=2');
-  await page.screenshot(path.resolve('test-results','agents-staff-desktop.png'));
-  assert.deepEqual(await f.riskClient.getRules(),policy);assert.deepEqual(page.errors,[]);
-});
+
 
 test('Model connection checks and banking replies omit evidence while preserving saved records',async t=>{
   const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
   const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
-  await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');
   await visit(page,f.baseUrl,'/assistant');assert.equal(await page.evaluate('!!document.querySelector("#assistant-engine")'),false);
   await page.fill('#assistant-message','test');await page.click('#assistant-form button[type=submit]');
   await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("Assistant is responding")');
@@ -124,13 +94,6 @@ test('Model connection checks and banking replies omit evidence while preserving
   assert.equal(await page.evaluate('document.querySelector("#assistant-error").textContent'),'');
   assert.notEqual(await page.evaluate("import('/js/core.js').then(({state})=>state.assistant.previousRunId)"),previousRun);
   assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),financialBefore);
-  const currentRun=await page.evaluate("import('/js/core.js').then(({state})=>state.assistant.previousRunId)");
-  await visit(page,f.baseUrl,'/banking-insights');
-  const runSelector='[data-agent-run="'+currentRun+'"]';
-  await page.waitFor('!!document.querySelector('+JSON.stringify(runSelector)+')');await page.click(runSelector);
-  await page.waitFor('location.pathname==="/banking-insights" && !!document.querySelector("[data-agent-report]")');
-  assert.match(await page.evaluate('document.querySelector("[data-agent-report]").textContent'),/\[E1\] Owned account balances/);
-  assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
   const unexpected=page.errors.filter(e=>!(e.source==='network' && e.url?.endsWith('/api/agents/assistant') && /status of 409/.test(e.text)));
   assert.deepEqual(unexpected,[]);
 });
@@ -173,16 +136,9 @@ test('AI audit failed searches do not display the previous query results',async 
 });
 
 
-test('An insights refresh preserves focus and typing in a draft rule form',async t=>{
- const {f,page}=await open(t,1280,'reviewer@greenlink.demo');await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelectorAll("#agent-rule option").length===5');
- await page.evaluate("window.focusOriginalFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.focusOriginalFetch(...args);if(String(args[0])==='/api/agents/status'){const body=await response.text();await new Promise(resolve=>window.releaseInsightStatus=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};");
- await page.evaluate("import('/js/agents.js').then(m=>{window.pendingInsightRefresh=m.loadAgents();return true;})");await page.waitFor('typeof window.releaseInsightStatus==="function"');
- await page.evaluate('document.querySelector("#agent-threshold").focus();document.querySelector("#agent-threshold").select();window.releaseInsightStatus();window.pendingInsightRefresh');
- const focused=await page.evaluate('document.activeElement.id');await page.send('Input.insertText',{text:'50'});
- assert.deepEqual({focused,threshold:await page.evaluate('document.querySelector("#agent-threshold").value')},{focused:'agent-threshold',threshold:'50'});assert.deepEqual(page.errors,[]);
-});
 
-test('Customers cannot open the AI audit page or trigger audit reads and do not see assistant or insight audit links',async t=>{
+
+test('Customers cannot open the AI audit page or trigger audit reads and do not see assistant audit links',async t=>{
  const {f,page}=await open(t,390,'jamie@greenlink.demo');
  assert.equal(await page.evaluate('!!document.querySelector("[data-nav=aiAudit]")'),false);
  await visit(page,f.baseUrl,'/ai-audit');await page.waitFor('location.pathname==="/dashboard"');
@@ -191,8 +147,6 @@ test('Customers cannot open the AI audit page or trigger audit reads and do not 
  const denied=await page.evaluate("(async()=>{const m=await import('/js/ai-audit.js');await m.loadAiAudit();await m.showAiAudit('agent','customer-forged-link');m.downloadAiAudit();return {requests:window.auditFetchCount,page:m.aiAuditPage(),dialog:document.querySelector('#modal').open};})()");
  assert.deepEqual(denied,{requests:0,page:'',dialog:false});
  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant")');
- assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id],[data-nav=aiAudit]")'),false);
- await visit(page,f.baseUrl,'/banking-insights');await page.waitFor('document.querySelector("[data-agent-status]")?.textContent.includes("OpenAI ready")');await page.click('#agent-liquidity-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-agent-report]")');
  assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id],[data-nav=aiAudit]")'),false);
  assert.deepEqual(page.errors,[]);
 });
@@ -402,19 +356,7 @@ test('Daily market review in the popup queues suspicious owned payments for inde
 });
 
 
-test('Rules arriving during another insights form edit initialize a valid preview without replacing focus',async t=>{
- const {f,page}=await open(t,1280,'reviewer@greenlink.demo');
- await page.evaluate('window.ruleFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith("/fraud/rules"))await new Promise(resolve=>window.releaseRules=resolve);return window.ruleFetch(...args);};');
- await page.evaluate("import('/js/core.js').then(m=>m.navigate('agents'))");
- await page.waitFor('!!window.releaseRules && !!document.querySelector("#agent-simulation-form fieldset[disabled]")');
- assert.equal(await page.evaluate('document.querySelector("#agent-rule").value'),'');
- await page.fill('#agent-days','14');await page.evaluate('window.releaseRules();window.fetch=window.ruleFetch;');
- await page.waitFor('document.querySelectorAll("#agent-rule option").length===5 && !document.querySelector("#agent-simulation-form fieldset").disabled');
- assert.equal(await page.evaluate('document.activeElement.id'),'agent-days');assert.equal(await page.evaluate('document.querySelector("#agent-days").value'),'14');
- assert.equal(await page.evaluate('document.querySelector("#agent-rule").value'),'high_value');assert.equal(await page.evaluate('document.querySelector("#agent-simulation-form").elements.enabled.checked'),true);
- await page.fill('#agent-threshold','50');await page.click('#agent-simulation-form button[type=submit]');await page.waitFor('document.querySelector("[data-agent-report]")?.textContent.includes("Historical fraud rule impact analysis")');
- assert.deepEqual(page.errors,[]);
-});
+
 
 
 test('Recent transaction replies display the entire bounded receipt list with its full-history action',async t=>{
@@ -428,4 +370,17 @@ test('Recent transaction replies display the entire bounded receipt list with it
  assert.match(await page.evaluate('document.querySelector(".from-assistant").textContent'),/showing 20.*Open Activity/);
  assert.equal(await page.evaluate('document.querySelector(".from-assistant [data-assistant-action]").textContent.includes("View matching transactions")'),true);
  assert.deepEqual(page.errors,[]);
+});
+
+
+test('Banking insights is absent for customers and staff while the chatbot and audit access remain available',async t=>{
+ for(const [width,email] of [[390,'jamie@greenlink.demo'],[1280,'reviewer@greenlink.demo']]){
+  const {f,page}=await open(t,width,email);
+  assert.equal(await page.evaluate('!!document.querySelector("[data-nav=agents],[data-investigate-transaction]")'),false);
+  await page.navigate(f.baseUrl+'/banking-insights');await page.waitFor('location.pathname==="/dashboard" && !!document.querySelector(".app-shell")');
+  assert.equal(await page.evaluate('!!document.querySelector("[data-nav=agents],[data-agent-report],form[data-agent-kind]")'),false);
+  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant")');
+  assert.equal(await page.evaluate('!!document.querySelector(".from-assistant [data-ai-audit-id]")'),email.startsWith('reviewer'));
+  assert.deepEqual(page.errors,[]);
+ }
 });

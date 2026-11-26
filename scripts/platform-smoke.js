@@ -70,24 +70,15 @@ async function runSmoke(baseUrl, { fraudUrl = process.env.FRAUD_SERVICE_URL, tok
   await alex.login('alex@greenlink.demo');
   const original = await alex.request('/api/dashboard');
   const source = original.accounts.find(a => a.name === 'Operating savings') || original.accounts[0];
-  const localAgent=(await alex.request('/api/agents/status')).agent;
-  if(localAgent.available){
-    const assistantBalance = await alex.request('/api/assistant/messages', { message: 'What is my balance?' });
-    assert.equal(assistantBalance.engine, localAgent.mode);
-    assert.ok(assistantBalance.evidenceReferences.some(e=>e.tool==='get_accounts'));
-    assert.equal(assistantBalance.privacy.externalServices, localAgent.mode==='openai');
-    const audit=(await alex.request('/api/ai-audit/agent/'+assistantBalance.runId)).record;
-    assert.ok(audit.modelCalls.length>=2);assert.ok(audit.modelCalls.every(c=>c.model===localAgent.model && c.executed && c.durationMs>=0));assert.ok(audit.evidence.tools.some(t=>t.tool==='get_accounts'));
-    assert.ok(['validated_evidence','withheld'].includes(audit.evidence.guardrails.narrative));
-    const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 from ' + source.name + ' to 1020002001' });
-    assert.equal(assistantDraft.actions[0].type, 'draft_transfer');
-    assert.equal(assistantDraft.requiresAuthorization, true);
-    console.log('Configured AI assistant evidence and draft checks passed.');
-  }else{
-    await alex.request('/api/assistant/messages', { message: 'What is my balance?' }, 'POST', 503);
-    await alex.request('/api/agents/reconciliation', {}, 'POST', 503);
-    console.log('AI credentials/model unavailable in this fixture: verified explicit AI unavailability with no offline fallback. Run demo:agents locally for real model coverage.');
-  }
+  const assistantBalance = await alex.request('/api/assistant/messages', { message: 'What is my balance?' });
+  assert.equal(assistantBalance.engine,'openai');assert.equal(assistantBalance.privacy.externalServices,true);
+  assert.ok(assistantBalance.evidenceReferences.some(e=>e.tool==='get_accounts'));
+  const assistantAudit=(await alex.request('/api/ai-audit/agent/'+assistantBalance.runId)).record;
+  assert.ok(assistantAudit.modelCalls.length>=2);assert.ok(assistantAudit.modelCalls.every(c=>c.model===rawModel.modelName && c.executed && c.durationMs>=0));assert.ok(assistantAudit.evidence.tools.some(t=>t.tool==='get_accounts'));
+  assert.ok(['validated_evidence','withheld'].includes(assistantAudit.evidence.guardrails.narrative));
+  const assistantDraft = await alex.request('/api/assistant/messages', { message: 'Transfer SGD 25 from ' + source.name + ' to 1020002001' });
+  assert.equal(assistantDraft.actions[0].type, 'draft_transfer');assert.equal(assistantDraft.requiresAuthorization, true);
+  console.log('Configured AI assistant evidence and draft checks passed.');
   assert.equal((await alex.request('/api/dashboard')).accounts.find(a => a.id === source.id).balanceCents, source.balanceCents);
   const first = await alex.request('/api/transfers', { fromAccountId: source.id, toAccountNumber: '1020002001', amount: '1.25', description: 'Service smoke transfer', authorizationPassword: password, requestId: randomUUID() });
   first.transaction=await settleHeld(first.transaction);
