@@ -16,6 +16,15 @@ const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const actor=async db=>(await db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
 async function financial(db){return {accounts:(await db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,transactions:(await db.query('SELECT id,status,amount_cents FROM transactions ORDER BY id')).rows,cases:(await db.query('SELECT * FROM fraud_cases ORDER BY id')).rows,rules:(await db.query('SELECT * FROM fraud_rules ORDER BY id')).rows};}
 
+pg('An invalid structured advisory retains its cited briefing without inventing flags or reporting a failed whole request',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),model=provider(),original=model.chat,before=await financial(f.db);
+ model.assessNews=async()=>{throw Object.assign(new Error('Controlled schema rejection'),{code:'NEWS_ADVISORY_INVALID',validationAttempts:2});};
+ model.chat=async messages=>messages.some(m=>m.role==='tool'&&m.tool_name==='analyze_news_insights')?{role:'assistant',content:'Public news was retrieved, but the advisory could not be validated. Review the dated sources before deciding what further checks are needed [E2].'}:original(messages);
+ const result=await createAgents({db:f.db,model,now}).execute(user,'assistant',{message:'Show current news for my industry and explain what our company should do next based on our business activities and priorities.'});
+ assert.equal(result.newsInsights.status,'unavailable');assert.match(result.newsInsights.summary,/Public news was retrieved/);assert.deepEqual(result.newsInsights.insights,[]);assert.equal(result.publicResearch.length,1);assert.equal(result.narrativeWithheld,undefined);assert.deepEqual(await financial(f.db),before);
+ assert.equal((await f.db.query("SELECT count(*)::int AS n FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'errorCode'='NEWS_ADVISORY_INVALID'")).rows[0].n,1);
+});
+
 for(const unavailable of [false,true])pg('Combined company and industry advice reuses scan coverage without a third search: '+(unavailable?'unavailable sources':'cited sources'),async t=>{
  const f=await fixture(t,{http:false,now}),user=await actor(f.db),model=provider();let searches=0,assessments=0;
  const original=model.research;model.research=async request=>{searches++;if(unavailable)throw Error('Controlled search outage');return original(request);};

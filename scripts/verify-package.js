@@ -17,7 +17,7 @@ for(const file of ['banking/payment-planning.js','public/js/payment-planning.js'
 const MANIFEST_NAME = 'PACKAGE-MANIFEST.json';
 for(const name of ['tests/dft-agent-model.js','public/js/model-activity.js','tests/dft-model-activity.test.js'])REQUIRED_FILES.add(name);
 for (const file of ['banking/fraud-cases.js', 'database/migrations/008_fraud_monitoring.sql', 'public/js/fraud-cases.js', 'tests/dft-fraud-cases.test.js', 'tests/dft-fraud-cases-browser.js', 'docs/fraud-monitoring.md']) REQUIRED_FILES.add(file);
-for (const file of ['banking/fraud-monitoring.js', 'banking/agents/evidence.js', 'tests/dft-assistant-evaluation.test.js', 'docs/ai-evaluation.md']) REQUIRED_FILES.add(file);
+for (const file of ['banking/fraud-monitoring.js', 'banking/agents/evidence.js', 'banking/agents/banking-context.js', 'tests/dft-banking-context.test.js', 'tests/dft-assistant-evaluation.test.js', 'docs/ai-evaluation.md']) REQUIRED_FILES.add(file);
 REQUIRED_FILES.add('public/bootstrap.js');
 for(const file of ['banking/market-context.js','banking/market-risk.js','tests/dft-market-context.test.js','tests/dft-market-fixtures.js','docs/market-context.md'])REQUIRED_FILES.add(file);
 for(const name of ['banking/ai-audit.js','public/js/ai-audit.js','tests/dft-ai-audit.test.js'])REQUIRED_FILES.add(name);

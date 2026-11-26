@@ -70,6 +70,15 @@ Copy only the question into Ask GLDB. Use a fresh conversation for unrelated que
 | Counterparty interaction risk | Evaluate reputation and financial risk of interacting with companies recorded in my transactions. | Owned cash-flow exposure, supported reasons and unknowns. Missing reputation evidence is not clearance or a tool failure. |
 | Reconciliation | Check my accounts for reconciliation exceptions. | Owned discrepancies or an explicit no-exception result; no balance repair. |
 
+For questions that need background as well as banking records, use these prompts:
+
+- **Explain liquidity and cash flow in wholesale digital banking.** General concepts can be explained without reading an account.
+- **Explain that more simply.** Ask immediately after a general explanation in the same chat.
+- **What are current Singapore payment authorization requirements? Explain using public sources.** Current information is researched with dated primary-source links.
+- **Show my current balances and explain the general liquidity context.** Account facts and public background remain separate.
+
+The assistant can use general banking knowledge and sourced public context. It still retrieves private balances, transactions, funding calculations and company assessments from permitted banking tools. Public context does not fill missing account values or verify a company identity.
+
 For the sanctions/news scan, ask **Scan news for companies this account deals with, including sanctions and compliance issues.** The assistant selects up to five safe recorded company names from recent owned external receipts, including the current logistics counterparties. Names are searched as recorded; a receipt or similarly named search result does not verify legal identity. Missing public coverage remains explicit and does not clear a company. Industry news and named public-company profiles remain available separately.
 
 For payment-form demonstrations, the current logistics login can ask these complete drafts. Inspect the form, then cancel unless you intend to authorize an actual instruction:

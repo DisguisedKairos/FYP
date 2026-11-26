@@ -53,7 +53,8 @@ function evidenceChoices(input){
  });
 }
 
-function unavailable({now=Date.now}={}){
+function unavailable({now=Date.now,assessmentUnverified=false}={}){
+  if(assessmentUnverified)return {status:'unavailable',checkedAt:new Date(now()).toISOString(),summary:'Public news was retrieved and is shown below. The automated advisory could not be validated, so no advisory flags were generated. Review the dated sources and verify their relevance to your business before deciding on further checks.',insights:[],coverageGaps:[],omittedParts:0,actions:[],items:[],scope:'The sourced briefing remains available. No validated advisory, company clearance, fraud finding or banking action was produced.'};
  return {status:'unavailable',checkedAt:new Date(now()).toISOString(),summary:'No cited public news is available for an advisory in this request. No news-based flags were generated. Verify the legal company names or request fresh sourced industry news.',insights:[],coverageGaps:[],omittedParts:0,actions:[],items:[],scope:'Missing public coverage does not establish company safety, misconduct or sanctions clearance. No news assessment or banking action was performed.'};
 }
 

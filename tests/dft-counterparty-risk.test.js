@@ -100,6 +100,14 @@ pg('Tester scenario-versus-recorded-review question returns a private advisory w
  assert.ok(result.data.counterpartyRisk.assessments.every(c=>c.demo&&c.reputation.reasons.some(f=>f.source==='operator_case_input')));
  assert.deepEqual(await financial(f.db),before);
 });
+
+pg('A rejected summary can reuse validated AI company assessments without losing the owned report',async t=>{
+ const provider=controlled(),original=provider.chat;
+ provider.chat=async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'There are eight companies in this portfolio [E1].'}:original(messages);
+ const f=await fixture(t,{http:false,agentModel:provider});await seedSectorCompanies(f.db);const user=await actor(f.db),before=await financial(f.db);
+ const result=await require('../banking/agents').createAgents({db:f.db,model:provider}).execute(user,'assistant',{message:'Evaluate reputation and financial risk of my sector companies.'});
+ assert.equal(result.narrativeWithheld,undefined);assert.equal(result.aiAudit.narrativeRecovery.method,'validated_assessment_summary');assert.equal(result.counterpartyRisk.assessments.length,8);assert.match(result.reply,/individual company assessments/);assert.doesNotMatch(result.reply,/eight/);assert.deepEqual(await financial(f.db),before);
+});
 pg('Assistant evaluates both risk dimensions with current ownership, CSRF and audit while leaving money and cases untouched',async t=>{
  const f=await fixture(t,{agentModel:controlled()});await seedSectorCompanies(f.db);const client=f.client();await client.login(EMAIL,PASSWORD);const before=await financial(f.db);
  assert.equal((await client.request('/api/agents/assistant',{method:'POST',body:{message:'Evaluate reputation and financial risk of my sector companies'},csrf:false})).status,403);

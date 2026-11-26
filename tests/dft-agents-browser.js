@@ -5,8 +5,8 @@ const path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {fixture}=require('./dft-helpers');
 const {launchChrome}=require('./chrome');
-async function open(t,width,email){
-  const f=await fixture(t),page=await launchChrome(t,{width,height:900,mobile:width<760});
+async function open(t,width,email,options={}){
+  const f=await fixture(t,options),page=await launchChrome(t,{width,height:900,mobile:width<760});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
   return {f,page};
@@ -18,6 +18,20 @@ async function visit(page,base,route){
   }
   await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');
 }
+
+test('General banking explanations are labelled on mobile and support a simple contextual follow-up',async t=>{
+ const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({available:true}),chat:async()=>({role:'assistant',content:'Liquidity means having readily available funds to meet business obligations.'})};
+ const {f,page}=await open(t,390,'alex@greenlink.demo',{agentModel});
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ await visit(page,f.baseUrl,'/assistant');
+ for(const question of ['What is liquidity in wholesale digital banking?','Explain that more simply.']){
+  const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');
+  await page.fill('#assistant-message',question);await page.click('#assistant-form button[type=submit]');
+  await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+'&&!document.querySelector("#assistant-form button[type=submit]").disabled');
+  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/General banking explanation; no account records checked/);
+ }
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
+});
 test('Popup accepts value-free security help, blocks appended credentials and opens permitted guidance screens',async t=>{
   const {f,page}=await open(t,390,'jamie@greenlink.demo');
   await visit(page,f.baseUrl,'/assistant');
