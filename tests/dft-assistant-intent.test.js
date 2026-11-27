@@ -176,6 +176,28 @@ pg('Staff presentation replies expose recorded scores, comparison counts and rul
  }
 });
 
+pg('An investigation follow-up reuses the verified transaction selection and rejects a silent target switch',async t=>{
+ const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT * FROM users WHERE role='admin' ORDER BY id LIMIT 1")).rows[0];
+ const ids=(await f.db.query('SELECT id FROM transactions WHERE amount_cents<0 ORDER BY requested_at DESC LIMIT 2')).rows.map(r=>r.id);assert.equal(ids.length,2);
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;let target=ids[0],followup=false,contextSeen=false;
+ const model=provider(async messages=>{
+  if(messages.some(m=>m.role==='tool'))return answer('banking_evidence','The retrieved payment evidence is shown below [E1].',[followup?'get_related_payments':'investigate_transaction']);
+  if(followup)contextSeen=messages.some(m=>m.role==='assistant'&&m.content.includes('Previous verified transaction selection')&&m.content.includes(ids[0]));
+  return call(followup?'get_related_payments':'investigate_transaction',{transactionId:target});
+ });
+ const agents=createAgents({db:f.db,model}),first=await agents.execute(user,'assistant',{message:'Take a closer look at '+ids[0]+' and explain its risk signals.'});
+ followup=true;
+ const second=await agents.execute(user,'assistant',{message:'How does it compare with earlier completed payments to that recipient?',previousRunId:first.runId});
+ assert.equal(contextSeen,true);assert.equal(second.narrativeWithheld,undefined,second.narrativeIssue);
+ const detail=await agents.detail(user,second.runId);assert.equal(detail.steps[0].arguments.transactionId,ids[0]);
+ target=ids[1];await assert.rejects(agents.execute(user,'assistant',{message:'Compare it with the earlier payments again.',previousRunId:second.runId}),e=>e.status===400&&/previously selected transaction/.test(e.message));
+ const switched=await agents.execute(user,'assistant',{message:'Now compare the earlier payments for '+ids[1]+'.',previousRunId:second.runId});
+ assert.equal((await agents.detail(user,switched.runId)).steps[0].arguments.transactionId,ids[1]);
+ const unrelated=await createAgents({db:f.db,model:provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','Your current owned balances are shown below [E1].',['get_accounts']):call('get_accounts'))}).execute(user,'assistant',{message:'Show my current balances.',previousRunId:second.runId});
+ assert.equal((await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[unrelated.runId])).rows[0].context_json.lastTransactionEnquiry,null);
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+});
+
 pg('Natural fraud rule requests advertise canonical identifiers and supported review actions',async t=>{
  const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT * FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];
  const agents=createAgents({db:f.db,model:provider(async(messages,schemas)=>{

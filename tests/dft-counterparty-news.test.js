@@ -50,7 +50,7 @@ pg('Counterparty selection is owned, bounded, recent and excludes unsafe labels 
  assert.doesNotMatch(JSON.stringify(selected.companies),/Other Private|Internal Supplier|Old Supplier|ignore/);
  const forbidden=await scan.prepare(f.db,owner,{company:'Other Private Customer Supplier'},'Scan sanctions news for Other Private Customer Supplier',{now:clock});assert.equal(forbidden.status,'no_counterparties');
  await assert.rejects(scan.prepare(f.db,owner,{company:'Owned Supplier A'},'Scan a different company'),e=>e.status===400);
- await assert.rejects(scan.prepare(f.db,owner,{},'Show my balance'),e=>e.status===400);
+ await assert.rejects(scan.prepare(f.db,{...owner,auth_version:owner.auth_version+1},{},'What should we check before paying them again?'),e=>e.status===409);
 });
 pg('An owned counterparty scan returns source cards and audited searches without financial or review-case changes',async t=>{
  const f=await fixture(t,{http:false}),owner=await user(f.db),before=await financial(f.db),model=provider(),queries=[];
@@ -66,6 +66,15 @@ pg('A failed official-source search stays explicit while available public news r
  const f=await fixture(t,{http:false}),owner=await user(f.db),result=await createAgents({db:f.db,model:provider({failOfficial:true})}).execute(owner,'assistant',{message:'Scan sanctions and company news for my counterparties'});
  assert.equal(result.counterpartyScan.status,'partial');assert.equal(result.publicResearch.length,1);assert.equal(result.publicResearch[0].kind,'counterparty_news');assert.equal(result.counterpartyScan.failures[0].kind,'counterparty_sanctions');
  assert.equal((await f.db.query("SELECT count(*)::int AS count FROM audit_log WHERE event_type='ai.model_call' AND metadata->>'phase'='counterparty_sanctions_research' AND metadata->>'status'='failed'")).rows[0].count,1);
+});
+
+pg('Model-selected relationship research accepts natural questions while retaining owned names and isolated searches',async t=>{
+ const f=await fixture(t,{http:false}),owner=await user(f.db),before=await financial(f.db),message='Who have we been dealing with, and what should we check before paying them again?';
+ assert.equal(scan.requested(message),false);
+ const result=await createAgents({db:f.db,model:provider()}).execute(owner,'assistant',{message});
+ assert.equal(result.counterpartyScan.status,'completed');assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ assert.deepEqual(await financial(f.db),before);
+ await assert.rejects(scan.prepare(f.db,owner,{company:'An unrelated business'},message),e=>e.status===400);
 });
 pg('No-searchable-company and unavailable-provider results never fabricate public findings',async t=>{
  const f=await fixture(t,{http:false}),owner=await user(f.db);let requests=0;const model=provider();model.research=async()=>{requests++;throw new Error('Offline');};

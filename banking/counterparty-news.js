@@ -15,7 +15,8 @@ function safeName(value){
  try{publicResearch.requestFor('company',{companyName:value},value);return true;}catch{return false;}
 }
 async function prepare(db,user,args,message,{now=Date.now}={}){
- if(!requested(message))throw new HttpError(400,'Ask explicitly for company news, sanctions or compliance research.');
+ // The assistant selects this read by meaning. Authorization and the owned
+ // company selection below remain independent of the user's vocabulary.
  const company=args.company;
  if(company!==undefined&&(typeof company!=='string'||!safeName(company)||!normalized(message).includes(normalized(company))))throw new HttpError(400,'Use an exact recorded company name from your question.');
  const end=now(),start=end-90*DAY;

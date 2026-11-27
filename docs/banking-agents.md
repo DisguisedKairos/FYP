@@ -82,6 +82,8 @@ Related read-only follow-ups can keep the company and search filters: after a co
 
 Natural form requests can use "one-off" or "one-time" for a single payment. An explicit future date stays in a scheduled review form; an unspecified recurrence still needs clarification. The payment-source list contains your own accounts, so it cannot establish that a supplied recipient is missing. Verify the recipient in the banking form. To save a displayed chart, you can also ask **Pin this visualization as "Supplier review" and refresh it weekly.** The chart verb is distinct from a security PIN; never include security values in chat.
 
+Payment forms also accept comma- or semicolon-separated fields and explicit Singapore times such as tomorrow at noon or midnight. Vague times such as afternoon still need a precise time. Company-risk and counterparty research tools accept the model's interpretation of a relationship question without requiring reputation, sanctions or news keywords; ownership, source isolation and identity limitations remain enforced.
+
 For questions that need background as well as banking records, use these prompts:
 
 - **Explain liquidity and cash flow in wholesale digital banking.** General concepts can be explained without reading an account.
@@ -107,6 +109,8 @@ For administrator demonstrations, sign out of the customer account and sign in a
 2. Ask **Preview the high_value fraud rule with a proposed threshold of SGD 9,500 over the last 30 days without changing the live rule.** Inspect its period, proposed threshold, eligible/skipped assessments and before/after decision counts. No eligible snapshots means insufficient coverage; it does not establish that a proposed threshold is safe or measure fraud accuracy.
 3. Ask **Check bank-wide reconciliation exceptions.** Customer questions remain limited to their owned accounts.
 4. Open **AI audit** using the administrator navigation. It shows permitted structured model/tool activity, not hidden model reasoning or other users' private conversations.
+
+After investigating a specific payment, ask **How does it compare with earlier completed payments to that recipient?** The conversation retains only the verified transaction selection and retrieves fresh evidence for that payment. An unrelated enquiry clears this selection; changing the target requires specifying the new transaction ID. Previous read context cannot authorize a payment or create a review flag.
 
 ## Guidance and missing details
 

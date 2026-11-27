@@ -20,8 +20,19 @@ test('Explicit tomorrow time is interpreted in Singapore and ambiguous dates are
   assert.equal(parse('Schedule transfer SGD 5 to 1088800201 tomorrow at 15:30 once').scheduledAt,'2026-10-25T07:30:00.000Z');
   assert.equal(parse('Schedule transfer SGD 5 to 1088800201 tomorrow at 12 am once').scheduledAt,'2026-10-24T16:00:00.000Z');
   assert.throws(()=>parse('Schedule transfer SGD 5 tomorrow at 25:30 once'),e=>e.status===400);
-  for(const time of ['9.30','15:300','9pmfoo','noon'])assert.throws(()=>parse('Schedule transfer SGD 5 tomorrow at '+time+' once'),e=>e.status===400,time);
+  for(const time of ['9.30','15:300','9pmfoo','noon pm','afternoon'])assert.throws(()=>parse('Schedule transfer SGD 5 tomorrow at '+time+' once'),e=>e.status===400,time);
   assert.throws(()=>parse('Schedule transfer SGD 5 tomorrow at 2030-01-01T01:00:00Z once'),e=>e.status===400);
+});
+
+test('Punctuated billing drafts preserve the owned source, reference and unambiguous Singapore clock',()=>{
+ for(const punctuation of [',',';'])for(const reference of ['RP-C300','"RP-C300"',"'RP-C300'"]){
+  const draft=parse('Please put together a monthly PUB payment form for SGD 5.00'+punctuation+' from 1088800101'+punctuation+' reference '+reference+punctuation+' starting tomorrow at noon.');
+  assert.equal(draft.kind,'schedule');assert.equal(draft.type,'bill');assert.equal(draft.billerId,'pub');assert.equal(draft.fromAccountId,'1');
+  assert.equal(draft.amount,'5.00');assert.equal(draft.reference,'RP-C300');assert.equal(draft.frequency,'monthly');assert.equal(draft.scheduledAt,'2026-10-25T04:00:00.000Z');
+ }
+ assert.equal(parse('Prepare a once transfer of SGD 5 to 1088800201 tomorrow at midnight').scheduledAt,'2026-10-24T16:00:00.000Z');
+ assert.throws(()=>parse('Prepare a bill of SGD 5 from Unknown account, reference RP-C300 starting tomorrow at noon'),e=>e.status===400);
+ for(const token of ['5,,','5.001,','1,00.50;'])assert.throws(()=>parse('Transfer SGD '+token+' from 1088800101 to 1088800201'),e=>e.status===400);
 });
 
 test('One-off and one-time requests retain their explicit single-payment recurrence and future form',()=>{

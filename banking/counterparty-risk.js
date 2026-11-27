@@ -19,7 +19,8 @@ const SYSTEM='Evaluate reputation and financial interaction risk using ONLY the 
 const riskSchema={type:'object',additionalProperties:false,properties:{level:{type:'string',enum:['elevated','review','insufficient_evidence']},evidenceIds:{type:'array',minItems:1,maxItems:4,items:{type:'string'}},summary:{type:'string',minLength:1,maxLength:600}},required:['level','evidenceIds','summary']};
 const TOOL={type:'function',function:{name:'submit_counterparty_assessment',description:'Return bounded evidence-linked qualitative reputation and financial assessments. No actions.',parameters:{type:'object',additionalProperties:false,properties:{assessments:{type:'array',minItems:1,maxItems:8,items:{type:'object',additionalProperties:false,properties:{companyKey:{type:'string'},reputation:riskSchema,financial:riskSchema,checks:{type:'array',minItems:1,maxItems:5,items:{type:'string',enum:Object.keys(CHECKS)}}},required:['companyKey','reputation','financial','checks']}}},required:['assessments']}}};
 async function prepare(db,user,args,message,{now=Date.now}={}){
- if(!requested(message))throw new HttpError(400,'Ask explicitly to evaluate company reputation or financial interaction risk.');
+ // Tool selection interprets the question; owned records and cited facts,
+ // rather than a second keyword check, constrain this read-only assessment.
  if(args.company!==undefined&&(typeof args.company!=='string'||args.company.trim().length<2||args.company.length>120||!companyMentioned(message,args.company)))throw new HttpError(400,'Use an exact owned company name from your question.');
  const companyKeys=args.company===undefined?null:[key(args.company),key(args.company).endsWith('.')?key(args.company).slice(0,-1):key(args.company)+'.'];
  const end=now(),start=end-90*DAY;

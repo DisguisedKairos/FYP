@@ -73,6 +73,14 @@ pg('Owned sector preparation calculates cash exposure while preserving demo prov
  await assert.rejects(risk.prepare(f.db,owner,{company:logistics.company},'Evaluate a different company risk'),e=>e.status===400);
  const body=JSON.stringify(prepared);assert.doesNotMatch(body,/1099007001|authorizationPassword|password_hash|accountNumber/);
 });
+
+pg('Model-selected company assessment accepts relationship questions without risk keywords',async t=>{
+ const f=await fixture(t,{http:false});await seedSectorCompanies(f.db);const owner=await actor(f.db),before=await financial(f.db);
+ const message='Who have we been dealing with, and what should we check before paying them again?';assert.equal(risk.requested(message),false);
+ const result=await require('../banking/agents').createAgents({db:f.db,model:controlled()}).execute(owner,'assistant',{message});
+ assert.equal(result.counterpartyRisk.status,'completed');assert.equal(result.counterpartyRisk.assessments.length,8);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ assert.deepEqual(await financial(f.db),before);
+});
 pg('Recorded company labels are eligible for bounded news searches without claiming verified identity',async t=>{
  const f=await fixture(t,{http:false});await seedSectorCompanies(f.db);const owner=await actor(f.db),scan=await news.prepare(f.db,owner,{},'Scan my counterparties for sanctions and news');
  assert.equal(scan.companies.length,5);assert.equal(scan.totalCompanyCount,8);assert.equal(scan.omittedCompanyCount,3);assert.equal(news.requestsFor(scan).length,2);assert.ok(scan.companies.every(name=>cases.some(c=>c.name===name)));assert.match(scan.scope,/does not verify legal identity/);
