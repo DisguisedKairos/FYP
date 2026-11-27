@@ -2,6 +2,7 @@
 
 const {HttpError}=require('../../models/errors');
 const MODES=['banking_evidence','general_banking','clarification','outside_scope'];
+const SCOPE_INSTRUCTIONS='Stay within wholesale banking, the app, business financial activity, company risk and relevant industry or market context. Judge the purpose of the request, not isolated words. Clarification is only for missing information needed by a supported banking or business task. An unrelated personal request remains outside_scope even when it lacks details; do not ask its preferences, collect details or offer to perform it. Business-sector relevance alone does not make a personal request a banking task. Requests explaining how a sector affects the business, its payments or its risks remain supported. For mixed requests, handle the supported banking part and briefly decline the unrelated part. Never use general_banking to answer unrelated questions. A request for another business\'s registered banking profile or private account activity must be declined without retrieving a default owned profile as a substitute. Public company research and the signed-in business\'s own recorded counterparty exposure are separate supported tasks; neither grants access to another customer\'s private data.';
 const PUBLIC_TOOLS=['get_banking_context','get_market_insights','research_public_company','scan_counterparty_news','get_daily_market_context'];
 // Tool names alone resume unfiltered reads. Filtered reads use separately
 // bound filters below; payment values never come from read context.
@@ -12,7 +13,7 @@ function format(toolNames,{evidenceTools=[]}={}){
  const modes=evidenceTools.length?(evidenceTools.every(name=>PUBLIC_TOOLS.includes(name))?['banking_evidence','general_banking']:['banking_evidence']):MODES;
  return {type:'json_schema',name:'banking_assistant_response',strict:true,schema:{
   type:'object',additionalProperties:false,
-  properties:{mode:{type:'string',enum:modes},requiresResearch:{type:'boolean',description:'True only when this answer needs current public research; false when asking for missing details or declining an unrelated request.'},requiredTools:{type:'array',description:'Tools required for the current answer. For clarification or outside_scope, return an empty array, without listing tools for a possible future request.',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string'}},
+  properties:{mode:{type:'string',enum:modes,description:'Use clarification only for missing details of a supported banking or business task. Use outside_scope for unrelated personal tasks, even if they are incomplete. Do not clarify or offer to perform an unrelated request.'},requiresResearch:{type:'boolean',description:'True only when this answer needs current public research; false when asking for missing details or declining an unrelated request.'},requiredTools:{type:'array',description:'Tools required for the current answer. For clarification or outside_scope, return an empty array, without listing tools for a possible future request.',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string'}},
   required:['mode','requiresResearch','requiredTools','reply'],
  }};
 }
@@ -98,4 +99,4 @@ function resolveEnquiry(tool,args,message,previous,{now=Date.now}={}){
  const readMessage=!period.from&&previous.period?message+'\nFor the period '+previous.period.from+' to '+previous.period.to:message;
  return {args:resolved,message:readMessage,boundCompany:previous.arguments?.company,resumed:true};
 }
-module.exports={INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,actionRequested,savedOptions,enquiryFor,resolveEnquiry,FILTERED_READS};
+module.exports={INSTRUCTIONS:INSTRUCTIONS+' '+SCOPE_INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,actionRequested,savedOptions,enquiryFor,resolveEnquiry,FILTERED_READS};

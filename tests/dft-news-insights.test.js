@@ -83,6 +83,19 @@ test('Chat-only news advice rejects invented staff notifications and review case
  const valid=reply(input);valid.tool_calls[0].function.arguments.summary='Ask your compliance team to review the source before deciding whether to open a case.';
  assert.equal(news.validate(valid,input).status,'completed');
 });
+test('News advice accepts explicit supply uncertainty and still rejects later guarantees',()=>{
+ const input=news.prepare([report()],{now});
+ for(const field of ['summary','headline','why']){
+  for(const text of ['The framework is not a supply guarantee.','Treat the agreement as a resilience signal rather than a supply guarantee.','The framework is not a procurement guarantee.']){
+   const value=reply(input),body=value.tool_calls[0].function.arguments;
+   if(field==='summary')body.summary=text;else body.insights[0][field]=text;
+   assert.equal(news.validate(value,input).status,'completed',field+': '+text);
+   if(field==='summary')body.summary+=' Delivery is guaranteed.';else body.insights[0][field]+=' Delivery is guaranteed.';
+   assert.throws(()=>news.validate(value,input),e=>e.code==='NEWS_ADVISORY_INVALID',field+': positive guarantee');
+  }
+ }
+});
+
 test('News analysis uses only fresh cited public text and reports omitted parts and unavailable checks',()=>{
  const source={...report(),privateBalance:987654321,privateAccount:'1088800101'},input=news.prepare([source],{now,gaps:['counterparty_sanctions','private data']});
  assert.doesNotMatch(JSON.stringify(input),/987654321|1088800101|privateBalance|privateAccount/);assert.deepEqual(input.coverageGaps,['counterparty_sanctions']);assert.equal(input.parts.length,1);

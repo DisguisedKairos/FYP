@@ -87,7 +87,7 @@ For questions that need background as well as banking records, use these prompts
 - **What are current Singapore payment authorization requirements? Explain using public sources.** Current information is researched with dated primary-source links.
 - **Show my current balances and explain the general liquidity context.** Account facts and public background remain separate.
 
-The assistant can use general banking knowledge and sourced public context. It still retrieves private balances, transactions, funding calculations and company assessments from permitted banking tools. Public context does not fill missing account values or verify a company identity.
+The assistant can use general banking knowledge and sourced public context. It still retrieves private balances, transactions, funding calculations and company assessments from permitted banking tools. Public context does not fill missing account values or verify a company identity. Clarifications apply to supported banking and business tasks; unrelated personal requests receive the scope reply even when their details are incomplete. Mixed questions retain the supported banking task and decline the unrelated part.
 
 For the sanctions/news scan, ask **Scan news for companies this account deals with, including sanctions and compliance issues.** The assistant selects up to five safe recorded company names from recent owned external receipts, including the current logistics counterparties. Names are searched as recorded; a receipt or similarly named search result does not verify legal identity. Missing public coverage remains explicit and does not clear a company. Industry news and named public-company profiles remain available separately.
 

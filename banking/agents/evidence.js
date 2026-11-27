@@ -48,7 +48,8 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
     .replace(/\b(?:does not|do not|cannot|can't)\s+establish\s+(?:whether|that)\s+(?:(?:a|any|this|the)\s+(?:payment|transaction)|it)\s+is\s+fraud[ -]free(?=\s*(?:[.!?;]|\[E\d+\]|$))/gi,'[qualified uncertainty]')
     .replace(/\b(?:no|not|without)\s+(?:(?:a|any|supported|exact|reliable|calibrated)\s+)*(?:(?:fraud\s+probabilit(?:y|ies)|probabilit(?:y|ies)\s+of\s+fraud)\s+or\s+)?guaranteed[ -](?:money[ -])?loss(?:es)?(?:\s+estimate)?\b/gi,'[qualified uncertainty]')
     .replace(/\b(?:not|neither)\s+(?:payment\s+)?authorization\s+(?:or|nor)\s+(?:a\s+)?guarantee\b/gi,'[qualified uncertainty]')
-    .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment)\s+)?guarantees?\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
+    .replace(/\b(?:rather than|instead of)\s+(?:(?:a|any)\s+)?(?:(?:funding|payment|supply|procurement)\s+)?guarantees?\b/gi,'[qualified uncertainty]')
+    .replace(/\b(?:does not|do not|can not|will not|would not|cannot|can't|no|without(?: any)?|not a)\s+(?:(?:funding|payment|supply|procurement)\s+)?guarantees?\b|\bnot\s+(?:guaranteed|(?:confirmed|proven)\s+fraud)\b/gi, '[qualified uncertainty]');
   if (/\b(?:definitely|certainly|proven|confirmed)\s+(?:fraud|fraudulent|safe|legitimate)|\b(?:no|zero)\s+(?:fraud|risk)\b|\bfraud[ -]free\b|\bguarantee(?:d|s)?\b/i.test(claims)) return 'The interpretation overstates what the evidence establishes.';
   const newsAdvice=[...results].reverse().find(r=>r.tool==='analyze_news_insights')?.value;
   if(newsAdvice?.status==='unavailable'&&!/\b(?:unavailable|no cited (?:public )?news|no searchable|insufficient (?:news|evidence)|cannot|can't|could not|couldn't|not available)\b/i.test(plain))return 'The sourced news advisory is unavailable; explain the coverage limitation without claiming advisory findings.';

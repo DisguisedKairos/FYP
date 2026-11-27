@@ -45,8 +45,8 @@ test('Explicit no-execution clauses are accepted without masking actual or quali
 
 test('Funding uncertainty accepts explicit negation while actual guarantees remain blocked',()=>{
  const options={evidence,requireCitations:true};
- for(const reply of ['This is not authorization or a guarantee [E1].','This is neither payment authorization nor a guarantee [E1].','There is no guarantee of funding [E1].','There are no guarantees of payment safety [E1].','A projection comes without any guarantee [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
- for(const reply of ['This guarantees funding [E1].','There is no guarantee, but I guarantee the payment will succeed [E1].','There are no guarantees, but I guarantee payment safety [E1].','This is not authorization or a guarantee; your payment is guaranteed [E1].'])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
+ for(const reply of ['This is not authorization or a guarantee [E1].','This is neither payment authorization nor a guarantee [E1].','There is no guarantee of funding [E1].','There are no guarantees of payment safety [E1].','A projection comes without any guarantee [E1].','The framework is not a supply guarantee [E1].','The agreement is a resilience signal rather than a supply guarantee [E1].','Treat the projection as a planning estimate instead of a payment guarantee [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['This guarantees funding [E1].','There is no guarantee, but I guarantee the payment will succeed [E1].','There are no guarantees, but I guarantee payment safety [E1].','This is not authorization or a guarantee; your payment is guaranteed [E1].','The framework is not a supply guarantee, but delivery is guaranteed [E1].','It is a resilience signal rather than a supply guarantee; your funding is guaranteed [E1].','We guarantee supply rather than review it [E1].'])assert.match(narrativeIssue(reply,null,options),/overstates/,reply);
 });
 
 test('Clarification choices do not bypass checks on financial quantities or certainty',()=>{
