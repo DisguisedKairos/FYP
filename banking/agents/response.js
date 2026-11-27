@@ -16,17 +16,19 @@ function format(toolNames,{evidenceTools=[]}={}){
   required:['mode','requiresResearch','requiredTools','reply'],
  }};
 }
-// A wording repair cannot reclassify the task or redefine its evidence needs.
+// Wording candidates cannot reclassify the task or redefine its evidence needs.
+// The caller validates each actual model response before selecting a paragraph.
+const NARRATIVE_PATTERN='^(?:[^0-9]|\\[E[1-9][0-9]*\\])+$';
 function narrativeFormat(){
  return {type:'json_schema',name:'banking_assistant_narrative',strict:true,schema:{
-  type:'object',additionalProperties:false,properties:{reply:{type:'string'}},required:['reply'],
+  type:'object',additionalProperties:false,properties:{replies:{type:'array',minItems:3,maxItems:3,description:'Independent, concise alternative paragraphs answering the same request from the supplied facts. Each must stand alone, include required uncertainty or funding warnings, and cite supplied references when applicable. Use qualitative wording: say the selected period instead of repeating durations, dates, counts or any number words. Exact facts remain in the application cards.',items:{type:'string',pattern:NARRATIVE_PATTERN}}},required:['replies'],
  }};
 }
 function parseNarrative(content){
  const invalid=()=>new HttpError(503,'The assistant returned an invalid wording correction. Retry the request.');
  let value;try{value=JSON.parse(content);}catch{throw invalid();}
- if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join(',')!=='reply'||typeof value.reply!=='string'||!value.reply.trim()||value.reply.length>12000)throw invalid();
- return {content:value.reply};
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join(',')!=='replies'||!Array.isArray(value.replies)||value.replies.length!==3||value.replies.some(reply=>typeof reply!=='string'||!reply.trim()||reply.length>3000||!new RegExp(NARRATIVE_PATTERN).test(reply)))throw invalid();
+ return {content:value.replies[0],narrativeCandidates:value.replies};
 }
 function parse(content,toolNames){
  const invalid=()=>new HttpError(503,'The assistant returned an invalid response. Retry the request.');

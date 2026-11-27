@@ -462,7 +462,10 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         for(let repair=0;!clarification && repair<2 && wordingIssue(reply) && deadline-Date.now()>1000;repair++){
           try{
             const revised=await trackedChat([...messages,{role:'assistant',content:reply},{role:'user',content:'Validation failure: '+wordingIssue(reply)+(generalAnswer?' Give a general banking explanation only. Do not claim any account was checked or state private financial facts. Do not use evidence references when no records were retrieved.':' Cite the supplied tool references.')+' Rewrite as a short qualitative paragraph. Apart from valid supplied references, do not include ANY digits or numbers written as words, monetary amounts, scores, counts, dates, thresholds, account IDs or numbered lists. The banking screen displays exact facts. Never claim execution, certainty of fraud, guaranteed funding, or facts contradicted by tool results. Reconciliation does not assess fraud. Only describe the retrieved scope and what a human should verify. For concentration, say main customer or main carrier, avoiding counts such as one customer. For a choice, ask for a preferred option without counting alternatives. Never repeat a count such as two recorded names or a tool capacity such as up to five. Say a payment rather than one payment, and a limited set rather than a numeric scope. For an ambiguous company say: The name matches multiple recorded companies; please choose the intended company from the options shown [E1].'}],[],{signal:AbortSignal.timeout(Math.min(15000,deadline-Date.now()))},'narrative_repair');
-            if(!revised.tool_calls?.length && revised.content.trim())reply=revised.content;
+            if(!revised.tool_calls?.length && revised.content.trim()){
+              const candidates=revised.narrativeCandidates||[revised.content];
+              reply=candidates.find(candidate=>!wordingIssue(candidate))||revised.content;
+            }
           }catch{
             // An optional wording repair must not discard a valid evidence
             // report. The original unsafe narrative is withheld below.

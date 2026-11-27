@@ -40,10 +40,11 @@ pg('A completed draft remains a banking answer instead of being rejected as a ne
  assert.equal(calls,3);assert.ok(result.actions.some(a=>a.type==='draft_transfer'));assert.equal(result.aiAudit.intent.mode,'banking_evidence');
 });
 
-test('Wording corrections accept only a reply and cannot redefine intent or tool permissions',()=>{
- const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['reply']);
- assert.deepEqual(response.parseNarrative('{"reply":"Inspect the owned records [E1]."}'),{content:'Inspect the owned records [E1].'});
- for(const value of [{reply:'',mode:'general_banking'},{reply:'Inspect the records.',requiredTools:['execute_payment']},{reply:'Inspect the records.',requiresResearch:false},{reply:''},{reply:5},[],null])assert.throws(()=>response.parseNarrative(JSON.stringify(value)),e=>e.status===503);
+test('Wording corrections accept only bounded model paragraphs and cannot redefine intent or tool permissions',()=>{
+ const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['replies']);
+ const replies=['Inspect the owned records [E1].','Check the displayed facts [E2].','Review the selected period [E10].'];
+ assert.deepEqual(response.parseNarrative(JSON.stringify({replies})),{content:replies[0],narrativeCandidates:replies});
+ for(const value of [{replies,mode:'general_banking'},{replies,requiredTools:['execute_payment']},{replies,requiresResearch:false},{replies:[]},{replies:[...replies,'extra']},{replies:['',...replies.slice(1)]},{replies:[5,...replies.slice(1)]},{replies:['Your balance is SGD 999.',...replies.slice(1)]},{replies:['x'.repeat(3001),...replies.slice(1)]},{reply:'Legacy wording.'},[],null])assert.throws(()=>response.parseNarrative(JSON.stringify(value)),e=>e.status===503);
  assert.throws(()=>response.parseNarrative('not JSON'),e=>e.status===503);
 });
 
@@ -52,7 +53,7 @@ pg('Wording-only corrections preserve the original enquiry intent without requir
  const model=createOpenAIModel({apiKey:'test-only-openai-key-not-a-real-secret',fetchImpl:async(url,options)=>{
   if(String(url).includes('/models/'))return new Response(JSON.stringify({id:'gpt-6-luna'}));
   const body=JSON.parse(options.body);calls++;
-  const text=JSON.stringify(body.text.format.name==='banking_assistant_narrative'?{reply:'The funds in your owned accounts are shown below [E1].'}:{mode:'banking_evidence',requiresResearch:false,requiredTools:calls===2?['get_accounts']:[],reply:calls===2?'There is one account in the retrieved records [E1].':'The funds in your owned accounts are shown below [E1].'});
+  const text=JSON.stringify(body.text.format.name==='banking_assistant_narrative'?{replies:['There is one account in the retrieved records [E1].','The funds in your owned accounts are shown below [E1].','We have executed the payment [E1].']}:{mode:'banking_evidence',requiresResearch:false,requiredTools:calls===2?['get_accounts']:[],reply:calls===2?'There is one account in the retrieved records [E1].':'The funds in your owned accounts are shown below [E1].'});
   return new Response(JSON.stringify({id:'resp_rewrite_'+calls,status:'completed',model:'gpt-6-luna',output:calls===1?[{type:'function_call',call_id:'call_accounts',name:'get_accounts',arguments:'{}'}]:[{type:'message',role:'assistant',content:[{type:'output_text',text}]}]}));
  }});
  const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'How much have I got available right now?'});
@@ -60,6 +61,19 @@ pg('Wording-only corrections preserve the original enquiry intent without requir
  assert.equal(calls,3);assert.deepEqual(result.aiAudit.intent.requiredTools,['get_accounts']);
  assert.equal(result.aiAudit.intent.mode,'banking_evidence');assert.deepEqual(result.steps.map(s=>s.tool),['get_accounts']);
  assert.ok(result.items.some(i=>typeof i.amountCents==='number'));assert.doesNotMatch(result.reply,/one account/);
+ assert.equal(result.reply,'The funds in your owned accounts are shown below [E1].');
+});
+
+pg('Alternative wording never bypasses financial safeguards when every model paragraph fails',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const candidates=['There is one account in the retrieved records [E1].','We have executed the payment [E1].','These transactions are definitely safe [E1].'];
+ const result=await createAgents({db:f.db,model:provider(async()=>{
+  if(++calls===1)return call('get_accounts');
+  if(calls===2)return answer('banking_evidence',candidates[0],['get_accounts']);
+  return {content:candidates[0],narrativeCandidates:candidates};
+ })}).execute(user,'assistant',{message:'How much have I got available right now?'});
+ assert.equal(result.narrativeWithheld,true);assert.ok(result.items.some(i=>typeof i.amountCents==='number'));
+ assert.doesNotMatch(result.reply,/definitely safe|executed|one account/);assert.equal(result.aiAudit.intent.mode,'banking_evidence');
 });
 
 test('Semantic task checks require every interpreted tool and current sources; explanations do not need private projections',()=>{
