@@ -55,6 +55,17 @@ test('Clarification choices do not bypass checks on financial quantities or cert
  for(const reply of ['Please choose one account with a balance of one million [E1].','Which one has SGD 999999 [E1]?','Choose one hundred dollars [E1].',"I can't guarantee this payment is fraud-free, but I guarantee the next payment [E1].",'Not guaranteed losses; the payment is guaranteed [E1].'])assert.ok(narrativeIssue(reply,null,options),reply);
 });
 
+test('Funding clarifications cannot claim a matched source account is missing',()=>{
+ const check={tool:'check_payment_funds',value:{source:{id:'owned-source',name:'Operating savings'},complete:false,missing:['payment amount in SGD']}};
+ const options={evidence,requireCitations:true,results:[check]};
+ for(const reply of ["I couldn't match the account number you gave to an owned source account [E1].",'The source account was not found [E1].',"I can't find your source account [E1]."]){
+  assert.match(narrativeIssue(reply,null,options),/source account was matched/,reply);
+  assert.equal(narrativeIssue(reply,null,{...options,results:[{...check,value:{...check.value,source:null}}]}),null,reply);
+ }
+ for(const reply of ['What amount in SGD should I check from your selected account [E1]?','The source account is selected, but the payment amount is missing [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ assert.equal(narrativeIssue("I couldn't find the recipient account [E1].",null,options),null);
+});
+
 test('Missing funding details allow explicit uncertainty without masking later claims of coverage',()=>{
  const options={evidence,requireCitations:true,results:[{tool:'check_payment_funds',value:{complete:false,fundingWarnings:[{code:'payment_details_required'}]}}]};
  for(const reply of ["I can't determine whether you have enough funds yet. Please provide the payment amount and source account [E1].",'I cannot yet confirm that your account has sufficient funds. Please specify the proposed payment [E1].',"We couldn't establish if the source is fully funded; provide the missing payment details [E1].","I can't assess whether you can pay until the amount and source are supplied [E1]."]){

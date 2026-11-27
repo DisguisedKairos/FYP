@@ -263,6 +263,9 @@ pg('A balance-only affordability answer retrieves missing payment details before
  assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.equal(requests,4);
  assert.deepEqual(result.steps.map(step=>step.tool),['get_accounts','check_payment_funds']);
  assert.ok(result.items.some(item=>item.title==='Please specify payment amount in SGD'));assert.equal(result.actions.length,0);
+ const funding=(await f.db.query("SELECT result_json FROM agent_tool_calls WHERE run_id=$1 AND tool_name='check_payment_funds'",[result.runId])).rows[0].result_json;
+ assert.deepEqual(funding.missing,['payment amount in SGD']);assert.equal(funding.source.name,source.name);
+ assert.doesNotMatch(funding.fundingWarnings[0].message,/source account/i);
  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });
 
