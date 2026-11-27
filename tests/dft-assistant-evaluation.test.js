@@ -55,6 +55,12 @@ test('Report month labels must belong to the retrieved period and cannot hide fi
  assert.ok(narrativeIssue('Your October 2026 report is ready [E1].',null,{...options,results:[{tool:'get_banking_context',value:{period:{from:'2026-10-01',to:'2026-10-31'}}}]}));
 });
 
+test('Historical date captions accept only retrieved report endpoints in supported date formats',()=>{
+ const options={evidence,requireCitations:true,results:[{tool:'get_accounts',value:{period:{from:'2026-11-01',to:'2026-11-25'}}}]};
+ for(const dates of ['2026-11-01 to 2026-11-25','1 November 2026 to 25 November 2026','November 1 to 25, 2026','1–25 November 2026','01/11/2026 to 25/11/2026','1 Nov to 25 Nov 2026'])assert.equal(narrativeIssue('Your opening and closing balances from '+dates+' are shown below [E1].',null,options),null,dates);
+ for(const text of ['The report ends 26 November 2026 [E1].','The report ends 2025-11-25 [E1].','The balance is SGD 25 November 2026 [E1].','The report ends 25 November 2026 with SGD 999 [E1].','There are two accounts from 1–25 November 2026 [E1].'])assert.ok(narrativeIssue(text,null,options),text);
+});
+
 test('Generated charts cannot be described as saved without retrieved saved-view evidence',()=>{
  const reply='Your saved dashboard shows the selected activity [E1].',options={evidence,requireCitations:true};
  assert.match(narrativeIssue(reply,null,{...options,results:[{tool:'get_company_activity',value:{status:'ready'}}]}),/not a saved dashboard/);

@@ -128,4 +128,19 @@ function clarification(error){
   if(!(error instanceof HttpError)||error.status!==400)throw error;
   return {complete:false,needsClarification:true,items:[{title:'Please clarify the report period',detail:error.message}],actions:[]};
 }
-module.exports={requestedPeriod,isDateReply,clarification,normalizeDurations};
+function withoutReportDates(text,periods){
+  const valid=periods.filter(p=>/^\d{4}-\d{2}-\d{2}$/.test(p?.from)&&/^\d{4}-\d{2}-\d{2}$/.test(p?.to));
+  if(!valid.length)return text;
+  const expanded=expandNamedRanges(text),years=[...new Set(valid.flatMap(p=>[p.from.slice(0,4),p.to.slice(0,4)]))];
+  let result=expanded;
+  // Reuse the request parser's named, ISO and Singapore date interpretation.
+  // Only returned period endpoints are exempt from numerical-claim screening.
+  for(const date of explicitDates(expanded,years.length===1?Number(years[0]):0).reverse()){
+    if(valid.some(p=>date.value===p.from||date.value===p.to)&&!/(?:\bSGD|S?\$)\s*$/i.test(expanded.slice(0,date.index)))result=result.slice(0,date.index)+'[retrieved report date]'+result.slice(date.end);
+  }
+  return result.replace(new RegExp('\\b('+MONTHS+')\\s+(\\d{4})\\b','gi'),(label,month,year)=>{
+    const prefix=year+'-'+String(names.indexOf(month.slice(0,3).toLowerCase())+1).padStart(2,'0');
+    return valid.some(p=>p.from.slice(0,7)<=prefix&&prefix<=p.to.slice(0,7))?'[retrieved report month]':label;
+  });
+}
+module.exports={requestedPeriod,isDateReply,clarification,normalizeDurations,withoutReportDates};

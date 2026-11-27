@@ -36,15 +36,10 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const cited = [...plain.matchAll(/\[(E\d+)\]/g)].map(match => match[1]), valid = new Set(evidence.map(e => e.id));
   if (requireCitations && (!cited.length || cited.some(id => !valid.has(id)))) return 'The interpretation must cite evidence retrieved in this run.';
   let qualitative = plain.replace(/\[E\d+\]/g, '').replace(/^\s*\d+[.)]\s+/gm, '');
-  // A month label from a retrieved report is scope, not an invented amount.
-  // Permit only months overlapping an actual returned read period; arbitrary
-  // years, dates, amounts and account identifiers remain screened below.
-  const periods=results.filter(r=>['get_accounts','get_finance_report','search_transactions','get_company_activity','open_saved_dashboard'].includes(r.tool)).map(r=>r.value?.period).filter(p=>/^\d{4}-\d{2}-\d{2}$/.test(p?.from)&&/^\d{4}-\d{2}-\d{2}$/.test(p?.to));
-  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
-  qualitative=qualitative.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/gi,(label,month,year)=>{
-    const prefix=year+'-'+String(months.findIndex(m=>m.toLowerCase()===month.toLowerCase())+1).padStart(2,'0');
-    return periods.some(p=>p.from.slice(0,7)<=prefix&&prefix<=p.to.slice(0,7))?'[retrieved report month]':label;
-  });
+  // Verified report scope is not an invented financial value. Amounts, counts
+  // and dates outside the retrieved scope still pass the checks below.
+  const periods=results.filter(r=>['get_accounts','get_finance_report','search_transactions','get_company_activity','open_saved_dashboard'].includes(r.tool)).map(r=>r.value?.period).filter(Boolean);
+  qualitative=require('../assistant-period').withoutReportDates(qualitative,periods);
   if(!requireCitations)qualitative=qualitative.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
   if (/\d/.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead.';
   // An imperative choice or interrogative pronoun is not a numerical bank fact.
