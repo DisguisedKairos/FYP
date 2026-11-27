@@ -76,10 +76,13 @@ export function renderAssistant() {
     root.innerHTML='<div id="funding-announcement" class="sr-only" role="status" aria-live="polite"></div><div class="assistant-funding-preview" hidden></div><button type="button" class="assistant-launcher" data-action="assistant-toggle" aria-label="Open GLDB Assistant" aria-controls="assistant-popup" aria-expanded="false">'+icon('chat')+'<span>Ask GLDB</span><span class="assistant-unread" hidden>New reply</span></button><section id="assistant-popup" class="assistant-popup" role="dialog" aria-modal="false" aria-labelledby="assistant-title" hidden></section>';
     bindAssistantWindow(root.querySelector('#assistant-popup'));
     root.querySelector('#assistant-popup').addEventListener('toggle',event=>{
-      if(!event.target.matches('details.assistant-evidence'))return;
+      if(!event.target.matches('details.assistant-evidence,details.news-insights,details.news-insight'))return;
       const id=event.target.closest('[data-message-id]')?.dataset.messageId;
       const message=state.assistant?.messages.find(message=>String(message.id)===id);
-      if(message)message.evidenceExpanded=event.target.open;
+      if(!message)return;
+      if(event.target.matches('.assistant-evidence'))message.evidenceExpanded=event.target.open;
+      else if(event.target.matches('.news-insights'))message.newsExpanded=event.target.open;
+      else (message.newsFlagsExpanded||={})[event.target.dataset.newsIndex]=event.target.open;
     },true);
   }
   root.classList.toggle('assistant-open',t.open);

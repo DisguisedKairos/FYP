@@ -11,11 +11,20 @@ async function ask(page){await page.fill('#assistant-message','Show current news
 test('Mobile news advice renders sourced flags and independent checks in chat without financial or staff-case actions',async t=>{
  const {f,page}=await open(t,390),before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
  await ask(page);const text=await page.evaluate('document.querySelector(".news-insights").textContent');
- assert.match(text,/Consider human review/);assert.match(text,/Watch this development/);assert.match(text,/Insufficient evidence/);assert.match(text,/Chat-only advisory flags/);assert.match(text,/independent verification/);
+ assert.match(text,/Consider human review/);assert.match(text,/Watch this development/);assert.match(text,/Insufficient evidence/);assert.match(text,/Chat-only advisory flags/);assert.match(text,/Verify source dates and legal identity independently/);
+ assert.equal(await page.evaluate('document.querySelector(".news-insights").open'),false);
+ assert.match(await page.evaluate('document.querySelector(".news-insights>summary").innerText'),/Human review: 1.*Watch: 1.*Uncertain: 1/);
+ assert.equal(await page.evaluate('document.querySelector(".news-insight p").checkVisibility()'),false);
+ await page.click('.news-insights>summary');assert.equal(await page.evaluate('document.querySelector(".news-insights").open'),true);
+ assert.equal(await page.evaluate('document.querySelector(".news-insight").open'),false);
+ await page.click('.news-insight>summary');assert.equal(await page.evaluate('document.querySelector(".news-insight p").checkVisibility()'),true);
+ await page.click('[data-action=assistant-close]');await page.click('[data-action=assistant-toggle]');
+ assert.equal(await page.evaluate('document.querySelector(".news-insights").open&&document.querySelector(".news-insight").open'),true);
+ await page.click('.news-insights>summary');assert.equal(await page.evaluate('document.querySelector(".news-insights").open'),false);
  assert.equal(await page.evaluate('document.querySelectorAll(".news-insights .news-insight-source a").length'),3);assert.equal(await page.evaluate('document.querySelector(".news-insight-source a").getAttribute("href")'),'https://www.csa.gov.sg/');
  assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action],.from-assistant:last-child [data-ai-audit-id]").length'),0);
  assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.equal((await f.db.query('SELECT count(*)::int AS count FROM fraud_cases')).rows[0].count,0);
- assert.equal(await page.evaluate('(()=>{const heading=document.querySelector(".news-insights h3").getBoundingClientRect(),thread=document.querySelector("#assistant-thread").getBoundingClientRect();return heading.top<thread.bottom&&heading.bottom>thread.top;})()'),true);
+ assert.equal(await page.evaluate('(()=>{const heading=document.querySelector(".news-insights>summary").getBoundingClientRect(),thread=document.querySelector("#assistant-thread").getBoundingClientRect();return heading.top<thread.bottom&&heading.bottom>thread.top;})()'),true);
  await page.screenshot('test-results/news-advice-mobile.png');assert.deepEqual(page.errors,[]);
 });
 test('News advice is cleared with the chat and cannot persist into another operator session',async t=>{

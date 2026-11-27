@@ -20,7 +20,7 @@ Ask **Show current news for my industry, explain the business implications and a
 
 The assistant retrieves relevant public news first, then calls the configured OpenAI model to analyze only those sourced summaries. The industry option maps the signed-in business profile to a fixed generic sector, including energy/utilities; it does not send the submitted industry text, private profile, balances or receipts to search. Searches prioritize recent developments and ask for source/event dates, while clearly distinguishing background and unverified dates. Check time is not publication time or a continuous news feed.
 
-Chat cards show business implications, practical independent checks, clickable source links and one of these advisory labels:
+News advice starts collapsed with visible flag counts and any coverage warning. Expand the card and individual flags to read the short advice, practical checks and full source excerpts. Company context is expandable separately, and each message keeps your card and flag choices when you reopen the assistant. New AI summaries and explanations use short sentences. Advisory labels are:
 
 - **Watch this development:** monitor an operating or market development.
 - **Consider human review:** independently verify a concern before applying it to the business.
