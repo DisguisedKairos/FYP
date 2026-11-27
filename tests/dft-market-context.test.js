@@ -58,6 +58,26 @@ pg('Market-assisted AI flags an owned suspicious payment once, preserves financi
  const closed=await reviewer.request('/api/fraud/cases/'+saved.id+'/review',{method:'POST',body:{action:'close',version:claimed.data.case.version,outcome:'legitimate',reason:'Verified the business purpose using an independent contact.',authorizationPassword:'Greenlink123!'}});assert.equal(closed.status,200,JSON.stringify(closed.data));
  const repeated=await request(client);assert.equal(repeated.status,200);assert.match(repeated.data.reply,/already reviewed/);assert.equal((await f.db.query('SELECT status FROM fraud_cases WHERE id=$1',[saved.id])).rows[0].status,'closed');assert.equal(await financial(f.db),before);
 });
+
+pg('Informal review intent uses a grounded request while denials and invented quotes cannot create cases',async t=>{
+ let forcedQuote;const base=marketModel(),agentModel={...base,chat:async messages=>{
+  const reply=await base.chat(messages);
+  for(const call of reply.tool_calls||[])if(call.function.name==='flag_transaction_for_review')call.function.arguments.requestQuote=forcedQuote??messages.find(m=>m.role==='user').content;
+  return reply;
+ }};
+ const f=await fixture(t,{now:()=>NOW,agentModel,marketContext:{get:async()=>contextFixture(NOW)}}),{client,id}=await payment(f);
+ const message='Take a closer look for anything dodgy among my recent payments.';
+ assert.equal(marketRisk.fraudIntent(message),false);const before=await financial(f.db);
+ forcedQuote='Check my transactions for fraud';
+ assert.equal((await request(client,message)).status,400);
+ forcedQuote='flag my payments for review';
+ assert.equal((await request(client,'Do not flag my payments for review.')).status,400);
+ assert.equal((await f.db.query('SELECT count(*)::int AS n FROM fraud_cases')).rows[0].n,0);
+ forcedQuote=undefined;const accepted=await request(client,message);assert.equal(accepted.status,200,JSON.stringify(accepted.data));
+ const saved=(await f.db.query('SELECT status,score FROM fraud_cases WHERE transaction_id=$1',[id])).rows[0];assert.equal(saved.status,'open');assert.equal(saved.score,null);
+ const stored=(await f.db.query('SELECT arguments_json FROM agent_tool_calls WHERE run_id=$1',[accepted.data.runId])).rows;
+ assert.doesNotMatch(JSON.stringify(stored),/requestQuote|closer look|dodgy/);assert.equal(await financial(f.db),before);
+});
 pg('Market tools cannot inspect another customer payment',async t=>{
  let target;const f=await fixture(t,{now:()=>NOW,agentModel:marketModel({initialArgs:()=>({transactionId:target})}),marketContext:{get:async()=>contextFixture(NOW)}});
  target=(await payment(f,{email:'alex@greenlink.demo'})).id;

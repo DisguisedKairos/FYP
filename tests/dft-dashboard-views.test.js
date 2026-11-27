@@ -182,6 +182,33 @@ function sequenceModel(plan){return {mode:'openai',model:'controlled-dashboard-s
  const step=messages.filter(row=>row.role==='tool').length;
  return step<plan.length?{role:'assistant',content:'',tool_calls:[{function:plan[step]}]}:{role:'assistant',content:'Review the company activity and stored receipt [E'+step+'].'};
 }};}
+
+pg('An informal bookmark request retains displayed filters, title, cadence and follow-up context without storing prompt text',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ await require('../banking/assistant-preferences').update(f.db,user,{chartType:'line'});
+ const before=await financial(f.db),agents=createAgents({db:f.db,model:sequenceModel([{name:'get_company_activity',arguments:{chartType:'bar'}}])});
+ const first=await agents.execute(user,'assistant',{message:'Map our money coming in against what went out over the past six months as columns.'});
+ assert.equal(first.companyDashboard.presentation.chartType,'bar');
+ const message='Hang on to this under "Supplier review" and keep it up to date each week.';
+ const kept=await createAgents({db:f.db,model:sequenceModel([{name:'save_company_dashboard',arguments:{requestQuote:message,title:'Supplier review',refreshCadence:'weekly'}}])}).execute(user,'assistant',{message,previousRunId:first.runId});
+ assert.equal(kept.companyDashboard.savedView.title,'Supplier review');assert.equal(kept.companyDashboard.savedView.refreshCadence,'weekly');
+ assert.deepEqual(kept.companyDashboard.savedView.definition.period,{kind:'months',months:6});assert.equal(kept.companyDashboard.presentation.chartType,'bar');
+ const record=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[kept.runId])).rows[0].context_json;
+ assert.equal(record.lastReadEnquiry.tool,'get_company_activity');
+ const stored=(await f.db.query('SELECT arguments_json FROM agent_tool_calls WHERE run_id=$1',[kept.runId])).rows;
+ assert.doesNotMatch(JSON.stringify(stored),/requestQuote|Hang on/);
+ const next=await createAgents({db:f.db,model:sequenceModel([{name:'get_company_activity',arguments:{reusePrevious:true}}])}).execute(user,'assistant',{message:'What about October 2026 instead?',previousRunId:kept.runId});
+ assert.equal(next.companyDashboard.data.period.from,'2026-10-01');assert.equal(next.companyDashboard.data.period.to,'2026-10-31');
+ assert.deepEqual(await financial(f.db),before);
+});
+
+pg('A quoted clause cannot override a user refusal to save a chart',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ const first=await createAgents({db:f.db,model:sequenceModel([{name:'get_company_activity',arguments:{}}])}).execute(user,'assistant',{message:'Show my activity as a chart.'});
+ const message='Do not save this chart.';
+ await assert.rejects(createAgents({db:f.db,model:sequenceModel([{name:'save_company_dashboard',arguments:{requestQuote:'save this chart'}}])}).execute(user,'assistant',{message,previousRunId:first.runId}),e=>e.status===400);
+ assert.equal((await views.list(f.db,user)).length,0);
+});
 pg('Saving this dashboard refuses to invent an all-company view when the earlier choice was ambiguous',async t=>{
  const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
  const earlier=await createAgents({db:f.db,model:model({save:false,companyName:'Pte. Ltd.'})}).execute(user,'assistant',{message:'Show a company dashboard for Pte. Ltd.'});

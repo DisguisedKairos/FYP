@@ -217,6 +217,14 @@ pg('News advisory tools are available for natural requests without triggering a 
  await agents.execute(user,'assistant',{message:'What does all that happening out there mean for us?'});assert.equal(available,true);
 });
 
+pg('A general explanation is not forced into a draft because it contains payment-form vocabulary',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);
+ const agents=createAgents({db:f.db,model:provider(async()=>answer('general_banking','A payment review checklist helps you verify the recipient, source and purpose before separate authorization.'))});
+ const result=await agents.execute(user,'assistant',{message:'Please prepare a payment review checklist explaining the process in general.'});
+ assert.equal(result.answerContext,'general_banking');assert.equal(result.clarification,undefined);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ assert.deepEqual(result.steps,[]);assert.deepEqual(result.actions,[]);
+});
+
 test('Read follow-ups carry only validated filters and never replace a new period or inherit payment instructions',()=>{
  const previous=response.enquiryFor('search_transactions',{period:{from:'2026-09-01',to:'2026-09-30'},actions:[{page:'activity',filters:{q:'Harbour Supplies',accountId:'12',from:'2026-09-01'}}],transactions:[{amountCents:123456}]});
  assert.deepEqual(previous,{tool:'search_transactions',arguments:{q:'Harbour Supplies',accountId:'12'},period:{from:'2026-09-01',to:'2026-09-30'}});

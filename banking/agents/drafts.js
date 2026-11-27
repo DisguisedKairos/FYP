@@ -52,12 +52,15 @@ async function prepareDraft(db,user,input,{now=Date.now}={}) {
 
 function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}={}){
   const text=message.trim();
-  const schedule=/\b(?:schedule|scheduled|weekly|monthly)\b/i.test(text);
+  const oncePer=text.match(/\bonce\s+(?:a|per|each|every)\s+(\w+)\b/i);
+  if(oncePer&&!/^(?:weeks?|months?)$/i.test(oncePer[1]))throw new HttpError(400,'Choose a single payment, weekly or monthly recurrence.');
+  const cadence=text.match(/\b(once\s+(?:a|per|each|every)\s+(?:weeks?|months?)|(?:each|every)\s+(?:week|month)|once|weekly|monthly)\b/i)?.[1].toLowerCase();
+  const frequency=cadence?.includes('week')?'weekly':cadence?.includes('month')?'monthly':cadence;
+  const schedule=/\b(?:schedule|scheduled)\b/i.test(text)||['weekly','monthly'].includes(frequency);
   const payment=/\b(?:pay|payment|bill)\b/i.test(text) && !/\btransfer\b/i.test(text);
   let draft={...previous};
   if(!draft.kind)draft.kind=schedule?'schedule':payment?'bill':'transfer';
   if(schedule && draft.kind!=='schedule'){draft.type=draft.kind;draft.kind='schedule';}
-  if(draft.kind==='schedule')draft.type=draft.type || (payment?'bill':'transfer');
   // Read the whole monetary token before validating it. Matching a valid prefix
   // would turn 1,000.50 into 1 or silently truncate excessive decimal places.
   const numeric=text.match(/(?:\b(?:SGD|amount)\s*|S\$\s*|\$\s*)([^\s]+)/i)
@@ -88,6 +91,7 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
   }
   const biller=billers.find(b=>text.toLowerCase().includes(b.name.toLowerCase()));
   if(biller)draft.billerId=biller.id;
+  if(draft.kind==='schedule'&&!draft.type)draft.type=draft.toAccountNumber?'transfer':biller||payment?'bill':'transfer';
   const reference=text.match(/\b(?:ref(?:erence)?)\s+("[^"\r\n]*"[.!?]?|'[^'\r\n]*'[.!?]?|.+?)(?=\s+(?:from|use|starting|tomorrow|at|on|once|weekly|monthly)\b|$)/i);
   if(reference){const value=reference[1].trim(),quoted=value.match(/^(["'])(.*)\1[.!?]?$/);draft.reference=quoted?quoted[2]:value.replace(/[!?]+$/,'');}
   const date=text.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/);
@@ -105,7 +109,7 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
     else if(explicit || /\btomorrow\s+(?:at\b|(?:in\s+the\s+)?(?:morning|afternoon|evening|night|noon|midnight)\b)/i.test(text))throw new HttpError(400,'Use a valid time such as tomorrow at 15:30.');
     draft.scheduledAt=new Date(sg+'T'+String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+':00+08:00').toISOString();
   }
-  const frequency=text.match(/\b(once|weekly|monthly)\b/i);if(frequency)draft.frequency=frequency[1].toLowerCase();
+  if(frequency)draft.frequency=frequency;
   return draft;
 }
 module.exports={prepareDraft,extractDraft};

@@ -23,6 +23,12 @@ test('Month comparisons and calendar quarters retain all requested months in Sin
  assert.deepEqual(requestedPeriod('Show May Logistics activity in October 2026',{now}),{from:'2026-10-01',to:'2026-10-31'});
  for(const wording of ['October and September 2026','July and August and September 2026'])assert.throws(()=>requestedPeriod(wording,{now}),e=>e.status===400);
 });
+
+test('Currency values and account numbers never become calendar dates in a natural payment enquiry',()=>{
+ for(const message of ['Could you put together the review form to move SGD 10.00 from 1099100101 to 1099100201?','How much is available in account 1099100101?','What would S$100.50 mean for my available balance?'])assert.deepEqual(requestedPeriod(message,{now}),{});
+ assert.deepEqual(requestedPeriod('Show transactions in account 1099100101 between 2026-10-01 and 2026-10-31 for SGD 10.00',{now}),{from:'2026-10-01',to:'2026-10-31'});
+ assert.throws(()=>requestedPeriod('Show transactions from 1 to date',{now}),e=>e.status===400);
+});
 const actor=async(db,email='alex@greenlink.demo')=>(await db.query('SELECT * FROM users WHERE email=$1',[email])).rows[0];
 async function row(db,{email='alex@greenlink.demo',amount=-100,status='completed',at='2026-01-15T00:00:00Z',requested=at,internal=false,label='Test Supplier',description='Finance test payment',reference='FINANCE-TEST'}={}){
   const account=(await db.query('SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email=$1 ORDER BY a.id LIMIT 1',[email])).rows[0];

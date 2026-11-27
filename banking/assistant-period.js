@@ -52,6 +52,9 @@ function explicitDates(message,year){
 }
 function requestedPeriod(message,{now=Date.now}={}){
   message=expandNamedRanges(normalizeDurations(message));
+  // Currency values and ten-digit account numbers are financial identifiers,
+  // not shorthand calendar dates or the endpoints of a date range.
+  message=message.replace(/(?:\bSGD\s*|S\$\s*|\$\s*)[-+]?\d[\d,.]*/gi,'[amount]').replace(/\b\d{10}\b/g,'[account]');
   const today=day(now()),year=Number(today.slice(0,4)),dates=explicitDates(message,year);
   if(dates.length){
     if(dates.length>2)throw fail();

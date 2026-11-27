@@ -6,6 +6,43 @@ const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const model=chat=>({mode:'openai',model:'controlled-guidance-test',inspect:async()=>({available:true}),chat});
 const actor=async db=>(await db.query("SELECT id,role,auth_version FROM users WHERE email='jamie@greenlink.demo'")).rows[0];
 
+test('Action wording is interpreted by the model and grounded in the user message without a command vocabulary',()=>{
+ const {actionRequested,savedOptions}=require('../banking/agents/response');
+ for(const [action,message] of [['save','Keep it.'],['save','Save it'],['save','Hang on to this so I can return to it.'],['save','How about keeping this handy for later?'],['draft','Could you put together the review form to move SGD 10.00?']])assert.equal(actionRequested(message,{action,requestQuote:message}),true);
+ for(const message of ['Do not save this chart.','How can I save this chart?','Explain how to save this chart.','Save this chart, but not now.'])assert.equal(actionRequested(message,{action:'save',requestQuote:message,legacy:true}),false,message);
+ for(const message of ['Do not prepare the draft.','Could you explain how to prepare a transfer?'])assert.equal(actionRequested(message,{action:'draft',requestQuote:message,legacy:true}),false,message);
+ assert.equal(actionRequested('What can I do next?',{action:'save'}),false);
+ assert.throws(()=>actionRequested('Show my balances.',{action:'save',requestQuote:'keep this chart for later'}),e=>e.status===400);
+ const text='Hang on to this under "Supplier review" and keep it up to date each week.';
+ assert.equal(savedOptions(text,{title:'Supplier review',refreshCadence:'weekly'},{}).title,'Supplier review');
+ assert.throws(()=>savedOptions(text,{title:'Invented title'},{}),e=>e.status===400);
+ assert.throws(()=>savedOptions("Save this chart but don't refresh it weekly.",{refreshCadence:'weekly'},{}),e=>e.status===400);
+});
+
+test('Recurrence wording cannot turn once a week into a one-off payment',()=>{
+ const {extractDraft}=require('../banking/agents/drafts');
+ for(const [words,expected] of [['once a week','weekly'],['once per week','weekly'],['once every month','monthly'],['each month','monthly'],['once','once']])assert.equal(extractDraft('Arrange SGD 10 '+words,{kind:'schedule'}).frequency,expected,words);
+ for(const words of ['once a day','once per year'])assert.throws(()=>extractDraft('Arrange SGD 10 '+words,{kind:'schedule'}),e=>e.status===400);
+});
+
+pg('An informal review-form request prepares a source-bound draft without a bogus date warning or financial changes',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),source=(await f.db.query('SELECT id,number FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const message='Could you put together the review form to move SGD 10.00 from '+source.number+' to 1020001001?';
+ assert.equal(require('../banking/agents/evidence').DRAFT_INTENT.test(message),false);
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ const result=await createAgents({db:f.db,model:model(async messages=>{
+  const steps=messages.filter(m=>m.role==='tool');
+  if(!steps.length)return {tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+  if(steps.length===1)return {tool_calls:[{function:{name:'prepare_payment_draft',arguments:{kind:'transfer',requestQuote:message}}}]};
+  return {content:'Review the transfer form and complete the separate authorization step [E2].'};
+ })}).execute(user,'assistant',{message});
+ assert.equal(result.clarification,undefined);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ const draft=result.actions.find(a=>a.type==='draft_transfer').draft;assert.equal(draft.amount,'10.00');assert.equal(draft.toAccountNumber,'1020001001');assert.equal(draft.fromAccountId,String(source.id));
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+ const stored=(await f.db.query('SELECT arguments_json FROM agent_tool_calls WHERE run_id=$1 ORDER BY step',[result.runId])).rows;
+ assert.doesNotMatch(JSON.stringify(stored),/requestQuote|put together/);
+});
+
 test('Guidance covers the complete manual catalogue without replacing supported banking reads',()=>{
  const text=fs.readFileSync(path.join(__dirname,'../docs/assistant-testing.md'),'utf8');
  const cases=text.split(/\r?\n/).filter(line=>/^\|\s*(?!UC-)[A-Z][A-Z0-9_-]*-\d+\s*\|/.test(line));
@@ -84,13 +121,14 @@ pg('A skipped banking tool is retried with required tool selection and returns v
  assert.equal(calls,3);assert.equal(result.narrativeWithheld,undefined);assert.equal(result.clarification,undefined);assert.ok(result.items.some(i=>Number.isSafeInteger(i.amountCents)));
 });
 
-pg('The model chooses only a draft kind while the server binds exact schedule values to user text',async t=>{
+pg('The model chooses a draft kind and request reference while the server binds exact schedule values to user text',async t=>{
  const now=()=>Date.parse('2026-11-26T04:00:00Z');
  const f=await fixture(t,{http:false,now}),user=await actor(f.db);let calls=0;
  const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
  const result=await createAgents({db:f.db,now,model:model(async(_messages,tools)=>{
   const draftTool=tools.find(t=>t.function.name==='prepare_payment_draft');
-  assert.deepEqual(Object.keys(draftTool.function.parameters.properties),['kind']);
+  assert.deepEqual(Object.keys(draftTool.function.parameters.properties),['kind','requestQuote']);
+  assert.deepEqual(draftTool.function.parameters.properties.kind.enum,['transfer','bill','schedule']);
   assert.equal(draftTool.function.parameters.additionalProperties,false);
   if(++calls===1)return {role:'assistant',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
   if(calls===2)return {role:'assistant',tool_calls:[{function:{name:'prepare_payment_draft',arguments:{kind:'schedule'}}}]};
@@ -100,6 +138,25 @@ pg('The model chooses only a draft kind while the server binds exact schedule va
  const action=result.actions.find(a=>a.type==='draft_schedule');assert.ok(action);
  assert.equal(action.draft.amount,'10.00');assert.equal(action.draft.toAccountNumber,'1020001001');assert.equal(action.draft.frequency,'weekly');
  assert.equal(action.draft.scheduledAt,'2026-11-27T07:30:00.000Z');
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+ assert.equal((await f.db.query('SELECT count(*)::int AS n FROM scheduled_payments')).rows[0].n,0);
+});
+
+pg('An informal recurring review-form request uses current sources and binds every-week recurrence in Singapore time',async t=>{
+ const now=()=>Date.parse('2026-11-27T05:00:00Z'),f=await fixture(t,{http:false,now}),user=await actor(f.db);
+ const source=(await f.db.query('SELECT id,number FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const message='Could you lay out the review form to move SGD 10.00 from '+source.number+' to 1020001001 starting tomorrow at 9am every week?';
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ const result=await createAgents({db:f.db,now,model:model(async messages=>{
+  const steps=messages.filter(m=>m.role==='tool');
+  if(!steps.length)return {tool_calls:[{function:{name:'get_payment_sources',arguments:{}}}]};
+  if(steps.length===1)return {tool_calls:[{function:{name:'prepare_payment_draft',arguments:{kind:'schedule',requestQuote:message}}}]};
+  return {content:'Review the recurring payment form and complete separate authorization [E2].'};
+ })}).execute(user,'assistant',{message});
+ assert.equal(result.clarification,undefined);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ const draft=result.actions.find(a=>a.type==='draft_schedule').draft;
+ assert.equal(draft.amount,'10.00');assert.equal(draft.frequency,'weekly');assert.equal(draft.scheduledAt,'2026-11-28T01:00:00.000Z');
+ assert.equal(result.items.some(i=>i.title==='Historical balance period'),false);
  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
  assert.equal((await f.db.query('SELECT count(*)::int AS n FROM scheduled_payments')).rows[0].n,0);
 });

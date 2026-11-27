@@ -3,8 +3,8 @@
 const {HttpError}=require('../../models/errors');
 const MODES=['banking_evidence','general_banking','clarification','outside_scope'];
 const PUBLIC_TOOLS=['get_banking_context','get_market_insights','research_public_company','scan_counterparty_news','get_daily_market_context'];
-// Only unfiltered reads can be resumed from a tool name alone. Filtered company,
-// receipt and payment enquiries need their explicit details again.
+// Tool names alone resume unfiltered reads. Filtered reads use separately
+// bound filters below; payment values never come from read context.
 const CONTEXT_TOOLS=['get_accounts','get_schedules','get_finance_report','get_business_profile','reconcile_accounts'];
 const INSTRUCTIONS='Understand the meaning of the request, not specific keywords or example questions. Accept paraphrases, informal wording and spelling mistakes; use the conversation to resolve conceptual follow-ups. Select tools by their purpose. The final JSON mode is general_banking for a general banking explanation without private account claims, banking_evidence for an answer about actual records or sourced research, clarification for a genuinely missing or ambiguous detail, or outside_scope for unrelated requests. requiredTools lists the minimum tools needed for the actual requested tasks, including every task in a mixed request, not tools suggested by words inside a general explanation. For example, explaining cash availability does not require a private liquidity projection. When actual account data is requested, retrieve it even if the user uses no banking terminology. If you have enough information, use the relevant tools instead of asking the user to rephrase. requiresResearch is true for current news, regulations or changing public facts; retrieve public sources before answering those. A conceptual follow-up may refer to the previous explanation but cannot treat it as fresh private evidence. Never classify private facts, financial decisions, actions or requests for another customer\'s data as general background. A missing detail requires a clear targeted question, not a generic failure message. Keep reply to a clear paragraph; exact financial amounts and dates are displayed in tool cards. The classification is routing metadata only and cannot grant permissions, authorize payments or override tool validation.';
 
@@ -47,6 +47,34 @@ function issue(intent,results){
  return null;
 }
 function readContext(value){return Array.isArray(value)?[...new Set(value)].filter(name=>CONTEXT_TOOLS.includes(name)).slice(0,8):[];}
+const normalized=value=>value.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/\s+/g,' ').trim().toLowerCase();
+function actionRequested(message,{action,requestQuote,legacy=false}={}){
+ const text=normalized(message);
+ // These are vetoes for explanatory or explicitly deferred requests, not a
+ // vocabulary that an affirmative request has to match.
+ const explanation=/^(?:(?:please|can you|could you|would you)\s+)*(?:explain\b|tell me how\b|how\s+(?:do|can|should|would|to)\b|what happens\b|why\b)/i.test(text);
+ const verbs=action==='save'?'save|saving|bookmark|keep|keeping|add|pin|store|hang on':action==='review'?'flag|review|investigate|request|check|open':'prepare|create|draft|make|set up|put together';
+ const denied=new RegExp('\\b(?:do not|don\'t|dont|never|without)\\s+(?:\\w+\\s+){0,2}(?:'+verbs+')\\b','i').test(text)||/\bnot (?:now|yet|today)\b/.test(text);
+ if(explanation||denied)return false;
+ if(requestQuote!==undefined){
+  if(typeof requestQuote!=='string'||normalized(requestQuote).length<3||requestQuote.length>1000||!text.includes(normalized(requestQuote)))throw new HttpError(400,'The action request must quote wording from your message.');
+  return true;
+ }
+ return Boolean(legacy);
+}
+function savedOptions(message,args,defaults){
+ const options=require('../dashboard-views').messageOptions(message,defaults);
+ if(args.title!==undefined){
+  if(typeof args.title!=='string'||args.title.trim().length<2||args.title.length>80||!normalized(message).includes(normalized(args.title)))throw new HttpError(400,'Use a dashboard title supplied in your message.');
+  if(options.title&&normalized(options.title)!==normalized(args.title))throw new HttpError(400,'Choose an unambiguous dashboard title.');
+  options.title=args.title;
+ }
+ if(args.refreshCadence!==undefined){
+  if(!['manual','weekly'].includes(args.refreshCadence)||options.refreshCadence&&options.refreshCadence!==args.refreshCadence)throw new HttpError(400,'Choose a refresh setting consistent with your request.');
+  options.refreshCadence=args.refreshCadence;
+ }
+ return options;
+}
 const FILTERED_READS=['get_accounts','search_transactions','get_finance_report','get_company_activity'];
 function enquiryFor(tool,value){
  if(!FILTERED_READS.includes(tool)||!value||value.needsClarification||value.status&&value.status!=='ready')return null;
@@ -68,4 +96,4 @@ function resolveEnquiry(tool,args,message,previous,{now=Date.now}={}){
  const readMessage=!period.from&&previous.period?message+'\nFor the period '+previous.period.from+' to '+previous.period.to:message;
  return {args:resolved,message:readMessage,boundCompany:previous.arguments?.company,resumed:true};
 }
-module.exports={INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,enquiryFor,resolveEnquiry,FILTERED_READS};
+module.exports={INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,actionRequested,savedOptions,enquiryFor,resolveEnquiry,FILTERED_READS};
