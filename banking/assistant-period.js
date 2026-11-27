@@ -64,6 +64,17 @@ function requestedPeriod(message,{now=Date.now}={}){
     dateRange(new URLSearchParams({from,to}));
     return {from,to};
   }
+  const candidates=[...message.matchAll(new RegExp('\\b('+MONTHS+')(?:\\s+(\\d{4}))?\\b','gi'))];
+  const monthRanges=candidates.slice(1).map((last,index)=>({first:candidates[index],last})).filter(({first,last})=>/^\s*(?:and|to|through|until|[-\u2013\u2014])\s*$/i.test(message.slice(first.index+first[0].length,last.index)));
+  if(monthRanges.length===1){
+    const {first,last}=monthRanges[0];
+    const firstYear=Number(first[2]||last[2]||year),lastYear=Number(last[2]||first[2]||year);
+    const firstMonth=names.indexOf(first[1].slice(0,3).toLowerCase())+1,lastMonth=names.indexOf(last[1].slice(0,3).toLowerCase())+1;
+    const from=format(firstYear,firstMonth,1),end=new Date(Date.UTC(lastYear,lastMonth,0)).toISOString().slice(0,10);
+    const to=end.slice(0,7)===today.slice(0,7)?today:end;
+    dateRange(new URLSearchParams({from,to}));return {from,to};
+  }
+  if(monthRanges.length>1)throw fail();
   // Never turn an incomplete or misspelled explicit range into a default month.
   if(/\b(?:from|between)\b[\s\S]*\b(?:to|and|until|through)\b[\s\S]*(?:\bdate\b|\d)|\b(?:start|end)\s*date\b|\b\d{1,4}[-/\.]\d{1,2}(?:[-/\.]\d{1,4})?\b/i.test(message))throw fail();
   const relative=/\b(?:last|past)\s+(\d+)\s+(days?|weeks?|months?)\b/i.exec(message);
@@ -87,7 +98,13 @@ function requestedPeriod(message,{now=Date.now}={}){
   if(/\b(?:last|previous) month\b/i.test(message)){
     const to=day(Date.parse(today.slice(0,7)+'-01T00:00:00+08:00')-DAY);return {from:to.slice(0,7)+'-01',to};
   }
-  const candidates=[...message.matchAll(new RegExp('\\b('+MONTHS+')(?:\\s+(\\d{4}))?\\b','gi'))];
+  const quarter=/\b(this|current|last|previous)\s+quarter\b/i.exec(message);
+  if(quarter){
+    const start=new Date(Date.UTC(year,Math.floor((Number(today.slice(5,7))-1)/3)*3,1));
+    if(/last|previous/i.test(quarter[1]))start.setUTCMonth(start.getUTCMonth()-3);
+    const end=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+3,0)).toISOString().slice(0,10);
+    return {from:start.toISOString().slice(0,10),to:quarter[1].match(/this|current/i)?today:end};
+  }
   const month=candidates.find(m=>m[2]||/\b(?:in|for|during|month of)\s*$/i.test(message.slice(0,m.index))||/^[\s.!?]*$/.test(message.slice(m.index+m[0].length)));
   if(month){
     if(/\b(?:last|previous|next)\s*$/i.test(message.slice(0,month.index))||new RegExp('\\b(?:from|between)\\s+(?:'+MONTHS+')\\b','i').test(message))throw fail();
@@ -101,7 +118,7 @@ function requestedPeriod(message,{now=Date.now}={}){
 }
 function isDateReply(message){
   message=normalizeDurations(message);
-  const remaining=message.replace(/\b\d+(?:st|nd|rd|th)\b/gi,'').replace(new RegExp('\\b(?:'+MONTHS+'|from|to|and|between|on|for|the|since|until|through|today|yesterday|this|last|past|current|previous|days?|weeks?|months?|dates?|please|yes)\\b','gi'),'').replace(/[\d\s,./!?-]/g,'');
+  const remaining=message.replace(/\b\d+(?:st|nd|rd|th)\b/gi,'').replace(new RegExp('\\b(?:'+MONTHS+'|from|to|and|between|on|for|the|since|until|through|today|yesterday|this|last|past|current|previous|days?|weeks?|months?|quarters?|dates?|please|yes)\\b','gi'),'').replace(/[\d\s,./!?-]/g,'');
   return !remaining&&/\d|today|yesterday|this|last|past|current|previous|date/i.test(message);
 }
 function clarification(error){

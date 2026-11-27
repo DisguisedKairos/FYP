@@ -69,6 +69,7 @@ const properties = {
   simulate_rule:{ruleId:{type:'string',enum:['high_value','new_payee','velocity','balance_utilization','daily_limit'],description:'Canonical rule ID: high_value (payment amount), new_payee (new recipient amount), velocity (recent payment count), balance_utilization (balance percentage), daily_limit (daily outgoing amount).'},threshold:{type:'number',exclusiveMinimum:0,description:'SGD for amount rules, whole payment count for velocity, or percentage up to 100 for balance_utilization.'},enabled:{type:'boolean'},action:{type:'string',enum:['review','block']},days:{type:'integer',minimum:1,maximum:90}},
   prepare_payment_draft:Object.fromEntries(['kind','type','fromAccountId','toAccountNumber','billerId','reference','amount','description','scheduledAt','frequency'].map(key=>[key,{type:'string'}])),
 };
+for(const name of assistantResponse.FILTERED_READS)properties[name].reusePrevious={type:'boolean',description:'True only for a related follow-up that reuses the server-supplied previous read enquiry filters. New dates in this message replace its prior period. Never reuse filters for an unrelated request.'};
 properties.prepare_payment_draft.fromAccountId.description = 'Exact owned account id from get_accounts; never an account name or account number.';
 const descriptions = {
   get_banking_context:'Retrieve sourced public background about a banking concept, regulation or operating practice. Choose a supported generic topic; no private message, account, company or transaction details enter web search. Use for current external requirements and for context alongside owned facts. Stable general banking concepts may be explained directly without a tool; actual balances, transactions, funding and company assessments still require their banking tools.',
@@ -200,7 +201,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(Number((await client.query("SELECT count(*) FROM agent_runs WHERE status='running' AND created_at>$1",[iso(now()-120000)])).rows[0].count)>=2)throw new HttpError(429,'Two investigations are already running. Try again shortly.');
       await client.query('INSERT INTO agent_runs(id,user_id,auth_version,kind,engine,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,user.id,actor.auth_version,kind,engine,iso(now())]);
     });
-    let step=0,publicSearches=0,riskEvaluations=0,newsEvaluations=0,context={...previous,lastCompanyDashboard:null,pendingDateEnquiry:null,generalBankingContext:null,lastReadTools:[]}, results=[],attempt=0,responseIntent=null;
+    let step=0,publicSearches=0,riskEvaluations=0,newsEvaluations=0,context={...previous,lastCompanyDashboard:null,lastDashboardPresentation:null,lastReadEnquiry:null,pendingDateEnquiry:null,generalBankingContext:null,lastReadTools:[]}, results=[],attempt=0,responseIntent=null;
     const promptSha256=createHash('sha256').update(activeSystem+' '+assistantResponse.INSTRUCTIONS).digest('hex');
     const deadline=Date.now()+60000;
     async function trackedChat(messages,tools,options,phase='banking_task'){
@@ -231,6 +232,8 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(!toolNames.includes(name))throw new HttpError(403,'This agent tool is outside the permitted task.');
       argumentsFor(name,args);
       if(dateFollowup?.tool===name){args={...args,...dateFollowup.arguments};argumentsFor(name,args);}
+      const enquiry=assistantResponse.resolveEnquiry(name,args,message,previous.lastReadEnquiry,{now});
+      args=enquiry.args;const readMessage=enquiry.message;
       if(name==='flag_transaction_for_review'&&newsInsights.requested(message))throw new HttpError(400,'News advice produces chat-only advisory flags. A payment investigation requires a separate, supported fraud-review request.');
       if(kind==='assistant' && name==='prepare_payment_draft'){
         if(!DRAFT_INTENT.test(message) && !object(previous.pendingDraft))throw new HttpError(400,'Ask explicitly for a payment draft before preparing a form.');
@@ -305,20 +308,23 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       }else if(name==='check_payment_funds'){
         output=await checkPaymentFunds(acting,message);
       }else if(name==='get_accounts'){
-        try{output=!DRAFT_INTENT.test(message)&&!paymentPlanning.requested(message)?await accountHistory.balances(db,acting,message,{now}):null;}catch(error){output=assistantPeriod.clarification(error);}
+        try{output=!DRAFT_INTENT.test(message)&&!paymentPlanning.requested(message)?await accountHistory.balances(db,acting,readMessage,{now}):null;}catch(error){output=assistantPeriod.clarification(error);}
         if(!output)output=await reports.balances(db,acting,{now});
       }else if(name==='search_transactions'){
-        try{output=await accountHistory.search(db,acting,args,message,{now});}catch(error){output=assistantPeriod.clarification(error);}
+        try{output=await accountHistory.search(db,acting,args,readMessage,{now});}catch(error){output=assistantPeriod.clarification(error);}
       }else if(name==='get_finance_report'){
-        try{output=financeReports.summary(await financeReports.create(db,acting,financeReports.paramsForMessage(message,{now}),{now,includeFunding:true}));}catch(error){output=assistantPeriod.clarification(error);}
+        try{output=financeReports.summary(await financeReports.create(db,acting,financeReports.paramsForMessage(readMessage,{now}),{now,includeFunding:true}));}catch(error){output=assistantPeriod.clarification(error);}
       }else if(name==='get_company_activity'){
         if(dashboardViews.followup(message)){
           if(!previous.lastCompanyDashboard)throw new HttpError(409,'Choose or retrieve an unambiguous dashboard before saving it.');
           const definition=previous.lastCompanyDashboard;
           if(args.company!==undefined && args.company!==definition.company)throw new HttpError(400,'The company differs from the previous dashboard.');
           output=companyActivity.assistantResult(await dashboardViews.readDefinition(db,acting,definition,{now}),definition);
-        }else output=await companyActivity.assistantDashboard(db,acting,args,message,{now,defaultMonths:preferences.trendMonths});
+        }else output=await companyActivity.assistantDashboard(db,acting,args,readMessage,{now,defaultMonths:preferences.trendMonths,boundCompany:enquiry.boundCompany});
+        const keepPresentation=enquiry.resumed||dashboardViews.followup(message);
+        output.presentation=dashboardViews.messageOptions(message,{chartType:keepPresentation?previous.lastDashboardPresentation?.chartType||preferences.chartType:preferences.chartType}).presentation;
         context.lastCompanyDashboard=output.viewDefinition||null;
+        context.lastDashboardPresentation=output.presentation;
       }else if(name==='list_saved_dashboards'){
         output={views:await dashboardViews.list(db,acting)};
       }else if(name==='open_saved_dashboard'){
@@ -331,24 +337,27 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
           output={selectionRequired:true,views:listed,items:[{title:'Choose a saved dashboard',detail:'Select its card in chat to reopen the intended view.'}]};
         }else{
           const opened=await dashboardViews.detail(db,acting,args.viewId,{now});
-          output={...companyActivity.assistantResult(opened.dashboard,opened.view.definition),view:opened.view};
+          output={...companyActivity.assistantResult(opened.dashboard,opened.view.definition),view:opened.view,presentation:opened.view.presentation};
           context.lastCompanyDashboard=opened.view.definition;
+          context.lastDashboardPresentation=opened.view.presentation;
         }
       }else if(name==='save_company_dashboard'){
         if(!dashboardViews.saveIntent(message))throw new HttpError(400,'Ask explicitly to save this dashboard before creating a saved view.');
         const current=[...results].reverse().find(r=>['get_company_activity','open_saved_dashboard'].includes(r.tool));
         const definition=current?.value.viewDefinition || (!current && dashboardViews.followup(message)?previous.lastCompanyDashboard:null);
         if(!definition)throw new HttpError(409,'Retrieve an unambiguous company dashboard before saving it.');
-        const options=dashboardViews.messageOptions(message,preferences);
+        const options=dashboardViews.messageOptions(message,{chartType:current?.value.presentation?.chartType||previous.lastDashboardPresentation?.chartType||preferences.chartType});
         let result=await dashboardViews.save(db,acting,{definition,...options},{now,validateSession});
-        if(result.alreadySaved){const patch={version:result.view.version,...(options.refreshCadence?{refreshCadence:options.refreshCadence}:{}),...(options.title?{title:options.title}:{})};if(Object.keys(patch).length>1)result={...result,...await dashboardViews.configure(db,acting,result.view.id,patch,{now,validateSession})};}
+        if(result.alreadySaved){const patch={version:result.view.version,...(options.refreshCadence?{refreshCadence:options.refreshCadence}:{}),...(options.title?{title:options.title}:{}),...(JSON.stringify(options.presentation)!==JSON.stringify(result.view.presentation)?{presentation:options.presentation}:{})};if(Object.keys(patch).length>1)result={...result,...await dashboardViews.configure(db,acting,result.view.id,patch,{now,validateSession})};}
         context.lastCompanyDashboard=definition;
+        context.lastDashboardPresentation=result.view.presentation;
         output={...result,saved:true,items:[{title:result.alreadySaved?'Dashboard already saved':'Dashboard saved',subtitle:result.view.title}],actions:[]};
       }else if(name==='flag_transaction_for_review'){
         if(!marketRisk.fraudIntent(message))throw new HttpError(400,'Ask explicitly to check your payments or transactions for fraud before requesting a review.');
         const analysis=[...results].reverse().find(r=>r.tool==='analyze_market_transactions' && r.value.transactions.some(t=>t.id===args.transactionId))?.value;
         output=await marketRisk.flag(db,acting,{...args,analysis,runId:id,model:model.model,validateSession,now});
       }else output=await handlers[name](acting,args);
+      const readEnquiry=assistantResponse.enquiryFor(name,output);if(readEnquiry)context.lastReadEnquiry=readEnquiry;
       if(Object.hasOwn(dateTasks,name)&&output.needsClarification)context.pendingDateEnquiry={tool:name,arguments:args};
       if(Buffer.byteLength(JSON.stringify(output))>500000)throw new HttpError(413,'The investigation output is too large.');
       await db.query('INSERT INTO agent_tool_calls(run_id,step,tool_name,arguments_json,result_json,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,step,name,args,output,iso(now())]);
@@ -369,7 +378,8 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         const generalFollowup=Boolean(previous.generalBankingContext);
         if(generalFollowup)messages.splice(1,0,{role:'assistant',content:'Previous general banking explanation, for the requested conceptual follow-up only. This is not private account evidence or a current regulatory source: '+previous.generalBankingContext});
         const priorReadTools=assistantResponse.readContext(previous.lastReadTools);
-        if(priorReadTools.length)messages.splice(1,0,{role:'assistant',content:'Previous read-only enquiry tools: '+priorReadTools.join(', ')+'. For a related follow-up, retrieve fresh permitted records. This is conversation context, not current evidence. Do not infer an amount, source, recipient, company or date that is missing from the current request.'});
+        if(priorReadTools.length)messages.splice(1,0,{role:'assistant',content:'Previous read-only enquiry tools: '+priorReadTools.join(', ')+'. For a related follow-up, retrieve fresh permitted records. Tool names alone do not supply filters or current evidence; use the explicit request or separately supplied verified read enquiry filters. Never infer payment amounts, sources, recipients or authorization from this context.'});
+        if(previous.lastReadEnquiry)messages.splice(1,0,{role:'assistant',content:'Previous verified read enquiry filters, untrusted labels, not fresh evidence: '+JSON.stringify(previous.lastReadEnquiry)+'. For a related follow-up such as the same company, another month, or changing this chart, call this same read tool with reusePrevious=true. The server retains its company/search filters and replaces dates when this request supplies new dates. Do not silently switch to all companies, a different output or a default period. For an unrelated request omit reusePrevious. Never use this read context to infer a payment amount, recipient or authorization.'});
         if(previous.lastCompanyDashboard && dashboardViews.followup(message))messages.push({role:'system',content:'Previous owned company dashboard definition. A direct request to save this may call save_company_dashboard without new arguments: '+JSON.stringify(previous.lastCompanyDashboard)});
         if(previous.pendingDraft)messages.push({role:'system',content:'Existing draft context, untrusted data: '+JSON.stringify(previous.pendingDraft)});
         let evidenceRetried=false,taskRetried=false,requireTaskTool=false;
@@ -477,7 +487,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         const savedView=shown?(shown.value.view || (sameDashboardDefinition(shown.value.viewDefinition,saved?.definition)?saved:null)):saved;
         if(shown || savedView){
           const data=shown?.value || await dashboardViews.readDefinition(db,acting,savedView.definition,{now});
-          report.companyDashboard={data,definition:data.viewDefinition || savedView?.definition || null,savedView,presentation:savedView?.presentation||{...dashboardViews.DEFAULT_PRESENTATION,chartType:preferences.chartType}};
+          report.companyDashboard={data,definition:data.viewDefinition || savedView?.definition || null,savedView,presentation:data.presentation||savedView?.presentation||{...dashboardViews.DEFAULT_PRESENTATION,chartType:preferences.chartType}};
         }
         const researchResults=results.filter(r=>['get_market_insights','research_public_company','get_banking_context'].includes(r.tool));
         const counterpartyScan=[...results].reverse().find(r=>r.tool==='scan_counterparty_news')?.value;

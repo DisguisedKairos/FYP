@@ -1,4 +1,5 @@
 'use strict';
+const {requestedPeriod}=require('../banking/assistant-period');
 const test=require('node:test'),assert=require('node:assert/strict');
 const {randomUUID}=require('node:crypto'),{inflateSync}=require('node:zlib');
 const {fixture}=require('./dft-helpers');
@@ -7,6 +8,21 @@ const {createAgents,toolSchema,argumentsFor}=require('../banking/agents');
 const {relevanceIssue}=require('../banking/agents/evidence');
 const NOW=Date.parse('2026-11-10T04:00:00Z'),now=()=>NOW;
 const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
+
+test('Month comparisons and calendar quarters retain all requested months in Singapore time',()=>{
+ const now=()=>Date.parse('2026-11-27T05:00:00Z');
+ for(const wording of ['in September and October 2026','between September and October 2026','from September to October 2026','September 2026 through October 2026'])assert.deepEqual(requestedPeriod(wording,{now}),{from:'2026-09-01',to:'2026-10-31'});
+ assert.deepEqual(requestedPeriod('Compare December 2025 and January 2026',{now}),{from:'2025-12-01',to:'2026-01-31'});
+ assert.deepEqual(requestedPeriod('Compare October and November 2026',{now}),{from:'2026-10-01',to:'2026-11-27'});
+ assert.deepEqual(requestedPeriod('my activity this quarter',{now}),{from:'2026-10-01',to:'2026-11-27'});
+ assert.deepEqual(requestedPeriod('my activity last quarter',{now}),{from:'2026-07-01',to:'2026-09-30'});
+ assert.equal(require('../banking/assistant-period').isDateReply('this quarter'),true);
+ const boundary=()=>Date.parse('2026-12-31T16:30:00Z');
+ assert.deepEqual(requestedPeriod('current quarter',{now:boundary}),{from:'2027-01-01',to:'2027-01-01'});
+ assert.deepEqual(requestedPeriod('previous quarter',{now:boundary}),{from:'2026-10-01',to:'2026-12-31'});
+ assert.deepEqual(requestedPeriod('Show May Logistics activity in October 2026',{now}),{from:'2026-10-01',to:'2026-10-31'});
+ for(const wording of ['October and September 2026','July and August and September 2026'])assert.throws(()=>requestedPeriod(wording,{now}),e=>e.status===400);
+});
 const actor=async(db,email='alex@greenlink.demo')=>(await db.query('SELECT * FROM users WHERE email=$1',[email])).rows[0];
 async function row(db,{email='alex@greenlink.demo',amount=-100,status='completed',at='2026-01-15T00:00:00Z',requested=at,internal=false,label='Test Supplier',description='Finance test payment',reference='FINANCE-TEST'}={}){
   const account=(await db.query('SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email=$1 ORDER BY a.id LIMIT 1',[email])).rows[0];
@@ -84,7 +100,9 @@ test('Finance report periods are derived from user text and the model cannot sup
   }
   assert.throws(()=>finance.paramsForMessage('A finance report last year',{now}),e=>e.status===400);
   assert.throws(()=>argumentsFor('get_finance_report',{userId:'2'}),e=>e.status===400);
-  assert.deepEqual(toolSchema('get_finance_report').function.parameters.properties,{});
+  assert.deepEqual(Object.keys(toolSchema('get_finance_report').function.parameters.properties),['reusePrevious']);
+  assert.equal(toolSchema('get_finance_report').function.parameters.properties.reusePrevious.type,'boolean');
+  for(const key of ['from','to','accountId','userId'])assert.throws(()=>argumentsFor('get_finance_report',{[key]:'untrusted'}),e=>e.status===400);
   assert.ok(relevanceIssue('Download a finance report',[{tool:'get_accounts'}]));
   assert.equal(relevanceIssue('Finance report with balances and cash flow',[{tool:'get_finance_report'}]),null);
   assert.ok(relevanceIssue('Can I afford future payments?',[{tool:'get_finance_report'}]),'A current activity snapshot cannot replace a future liquidity scenario.');

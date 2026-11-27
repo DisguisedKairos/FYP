@@ -47,4 +47,25 @@ function issue(intent,results){
  return null;
 }
 function readContext(value){return Array.isArray(value)?[...new Set(value)].filter(name=>CONTEXT_TOOLS.includes(name)).slice(0,8):[];}
-module.exports={INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext};
+const FILTERED_READS=['get_accounts','search_transactions','get_finance_report','get_company_activity'];
+function enquiryFor(tool,value){
+ if(!FILTERED_READS.includes(tool)||!value||value.needsClarification||value.status&&value.status!=='ready')return null;
+ const args={};
+ if(tool==='get_company_activity'&&value.scopeType!=='all'&&value.company)args.company=value.company;
+ if(tool==='search_transactions'){
+  const filters=value.actions?.find(a=>a.page==='activity')?.filters||{};
+  for(const key of ['q','accountId'])if(typeof filters[key]==='string'&&filters[key])args[key]=filters[key];
+ }
+ const p=value.period;
+ return {tool,arguments:args,...(p?.from&&p?.to?{period:{from:p.from,to:p.to}}:{})};
+}
+function resolveEnquiry(tool,args,message,previous,{now=Date.now}={}){
+ const {reusePrevious,...current}=args;
+ if(!reusePrevious)return {args:current,message};
+ if(!FILTERED_READS.includes(tool)||previous?.tool!==tool)throw new HttpError(400,'Retrieve the relevant account report, transaction search or company chart before referring to its filters.');
+ const resolved={...previous.arguments,...current};
+ let period;try{period=require('../assistant-period').requestedPeriod(message,{now});}catch{return {args:resolved,message,boundCompany:previous.arguments?.company,resumed:true};}
+ const readMessage=!period.from&&previous.period?message+'\nFor the period '+previous.period.from+' to '+previous.period.to:message;
+ return {args:resolved,message:readMessage,boundCompany:previous.arguments?.company,resumed:true};
+}
+module.exports={INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,enquiryFor,resolveEnquiry,FILTERED_READS};

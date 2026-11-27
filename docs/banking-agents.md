@@ -76,6 +76,8 @@ Natural alternatives are supported: “Generate a finance report from 1 to 25 No
 | Counterparty interaction risk | Evaluate reputation and financial risk of interacting with companies recorded in my transactions. | Owned cash-flow exposure, supported reasons and unknowns. Missing reputation evidence is not clearance or a tool failure. |
 | Reconciliation | Check my accounts for reconciliation exceptions. | Owned discrepancies or an explicit no-exception result; no balance repair. |
 
+Related read-only follow-ups can keep the company and search filters: after a company chart, ask **Show the same company for October 2026 instead.** After a filtered transaction search, ask **What about October 2026 for the same company?** Keep these in the same conversation. The assistant retrieves fresh owned records; it does not reuse old balances or carry payment instructions into a new request. An explicit bar or line chart request overrides the display preference for that chart, and saving the displayed chart retains its style. **Compare our inflow and outflow in September and October 2026 as a chart** covers both months; **Show a dashboard of my transaction trends this quarter** uses the Singapore calendar quarter through today.
+
 For questions that need background as well as banking records, use these prompts:
 
 - **Explain liquidity and cash flow in wholesale digital banking.** General concepts can be explained without reading an account.

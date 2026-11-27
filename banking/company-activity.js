@@ -97,8 +97,8 @@ function assistantResult(data,viewDefinition){
   const receipts=data.transactions?.map(t=>({id:t.id,type:t.type,description:t.description,reference:t.reference,amountCents:t.amountCents,status:t.status,date:t.completedAt||t.requestedAt}));
   return {...data,...(receipts?{transactions:receipts}:{}),actions,items:[...items,{title:'Dashboard period',subtitle:data.period.from+' to '+data.period.to+' (SGT)'}],...(data.status==='ready'?{viewDefinition}: {})};
 }
-async function assistantDashboard(db,user,{company},message,{now=Date.now,defaultMonths=3}={}){
-  if(company!==undefined && (typeof company!=='string' || !normalize(company) || !normalize(message).includes(normalize(company))))throw new HttpError(400,'Use a company name from your message.');
+async function assistantDashboard(db,user,{company},message,{now=Date.now,defaultMonths=3,boundCompany}={}){
+  if(company!==undefined && (typeof company!=='string' || !normalize(company) || !normalize(message).includes(normalize(company))&&company!==boundCompany))throw new HttpError(400,'Use a company name from your message.');
   // A vague trend window uses the operator's configured preference. Normalize
   // it before the strict date parser so it cannot become an invalid range.
   message=message.replace(/\b(?:past|last)\s+(?:a\s+)?few\s+months\b/gi,'past '+defaultMonths+' months');

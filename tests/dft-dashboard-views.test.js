@@ -7,6 +7,28 @@ const {createAgents}=require('../banking/agents');
 const {narrativeIssue}=require('../banking/agents/evidence');
 const pg=(name,work)=>test(name,{skip:!process.env.TEST_DATABASE_URL},work);
 const definition={scope:'all',company:'',period:{kind:'rolling',days:90}};
+
+test('An explicit inline chart type overrides preferences without changing saved defaults',()=>{
+ assert.equal(views.messageOptions('Show my activity as a bar graph.',{chartType:'line'}).presentation.chartType,'bar');
+ assert.equal(views.messageOptions('Use a line chart for my transactions.',{chartType:'bar'}).presentation.chartType,'line');
+ assert.equal(views.messageOptions('Show the activity in a table.',{chartType:'line'}).presentation.chartType,'table');
+ assert.equal(views.messageOptions('Show my transactions.',{chartType:'line'}).presentation.chartType,'line');
+ assert.equal(views.messageOptions("Don't use a bar chart.",{chartType:'line'}).presentation.chartType,'line');
+});
+
+pg('Saving a displayed bar chart retains its style across weekly saving and reopening',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).alex;
+ await require('../banking/assistant-preferences').update(f.db,user,{chartType:'line'});
+ const before=await financial(f.db);
+ const first=await createAgents({db:f.db,model:model({save:false})}).execute(user,'assistant',{message:'Show a dashboard of my transactions as a bar graph.'});
+ assert.equal(first.companyDashboard.presentation.chartType,'bar');
+ const saved=await createAgents({db:f.db,model:model({followup:true})}).execute(user,'assistant',{message:'Save this chart as "Presentation bars" and refresh it weekly.',previousRunId:first.runId});
+ assert.equal(saved.companyDashboard.presentation.chartType,'bar');assert.equal(saved.companyDashboard.savedView.presentation.chartType,'bar');
+ assert.equal(saved.companyDashboard.savedView.refreshCadence,'weekly');
+ const reopened=await views.detail(f.db,user,saved.companyDashboard.savedView.id);assert.equal(reopened.view.presentation.chartType,'bar');
+ assert.equal((await require('../banking/assistant-preferences').read(f.db,user)).chartType,'line');
+ assert.deepEqual(await financial(f.db),before);
+});
 async function actors(db){return Object.fromEntries((await db.query('SELECT * FROM users')).rows.map(u=>[u.email.split('@')[0],u]));}
 async function financial(db){return {accounts:(await db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,transactions:(await db.query('SELECT * FROM transactions ORDER BY id')).rows,schedules:(await db.query('SELECT * FROM scheduled_payments ORDER BY id')).rows,rules:(await db.query('SELECT * FROM fraud_rules ORDER BY id')).rows};}
 function model({save=true,followup=false,companyName}={}){return {mode:'openai',model:'controlled-saved-view-test',inspect:async()=>({available:true}),chat:async messages=>{

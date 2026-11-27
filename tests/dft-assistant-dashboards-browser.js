@@ -24,12 +24,14 @@ async function logout(page){await page.click('[data-action="assistant-close"]');
 
 test('Requested company charts render inside chat, resolve ambiguity and never navigate away',async t=>{
  const {f,page}=await open(t,1280),url=await page.evaluate('location.pathname');
+ const user=(await f.db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+ await require('../banking/assistant-preferences').update(f.db,user,{chartType:'line'});
  assert.equal(await page.evaluate('document.querySelectorAll("[data-nav=companyActivity],[data-nav=dashboardViews]").length'),0);
  assert.equal(await page.evaluate('document.querySelectorAll("[data-company-dashboard]").length'),0);
  await chat(page);
  await page.evaluate('document.querySelector(".assistant-resize-handle").focus()');await page.press('ArrowLeft');
  const chosenWidth=await page.evaluate('document.querySelector("#assistant-popup").getBoundingClientRect().width');
- await ask(page,'Show a transaction dashboard with Harbour Supplies for the last 30 days');
+ await ask(page,'Show a transaction dashboard with Harbour Supplies for the last 30 days as a bar graph');
  await page.waitFor('!!document.querySelector("#assistant-popup [data-company-dashboard]")');
  assert.equal(await page.evaluate('location.pathname'),url);
  assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child [data-company-dashboard]").textContent'),/Harbour Supplies.*85\.00/s);

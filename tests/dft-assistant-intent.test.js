@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const response=require('../banking/agents/response'),{createOpenAIModel}=require('../banking/agents/openai');
 const {createAgents}=require('../banking/agents'),{fixture}=require('./dft-helpers');
-const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','project_liquidity','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments'];
+const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','get_company_activity','project_liquidity','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments'];
 const answer=(mode,reply,requiredTools=[],requiresResearch=false)=>response.parse(JSON.stringify({mode,reply,requiredTools,requiresResearch}),tools);
 const call=(name,args={})=>({role:'assistant',content:'',tool_calls:[{function:{name,arguments:args}}]});
 const provider=chat=>({mode:'openai',model:'gpt-6-luna',inspect:async()=>({available:true}),chat});
@@ -215,4 +215,54 @@ pg('News advisory tools are available for natural requests without triggering a 
  const f=await fixture(t,{http:false}),user=await actor(f.db);let available=false;
  const agents=createAgents({db:f.db,model:provider(async(_messages,schemas)=>{available=schemas.some(s=>s.function.name==='analyze_news_insights');return answer('clarification','Which development would you like me to research and relate to your business?');})});
  await agents.execute(user,'assistant',{message:'What does all that happening out there mean for us?'});assert.equal(available,true);
+});
+
+test('Read follow-ups carry only validated filters and never replace a new period or inherit payment instructions',()=>{
+ const previous=response.enquiryFor('search_transactions',{period:{from:'2026-09-01',to:'2026-09-30'},actions:[{page:'activity',filters:{q:'Harbour Supplies',accountId:'12',from:'2026-09-01'}}],transactions:[{amountCents:123456}]});
+ assert.deepEqual(previous,{tool:'search_transactions',arguments:{q:'Harbour Supplies',accountId:'12'},period:{from:'2026-09-01',to:'2026-09-30'}});
+ const now=()=>Date.parse('2026-11-27T05:00:00Z');
+ const october=response.resolveEnquiry('search_transactions',{reusePrevious:true},'What about October 2026 for the same company?',previous,{now});
+ assert.deepEqual(october.args,previous.arguments);assert.doesNotMatch(october.message,/2026-09/);
+ assert.equal(require('../banking/assistant-period').requestedPeriod(october.message,{now}).from,'2026-10-01');
+ const repeat=response.resolveEnquiry('search_transactions',{reusePrevious:true},'Show those receipts again.',previous,{now});
+ assert.match(repeat.message,/2026-09-01 to 2026-09-30/);
+ assert.deepEqual(response.resolveEnquiry('search_transactions',{},'Show my recent transactions.',previous,{now}),{args:{},message:'Show my recent transactions.'});
+ assert.throws(()=>response.resolveEnquiry('get_accounts',{reusePrevious:true},'Repeat it.',previous),e=>e.status===400);
+ assert.throws(()=>response.resolveEnquiry('search_transactions',{reusePrevious:true},'Repeat it.',null),e=>e.status===400);
+ assert.equal(response.enquiryFor('prepare_payment_draft',{draft:{amount:'1.00'}}),null);
+ assert.equal(response.enquiryFor('get_company_activity',{status:'ambiguous',company:'Harbour'}),null);
+ assert.equal(response.enquiryFor('get_finance_report',{needsClarification:true}),null);
+ const invalid=response.resolveEnquiry('search_transactions',{reusePrevious:true},'from 32 November to 1 December 2026',previous,{now});
+ assert.throws(()=>require('../banking/assistant-period').requestedPeriod(invalid.message,{now}),e=>e.status===400);
+});
+
+pg('A same-company chart follow-up keeps its owned company while replacing dates and rereading the ledger',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),now=()=>Date.parse('2026-11-27T05:00:00Z');let reuse=false,contextSeen=false;
+ const agents=createAgents({db:f.db,now,model:provider(async messages=>{
+  contextSeen=messages.some(m=>m.content?.startsWith('Previous verified read enquiry filters, untrusted labels, not fresh evidence:'));
+  return messages.some(m=>m.role==='tool')?answer('banking_evidence','The company chart is shown below [E1].',['get_company_activity']):call('get_company_activity',reuse?{reusePrevious:true}:{company:'Harbour Supplies'});
+ })});
+ const first=await agents.execute(user,'assistant',{message:'Show my transactions with Harbour Supplies as a bar chart for September 2026.'});
+ assert.equal(first.companyDashboard.data.company,'Harbour Supplies Pte. Ltd.');
+ reuse=true;
+ const second=await agents.execute(user,'assistant',{message:'Show the same company for October 2026 instead.',previousRunId:first.runId});
+ assert.equal(contextSeen,true);assert.equal(second.narrativeWithheld,undefined,second.narrativeIssue);
+ assert.equal(second.companyDashboard.data.company,first.companyDashboard.data.company);
+ assert.equal(second.companyDashboard.data.period.from,'2026-10-01');assert.equal(second.companyDashboard.data.period.to,'2026-10-31');
+ const context=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[second.runId])).rows[0].context_json;
+ assert.deepEqual(context.lastReadEnquiry.arguments,{company:'Harbour Supplies Pte. Ltd.'});
+ assert.doesNotMatch(JSON.stringify(context.lastReadEnquiry),/balanceCents|amountCents|same company/);
+ const other=(await f.db.query("SELECT * FROM users WHERE email='jamie@greenlink.demo'")).rows[0];
+ await assert.rejects(agents.execute(other,'assistant',{message:'Show the same company.',previousRunId:second.runId}),e=>e.status===404);
+});
+
+pg('A filtered receipt follow-up retains company and account filters instead of becoming a dashboard',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),now=()=>Date.parse('2026-11-27T05:00:00Z');let reuse=false;
+ const account=(await f.db.query('SELECT id::text FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0].id;
+ const agents=createAgents({db:f.db,now,model:provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','Your matching receipts are shown below [E1].',['search_transactions']):call('search_transactions',reuse?{reusePrevious:true}:{q:'Harbour Supplies',accountId:account}))});
+ const first=await agents.execute(user,'assistant',{message:'Find my transactions with Harbour Supplies in November 2026.'});reuse=true;
+ const next=await agents.execute(user,'assistant',{message:'What about October 2026 for the same company?',previousRunId:first.runId});
+ const filters=next.actions.find(a=>a.page==='activity').filters;
+ assert.equal(filters.q,'Harbour Supplies');assert.equal(filters.accountId,account);assert.equal(filters.from,'2026-10-01');assert.equal(filters.to,'2026-10-31');
+ assert.deepEqual(next.steps.map(s=>s.tool),['search_transactions']);assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);
 });
