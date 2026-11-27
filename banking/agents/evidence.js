@@ -1,6 +1,14 @@
 'use strict';
 
 const DRAFT_INTENT = /^(?!\s*(?:how|what|why|explain)\b)(?![\s\S]*\b(?:do not|don't|dont|never)\s+(?:(?:please|actually)\s+)?(?:prepare|create|draft|set up)\b)(?:(?:(?:please|can you|could you|would you|will you|help me|help us|I (?:want|need|would like) to|I'd like to)\s+)*(?:transfer|send|move|pay|schedule)\b|[\s\S]*\b(?:create|prepare|draft|set up)\b[\s\S]*\b(?:payment|transfer|schedule|bill)\b)/i;
+// A financial evidence check, not a command vocabulary: model-selected account
+// balances cannot replace a proposed-payment check just because wording varies.
+const obligationsOnly=message=>/\b(?:scheduled|upcoming|coming due)\b/i.test(message)&&!/\b(?:additional|extra|new|proposed)\b/i.test(message);
+const proposedFundingRequest=message=>!obligationsOnly(message)&&(/\bafford\b/i.test(message)||
+  /\b(?:pay|payments?|transfers?|invoices?|bills?)\b/i.test(message)&&(
+    /\b(?:enough|sufficient)\b/i.test(message)||
+    /\b(?:can|could|would|will|may|might)\s+(?:i|we|my business|our business|the business|the company)\s+(?:(?:still|currently|comfortably|safely)\s+)?(?:cover|finance|fund|pay|settle|support|handle|meet)\b/i.test(message)||
+    /\b(?:possible|able)\s+to\s+(?:cover|finance|fund|pay|settle|support|handle|meet)\b/i.test(message)));
 const LABELS = { get_banking_context:'Sourced public banking background', analyze_news_insights:'Sourced public news implications and chat-only advisory flags', assess_counterparty_risk:'Owned company risk scenarios, recorded exposure and configured AI assessment', scan_counterparty_news:'Owned counterparties with sourced public sanctions/compliance and industry news', get_business_profile:'Owned business profile and activity', get_market_insights:'Sourced public market research', research_public_company:'Sourced public company research', check_payment_funds:'Owned source-account payment funding check', get_finance_report:'Current owned finance activity snapshot', list_saved_dashboards:'Owned saved dashboard definitions', open_saved_dashboard:'Refreshed owned company dashboard', save_company_dashboard: 'Private saved dashboard receipt', get_company_activity: 'Owned company transaction activity', get_daily_market_context: 'Dated official public market and scam context', analyze_market_transactions: 'Permitted payments with market and scam context', flag_transaction_for_review: 'Human investigation request', get_accounts: 'Owned account balances', get_schedules: 'Owned scheduled instructions', search_transactions: 'Owned transaction search', project_liquidity: 'Scheduled-payment liquidity scenario', investigate_transaction: 'Recorded payment risk assessment', get_related_payments: 'Earlier completed payments', simulate_rule: 'Historical rule comparison', reconcile_accounts: 'Ledger and operational checks', prepare_payment_draft: 'Payment form draft' };
 LABELS.get_payment_sources='Owned current payment sources';
 // Screen the claim itself while allowing a bounded clause that explicitly says
@@ -89,13 +97,13 @@ function relevanceIssue(message, results, intent) {
     if(chart&&!tools.has('get_company_activity')&&!tools.has('open_saved_dashboard'))return 'Retrieve the requested owned dashboard/chart, not only a receipt list or written summary.';
     if(!chart&&/\b(?:show|list|retrieve|find|search|get)\b[^.!?]*\b(?:my|our)\s+(?:recent\s+)?transactions?\b|\b(?:my|our)\s+transaction history\b/i.test(message)&&!tools.has('search_transactions'))return 'Retrieve the requested individual receipt list using search_transactions.';
     if(/\b(?:download(?:able)?|export|pdf|csv)\b/i.test(message)&&/\b(?:finance|financial)\s+(?:activity\s+)?reports?\b/i.test(message)&&!tools.has('get_finance_report'))return 'Generate the requested downloadable finance report; account balances do not provide that output.';
-    const coverageRequest=/\b(?:scheduled|upcoming|coming due)\b/i.test(message)&&/\b(?:cover|enough|sufficient|funding|shortfalls?|short|afford)\b/i.test(message)&&!DRAFT_INTENT.test(message);
+    const coverageRequest=obligationsOnly(message)&&/\b(?:cover|enough|sufficient|funding|shortfalls?|short|afford)\b/i.test(message)&&!DRAFT_INTENT.test(message);
     if(coverageRequest&&!results.some(r=>r.value?.paymentReadiness)){
       let days;try{days=require('./reports').requestedHorizon(message);}catch(error){return error.message;}
       const coverage=[...results].reverse().find(r=>r.value?.fundingCheck)?.value.fundingCheck;
       if(days!==undefined&&(!coverage||typeof coverage.available!=='boolean'||coverage.days!==days))return 'Check the requested '+days+'-day scheduled-payment period with project_liquidity; a default or different horizon does not answer it.';
     }
-    if(!coverageRequest&&/\bafford\b/i.test(message)&&!DRAFT_INTENT.test(message)&&!tools.has('check_payment_funds'))return 'Check the proposed payment using check_payment_funds, including clarification of any missing amount or owned source; general balances or scheduled coverage are insufficient.';
+    if(!coverageRequest&&proposedFundingRequest(message)&&!DRAFT_INTENT.test(message)&&!tools.has('check_payment_funds'))return 'Check the proposed payment using check_payment_funds, including clarification of any missing amount or owned source; general balances or scheduled coverage are insufficient.';
     return null;
   }
   if(tools.has('get_banking_context')&&require('./banking-context').generalQuestion(message))return null;
@@ -111,7 +119,7 @@ function relevanceIssue(message, results, intent) {
   if(/\b(?:sanctions?|compliance|regulatory|enforcement|news)\b/i.test(message)&&/\b(?:counterpart(?:y|ies)|suppliers?|business partners?|dealing|deal with|deals with|companies.*(?:account|transact)|account.*companies)\b/i.test(message)&&!tools.has('scan_counterparty_news'))return 'The requested owned-counterparty public research was not retrieved.';
   const planned=results.some(row=>row.tool==='check_payment_funds' && row.value?.paymentReadiness);
   if(require('../payment-planning').requested(message) && !planned)return 'The proposed dated payment and cash flow must be checked using check_payment_funds; a balance or general projection alone is insufficient.';
-  if(/\bafford\b/i.test(message) && !DRAFT_INTENT.test(message) && !tools.has('check_payment_funds'))return 'Check the proposed payment using check_payment_funds, including clarification of any missing amount or owned source; general scheduled coverage is insufficient.';
+  if(proposedFundingRequest(message) && !DRAFT_INTENT.test(message) && !tools.has('check_payment_funds'))return 'Check the proposed payment using check_payment_funds, including clarification of any missing amount or owned source; general scheduled coverage is insufficient.';
   const has = names => names.some(name => tools.has(name));
   const coverage=[...results].reverse().find(row=>row.value?.fundingCheck)?.value.fundingCheck;
   const duration=message.match(/\b(\d+)\s+(days?|weeks?|months?)\b/i),unit=duration?.[2]?.toLowerCase();

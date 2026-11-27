@@ -240,10 +240,13 @@ pg('A general explanation is not forced into a draft because it contains payment
 });
 
 test('Semantic metadata cannot substitute account balances for a proposed-payment affordability clarification',()=>{
- const request='Can I afford a payment from Operating savings?';
  const intent=answer('banking_evidence','The current balances are displayed below [E1].',['get_accounts']).intent;
- assert.match(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'get_accounts',value:{}}],intent),/check_payment_funds/);
- assert.equal(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'check_payment_funds',value:{complete:false,missing:['amount']}}],{...intent,requiredTools:['check_payment_funds']}),null);
+ for(const request of ['Can I afford a payment from Operating savings?','Would it be possible to cover a payment from Operating savings?','Could we finance an invoice from Operating savings?','Is there enough cash for a transfer from Operating savings?','Are we able to pay the supplier from Operating savings?','Can we cover an extra invoice alongside scheduled payments?']){
+  assert.match(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'get_accounts',value:{}}],intent),/check_payment_funds/,request);
+  assert.equal(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'check_payment_funds',value:{complete:false,missing:['amount']}}],{...intent,requiredTools:['check_payment_funds']}),null,request);
+ }
+ assert.equal(require('../banking/agents/evidence').relevanceIssue('Show my completed invoice payments.',[{tool:'search_transactions',value:{}}],{...intent,requiredTools:['search_transactions']}),null);
+ for(const request of ['Generate a finance report with my bill payments.','Can we generate a finance report showing invoice payments?','Which period does my finance report cover for bill payments?'])assert.equal(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'get_finance_report',value:{}}],{...intent,requiredTools:['get_finance_report']}),null,request);
  assert.equal(require('../banking/agents/evidence').relevanceIssue('Explain how a company decides whether it can afford a payment.',[],answer('general_banking','A company compares its available funds and obligations.').intent),null);
 });
 
@@ -256,7 +259,7 @@ pg('A balance-only affordability answer retrieves missing payment details before
   if(requests===2)return answer('banking_evidence','Your current balances and scheduled coverage are shown below [E1].',['get_accounts']);
   if(requests===3)return call('check_payment_funds');
   return answer('banking_evidence','What payment amount would you like checked from the selected source [E2]?',['get_accounts','check_payment_funds']);
- })}).execute(user,'assistant',{message:'Can I afford a payment from '+source.name+'?'});
+ })}).execute(user,'assistant',{message:'Would it be possible to cover a payment from '+source.name+'?'});
  assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.equal(requests,4);
  assert.deepEqual(result.steps.map(step=>step.tool),['get_accounts','check_payment_funds']);
  assert.ok(result.items.some(item=>item.title==='Please specify payment amount in SGD'));assert.equal(result.actions.length,0);
