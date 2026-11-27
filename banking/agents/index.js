@@ -476,9 +476,9 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
               reply=candidates.find(candidate=>!wordingIssue(candidate))||revised.content;
             }
           }catch{
-            // An optional wording repair must not discard a valid evidence
-            // report. The original unsafe narrative is withheld below.
-            break;
+            // Preserve the valid report and use any remaining bounded attempt.
+            // If both corrections fail, the unsafe prose is withheld below.
+            continue;
           }
         }
       }

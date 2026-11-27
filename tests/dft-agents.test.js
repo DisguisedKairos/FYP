@@ -302,7 +302,23 @@ pg('Failed optional model wording repair retains authoritative evidence and with
   });
   const result=await createAgents({db:f.db,model}).execute(users.jamie,'assistant',{message:'Show balances.'});
   assert.equal(result.narrativeWithheld,true);assert.equal(result.items[0].amountCents,120000);
+  assert.equal(calls,4,'Failed corrections must stop after the existing two-attempt limit');
   assert.ok(!result.reply.includes('999999'));assert.equal((await f.db.query('SELECT status FROM agent_runs WHERE id=$1',[result.runId])).rows[0].status,'completed');
+});
+
+pg('A transient optional wording failure uses the remaining bounded correction without exposing unsafe prose',async t=>{
+ const f=await fixture(t,{http:false}),user=(await actors(f.db)).jamie,before=await financialSnapshot(f.db);let calls=0;
+ const model=fakeModel(async()=>{
+  calls++;
+  if(calls===1)return {tool_calls:[{function:{name:'get_accounts',arguments:{}}}]};
+  if(calls===2)return {content:'Your balance is SGD 999999 [E1].'};
+  if(calls===3)throw new (require('../models/errors').HttpError)(503,'Temporary provider failure.');
+  return {content:'Review the current owned account balances displayed below [E1].'};
+ });
+ const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'Show my balances.'});
+ assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.equal(calls,4);
+ assert.doesNotMatch(result.reply,/999999/);assert.equal(result.items[0].amountCents,120000);
+ assert.deepEqual(await financialSnapshot(f.db),before);
 });
 
 
