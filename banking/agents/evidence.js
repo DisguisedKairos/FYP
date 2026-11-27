@@ -25,6 +25,8 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const plain = reply.replace(/[*_`]/g, '').replace(/[\u2018\u2019]/g, "'");
   const preview=results.find(r=>r.tool==='simulate_rule')?.value;
   if(preview?.assessed===0&&!/\b(?:no eligible|no (?:valid |recorded |eligible )?assessments|insufficient (?:eligible )?(?:history|data|coverage)|not enough (?:eligible )?(?:history|data|assessments))\b/i.test(plain))return 'There are no eligible assessments in the rule preview; explicitly state insufficient coverage instead of implying measured rule impact.';
+  const histories=[report,...results.filter(r=>r.tool==='investigate_transaction').map(r=>r.value)].filter(Boolean).map(r=>r.history).filter(Boolean);
+  if(histories.some(h=>h.samePayeeCount>0)&&/\bno\s+(?:earlier|prior|previous)\s+(?:completed\s+)?(?:outgoing\s+)?payments?(?:\s+(?:were|are|have been)\s+(?:found|recorded))?\s+(?:to|for|with)\s+(?:(?:the|this|that)\s+)?(?:same\s+)?(?:payee|recipient|counterparty)\b/i.test(plain))return 'Retrieved history contains earlier completed payments to this payee. Do not infer absent payment history from unavailable or older monitoring context.';
   let executionClaims=plain.replace(/\bno\s+(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[no execution]');
   const investigated=results.filter(r=>r.tool==='investigate_transaction').map(r=>r.value?.transaction);
   // Describing a retrieved receipt's past status is not executing a payment.

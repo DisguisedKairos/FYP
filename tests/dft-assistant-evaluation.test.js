@@ -103,6 +103,16 @@ test('An investigation can describe its recorded completed status without claimi
  for(const text of ['The transaction is now completed [E1].','Your payment has been completed [E1].','The transaction was completed; I have approved the transfer [E1].','The transaction was completed until yesterday [E1].'])assert.match(narrativeIssue(text,null,options),/outside its authority/);
 });
 
+test('Missing monitoring context cannot override retrieved earlier payment history',()=>{
+ const value={history:{samePayeeCount:3}},options={evidence,requireCitations:true,results:[{tool:'investigate_transaction',value}]};
+ for(const text of ['The monitoring record notes no earlier completed payments to this recipient [E1].','There are no prior outgoing payments to the same payee [E1].']){
+  assert.match(narrativeIssue(text,null,options),/Retrieved history/);
+  assert.match(narrativeIssue(text,value,{evidence,requireCitations:true}),/Retrieved history/);
+  assert.equal(narrativeIssue(text,null,{...options,results:[{tool:'investigate_transaction',value:{history:{samePayeeCount:0}}}]}),null);
+ }
+ assert.equal(narrativeIssue('Earlier completed payments to this recipient were found, but the original monitoring input is unavailable. That gap does not prove fraud [E1].',null,options),null);
+});
+
 test('Funding uncertainty accepts explicit negation while actual guarantees remain blocked',()=>{
  const options={evidence,requireCitations:true};
  for(const reply of ['This is not authorization or a guarantee [E1].','This is neither payment authorization nor a guarantee [E1].','There is no guarantee of funding [E1].','There are no guarantees of payment safety [E1].','A projection comes without any guarantee [E1].','The framework is not a supply guarantee [E1].','The agreement is a resilience signal rather than a supply guarantee [E1].','Treat the projection as a planning estimate instead of a payment guarantee [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
