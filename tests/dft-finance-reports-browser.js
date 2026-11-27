@@ -17,7 +17,7 @@ test('Assistant finance CSV and PDF downloads remain in chat and retrieve change
   assert.deepEqual(await page.evaluate('window.financeNames.map(name=>name.split(".").at(-1))'),['csv','pdf']);assert.equal(await page.evaluate('location.pathname'),route);
   assert.equal(await page.evaluate('[...document.querySelectorAll("[data-finance-format]")].every(el=>{const r=el.getBoundingClientRect();return r.x>=0 && r.right<=innerWidth;})'),true);
   const prose=await page.evaluate('(()=>{const reply=document.querySelector(".from-assistant:last-child .assistant-message-text");return {tag:reply.tagName,text:reply.textContent,paragraphs:reply.parentElement.querySelectorAll(".assistant-message-text").length,whitespace:getComputedStyle(reply).whiteSpace};})()');
-  assert.equal(prose.tag,'P');assert.equal(prose.paragraphs,1);assert.equal(prose.whitespace,'normal');assert.doesNotMatch(prose.text,/[\r\n]/);
+  assert.equal(prose.tag,'P');assert.equal(prose.paragraphs,1);assert.equal(prose.whitespace,'pre-line');assert.doesNotMatch(prose.text,/[\r\n]/);
   assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response/);assert.deepEqual(page.errors,[]);
 });
 test('A shorthand presentation period remains correct in the displayed report and download request',async t=>{

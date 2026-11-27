@@ -78,7 +78,7 @@ test('Business users build a multi-turn draft on mobile without an insights work
 
 
 test('Evidence starts collapsed, follows explicit requests and preserves manual toggles without exposing customer audit controls',async t=>{
-  const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
+  const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].\n\nCheck upcoming obligations before deciding on a payment.'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
   const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
@@ -92,6 +92,8 @@ test('Evidence starts collapsed, follows explicit requests and preserves manual 
   await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length===2 && !document.querySelector("#assistant-form button[type=submit]").disabled');
   assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response|View saved evidence/);
   assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence").length'),1);
+  assert.equal(await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-message-text").textContent.split(/\\n\\n/).length'),2);
+  assert.equal(await page.evaluate('getComputedStyle(document.querySelector(".from-assistant:last-child .assistant-message-text")).whiteSpace'),'pre-line');
   assert.equal(await page.evaluate('document.querySelector(".assistant-evidence").open'),false);
   assert.equal(await page.evaluate('document.querySelectorAll("#assistant-thread [data-agent-run],[data-ai-audit-id]").length'),0);
   await page.click('.assistant-evidence summary');await page.waitFor('document.querySelector(".assistant-evidence").open');

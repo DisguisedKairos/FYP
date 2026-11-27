@@ -116,16 +116,16 @@ pg('Grounded model answers return saved evidence references and verified facts w
   assert.deepEqual(saved.report.evidenceReferences, response.evidenceReferences);
   assert.equal(response.items[0].amountCents, 120000); assert.deepEqual(await balances(f.db), before);
 });
-pg('Brief and detailed assistant answers stay in a single paragraph without losing warnings or evidence', async t => {
+pg('Brief and detailed assistant answers stay within two paragraphs without losing warnings or evidence', async t => {
   const f = await fixture(t, { http: false }), user = await actor(f.db), before = await balances(f.db);
-  const prose = 'Review your available balance before making a payment [E1].\r\n\r\n- Check upcoming scheduled payments.\n1. A projection does not guarantee funding.';
-  const expected = 'Review your available balance before making a payment [E1]. Check upcoming scheduled payments. A projection does not guarantee funding.';
+  const prose = 'Review your available balance before making a payment [E1].\r\n\r\n- Check upcoming scheduled payments.\n\n1. A projection does not guarantee funding.';
+  const expected = 'Review your available balance before making a payment [E1].\n\nCheck upcoming scheduled payments. A projection does not guarantee funding.';
   for (const responseStyle of ['concise', 'detailed']) {
     await require('../banking/assistant-preferences').update(f.db, user, { responseStyle });
     let calls = 0;
     const agent = createAgents({ db: f.db, model: model(async messages => {
       const system = messages.find(m => m.role === 'system').content;
-      assert.match(system, /single paragraph in plain language/);
+      assert.match(system, /at most two short paragraphs in plain language/);
       assert.match(system, responseStyle === 'detailed' ? /at most five short sentences/ : /at most three short sentences/);
       return ++calls === 1 ? tool('get_accounts') : { role: 'assistant', content: prose };
     }) });
