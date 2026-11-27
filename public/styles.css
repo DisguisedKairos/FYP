@@ -335,6 +335,10 @@ dialog.wide-dialog { width:900px; }
 .assistant-items ul { padding-left:16px; font-size:11px; color:var(--muted); line-height:1.9; margin:10px 0 0; }
 .assistant-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:16px; }
 .assistant-actions .button { font-size:11px; }
+.assistant-evidence { margin-top:14px; border-top:1px solid #e0e7f2; padding-top:10px; font-size:11px; color:var(--muted); }
+.assistant-evidence summary { cursor:pointer; width:fit-content; font-weight:600; }
+.assistant-evidence summary:focus-visible { outline:2px solid var(--pine); outline-offset:4px; }
+.assistant-evidence ul { padding-left:18px; line-height:1.8; overflow-wrap:anywhere; }
 .assistant-response-status { min-height:20px; margin:0 18px; flex-shrink:0; font-size:11px; color:var(--green); line-height:1.8; }
 .assistant-error { margin:5px 18px 10px; max-height:110px; min-height:0; overflow:auto; flex-shrink:1; }
 .assistant-suggestions { display:flex; flex-wrap:wrap; gap:6px; padding:0 18px 12px; max-height:100px; min-height:0; overflow:auto; flex-shrink:1; }

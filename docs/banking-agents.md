@@ -5,7 +5,7 @@ Test each assistant capability with the [manual question bank, use cases and exp
 
 Version 2.8.0 adds explicit tool citations, evidence links, qualitative consistency/relevance checks, user-bound draft values and an automated adversarial evaluation suite. See [AI evaluation and reliability](ai-evaluation.md) and run `npm run evaluate:assistant`.
 
-Chat replies show the answer and banking facts without an evidence section or citation markers. Saved tool evidence remains available in the administrator-only AI audit log. Model grounding and validation still use the recorded evidence.
+Chat replies show the answer and banking facts with supporting evidence references collapsed by default. Users can open Evidence manually or ask to keep it expanded; an explicit display request applies to later replies in that conversation until changed or cleared. Inline citation markers remain hidden. Detailed saved tool evidence remains available in the administrator-only AI audit log. Model grounding and validation still use the recorded evidence.
 
 The standalone Banking insights workspace has been removed, including its forms, saved-investigation list, queue shortcuts and dedicated API endpoints. Its old URL redirects to Overview. Shared calculations and evidence tools remain available through GLDB Assistant; no onboarding agent is included.
 

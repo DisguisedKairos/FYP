@@ -77,7 +77,7 @@ test('Business users build a multi-turn draft on mobile without an insights work
 });
 
 
-test('Model connection checks and banking replies omit evidence while preserving saved records',async t=>{
+test('Evidence starts collapsed, follows explicit requests and preserves manual toggles without exposing customer audit controls',async t=>{
   const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
   const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
@@ -91,9 +91,18 @@ test('Model connection checks and banking replies omit evidence while preserving
   assert.equal(await page.evaluate('document.querySelectorAll("[data-assistant-suggestion]").length'),4);
   await page.fill('#assistant-message','Check my balance');await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length===2 && !document.querySelector("#assistant-form button[type=submit]").disabled');
   assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response|View saved evidence/);
-  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence,#assistant-thread [data-agent-run]").length'),0);
+  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence").length'),1);
+  assert.equal(await page.evaluate('document.querySelector(".assistant-evidence").open'),false);
+  assert.equal(await page.evaluate('document.querySelectorAll("#assistant-thread [data-agent-run],[data-ai-audit-id]").length'),0);
+  await page.click('.assistant-evidence summary');await page.waitFor('document.querySelector(".assistant-evidence").open');
   await page.click('[data-action="assistant-close"]');await page.click('[data-action="assistant-toggle"]');
-  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-evidence").length'),0);
+  assert.equal(await page.evaluate('document.querySelector(".assistant-evidence").open'),true);
+  for(const [message,expanded]of [["Check my balance; don't minimize the evidence tab.",true],['Check my balance',true],['Check my balance; do not show evidence.',false],['Check my balance; leave the evidence section expanded.',true],['Check my balance; keep the evidence panel collapsed.',false]]){
+    const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');
+    await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');
+    await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+' && !document.querySelector("#assistant-form button[type=submit]").disabled');
+    assert.equal(await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-evidence").open'),expanded,message);
+  }
   const previousRun=await page.evaluate("import('/js/core.js').then(({state})=>state.assistant.previousRunId)");
   const saved=(await f.db.query('SELECT report_json FROM agent_runs WHERE id=$1',[previousRun])).rows[0].report_json;
   assert.match(saved.reply,/\[E1\]/);assert.equal(saved.evidenceReferences[0].tool,'get_accounts');
@@ -351,7 +360,7 @@ test('Mobile popup clears session data and rejects a delayed reply after another
 });
 
 
-test('Daily market review in the popup queues suspicious owned payments for independent staff without showing evidence panels',async t=>{
+test('Daily market review retains visible findings with supporting evidence collapsed and audit controls private',async t=>{
  const {contextFixture,marketModel}=require('./dft-market-fixtures');
  const f=await fixture(t,{agentModel:marketModel(),marketContext:{get:async()=>contextFixture()}}),client=f.client();await client.login('jamie@greenlink.demo');
  const source=(await client.dashboard()).accounts[0];
@@ -362,7 +371,8 @@ test('Daily market review in the popup queues suspicious owned payments for inde
  await login('jamie@greenlink.demo');await page.click('[data-action="assistant-toggle"]');await page.click('[data-assistant-suggestion="Check my transactions for fraud using daily market trends"]');
  await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("referred") && !document.querySelector("#assistant-form button[type=submit]").disabled');
  const reply=await page.evaluate('document.querySelector(".from-assistant:last-child").textContent');assert.match(reply,/USD\/SGD/);assert.match(reply,/ScamShield/);assert.match(reply,/Human review requested/);assert.doesNotMatch(reply,/Evidence for this response|\[E\d+\]/);
- assert.equal(await page.evaluate('!!document.querySelector(".assistant-evidence,[data-ai-audit-id]")'),false);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
+ assert.equal(await page.evaluate('document.querySelector(".assistant-evidence").open'),false);
+ assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id]")'),false);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
  await page.click('[data-action="assistant-close"]');await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');await login('reviewer@greenlink.demo');
  await page.click('[data-action="menu-open"]');await page.click('[data-nav="fraud"]');await page.waitFor('!!document.querySelector("[data-fraud-case]")');await page.click('[data-fraud-case]');
  await page.waitFor('document.querySelector("#modal").textContent.includes("qualitative human review")');assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/No new numeric fraud score/);assert.ok(await page.evaluate('!!document.querySelector("[data-claim-fraud-case]")'));
