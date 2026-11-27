@@ -19,9 +19,28 @@ const FUNDING_UNCERTAINTY=new RegExp('\\b(?:cannot|can not|can\'t|could not|coul
 function references(runId, results) {
   return results.map((result, i) => ({ id: `E${i + 1}`, runId, step: i + 1, tool: result.tool, label: LABELS[result.tool] || 'Banking evidence' }));
 }
+function withoutReconciliationCounts(text, results) {
+  const checks=results.filter(r=>r.tool==='reconcile_accounts');
+  if(checks.length!==1)return text;
+  const value=checks[0].value;
+  const facts=[
+    [value.accountsChecked,'(?:inspected |checked )?accounts?'],
+    [value.discrepancies?.length,'(?:balance |ledger )?discrepanc(?:y|ies)'],
+    [value.failedSchedules?.length,'(?:schedule|scheduled payment) exceptions?'],
+    [value.notificationExceptions?.length,'(?:notification|delivery) exceptions?'],
+  ];
+  if(Array.isArray(value.failedSchedules))facts.push([value.failedSchedules.filter(s=>s.status==='failed').length,'failed (?:schedules?|scheduled payments?)']);
+  const words=['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty'];
+  for(const [count,noun] of facts){
+    if(!Number.isSafeInteger(count)||count<0)continue;
+    const pattern=new RegExp('\\b(?:'+count+(words[count]?'|'+words[count]:'')+')\\s+'+noun+'\\b','gi');
+    text=text.replace(pattern,(match,offset,source)=>/(?:SGD|S\$|\$|[+-]|\bminus|\bnegative)\s*$/i.test(source.slice(0,offset))?match:'[verified reconciliation count]');
+  }
+  return text;
+}
 function narrativeIssue(reply, report, { results = [], evidence = [], requireCitations = false } = {}) {
   if(/<\/?[a-z][^>]*>|\[E\d+\][.!?,;:。！？、，；：\u3010\u3011]*[\p{L}\p{N}]/iu.test(reply))return 'The answer contains markup or malformed text adjoining an evidence reference. Use plain banking prose with separated references.';
-  if(/[{}\x60]|<\/?(?:analysis|think)>|<\|(?:analysis|final|assistant)\|>|\b(?:JSON|response|output)\s+(?:mode|schema|format|object)\b|\b(?:output|return)\s+only\s+(?:valid\s+)?JSON\b|\b(?:need|ensure|must)\s+(?:no|only)\s+(?:numeric|digits?|numbers?)\b|\b(?:must|need to)\s+(?:meet|follow|satisfy|match)\s+(?:the\s+)?(?:output\s+|response\s+)?format\b|\b(?:format requested object|(?:ensure|need) valid JSON|YIELD_[A-Z_]+)\b/i.test(reply))return 'The answer contains formatting remnants or model drafting instructions. Return only the customer-facing banking explanation.';
+  if(/[{}\x60]|<\/?(?:analysis|think)>|<\|(?:analysis|final|assistant)\|>|\bJSON\s+(?:mode|schema|format|object)\b|\b(?:response|output)\s+(?:mode|schema|object)\b|\b(?:output|return)\s+only\s+(?:valid\s+)?JSON\b|\b(?:need|ensure|must)\s+(?:no|only)\s+(?:numeric|digits?|numbers?)\b|\b(?:must|need to)\s+(?:meet|follow|satisfy|match)\s+(?:the\s+)?(?:output\s+|response\s+)?format\b|\b(?:format requested object|(?:ensure|need) valid JSON|YIELD_[A-Z_]+)\b/i.test(reply))return 'The answer contains formatting remnants or model drafting instructions. Return only the customer-facing banking explanation.';
   const plain = reply.replace(/[*_`]/g, '').replace(/[\u2018\u2019]/g, "'");
   const preview=results.find(r=>r.tool==='simulate_rule')?.value;
   if(preview?.assessed===0&&!/\b(?:no eligible|no (?:valid |recorded |eligible )?assessments|insufficient (?:eligible )?(?:history|data|coverage)|not enough (?:eligible )?(?:history|data|assessments))\b/i.test(plain))return 'There are no eligible assessments in the rule preview; explicitly state insufficient coverage instead of implying measured rule impact.';
@@ -42,6 +61,9 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   // and dates outside the retrieved scope still pass the checks below.
   const periods=results.filter(r=>['get_accounts','get_finance_report','search_transactions','get_company_activity','open_saved_dashboard'].includes(r.tool)).map(r=>r.value?.period).filter(Boolean);
   qualitative=require('../assistant-period').withoutReportDates(qualitative,periods);
+  // Accept only exact counts tied to a single retrieved reconciliation result
+  // and their specific nouns. Unrelated numbers and incorrect totals still fail.
+  qualitative=withoutReconciliationCounts(qualitative,results);
   if(!requireCitations)qualitative=qualitative.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
   if (/\d/.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead.';
   // An imperative choice or interrogative pronoun is not a numerical bank fact.

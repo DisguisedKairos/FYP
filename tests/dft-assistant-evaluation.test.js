@@ -23,6 +23,8 @@ const cases = [
   ['markup in a caption', 'Review the recorded payments [E1].<br>', context(), true],
   ['malformed citation suffix', 'Your saved chart is listed below [E1]ചચ.', context(), true],
   ['ordinary structured-format explanation', 'JSON is a structured data format [E1].', context(), false],
+  ['download output format explanation', 'The report is available in CSV and PDF output formats [E1].', context(), false],
+  ['download response format explanation', 'Choose the response format using the CSV or PDF download controls [E1].', context(), false],
   ['qualified model uncertainty', 'This projection does not guarantee funding and is not confirmed fraud [E1].', context(), false],
   ['missing citation', 'The account evidence is available.', context(), true],
   ['fabricated citation', 'Inspect these balances [E99].', context(), true],
@@ -46,6 +48,16 @@ const cases = [
 for (const [name, reply, c, blocked] of cases) test('Assistant evaluation: ' + name, () => assert.equal(Boolean(narrativeIssue(reply, c.report, c.options)), blocked));
 
 test('Adjacent valid evidence references remain accepted',()=>assert.equal(narrativeIssue('Inspect the permitted records [E1][E2].',null,{evidence:[{id:'E1'},{id:'E2'}],requireCitations:true}),null));
+
+test('Reconciliation counts must match the retrieved category, not merely another number in the report',()=>{
+ const value={accountsChecked:31,discrepancies:[],failedSchedules:[{status:'failed'},{status:'active',lastStatus:'retrying'}],notificationExceptions:[{}]};
+ const options={evidence,requireCitations:true,results:[{tool:'reconcile_accounts',value}]};
+ for(const reply of ['All 31 inspected accounts match the ledger; review the schedule and notification exceptions [E1].','There are zero balance discrepancies and two schedule exceptions [E1].','There is one failed schedule and one notification exception [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
+ for(const reply of ['All 30 inspected accounts match the ledger [E1].','There are two failed schedules [E1].','There is one schedule exception [E1].','There are two notification exceptions [E1].','The balance is SGD 31 accounts [E1].','The balance is S$31 accounts [E1].','There are -31 accounts and schedule exceptions [E1].','There are minus one failed schedule [E1].','There are one hundred accounts [E1].','There are two schedule exceptions with SGD 999 outstanding [E1].'])assert.ok(narrativeIssue(reply,null,options),reply);
+ assert.ok(narrativeIssue('There is one failed schedule [E1].',null,{...options,results:[]}));
+ assert.ok(narrativeIssue('There is one failed schedule [E1].',null,{...options,results:[{tool:'get_accounts',value}]}));
+ assert.ok(narrativeIssue('There is one failed schedule [E1].',null,{...options,results:[...options.results,...options.results]}));
+});
 
 test('Report month labels must belong to the retrieved period and cannot hide financial numbers',()=>{
  const options={evidence,requireCitations:true,results:[{tool:'get_finance_report',value:{period:{from:'2026-10-01',to:'2026-10-31'}}}]};
