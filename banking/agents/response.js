@@ -13,23 +13,23 @@ function format(toolNames,{evidenceTools=[]}={}){
  const modes=evidenceTools.length?(evidenceTools.every(name=>PUBLIC_TOOLS.includes(name))?['banking_evidence','general_banking']:['banking_evidence']):MODES;
  return {type:'json_schema',name:'banking_assistant_response',strict:true,schema:{
   type:'object',additionalProperties:false,
-  properties:{mode:{type:'string',enum:modes,description:'Use clarification only for missing details of a supported banking or business task. Use outside_scope for unrelated personal tasks, even if they are incomplete. Do not clarify or offer to perform an unrelated request.'},requiresResearch:{type:'boolean',description:'True only when this answer needs current public research; false when asking for missing details or declining an unrelated request.'},requiredTools:{type:'array',description:'Tools required for the current answer. For clarification or outside_scope, return an empty array, without listing tools for a possible future request.',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string'}},
+  properties:{mode:{type:'string',enum:modes,description:'Use clarification only for missing details of a supported banking or business task. Use outside_scope for unrelated personal tasks, even if they are incomplete. Do not clarify or offer to perform an unrelated request.'},requiresResearch:{type:'boolean',description:'True only when this answer needs current public research; false when asking for missing details or declining an unrelated request.'},requiredTools:{type:'array',description:'Tools required for the current answer. For clarification or outside_scope, return an empty array, without listing tools for a possible future request.',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string',description:'Only the banking answer addressed to the user. No serialized data, code fences, formatting instructions, schema discussion or commentary about writing the answer.'}},
   required:['mode','requiresResearch','requiredTools','reply'],
  }};
 }
-// Wording candidates cannot reclassify the task or redefine its evidence needs.
-// The caller validates each actual model response before selecting a paragraph.
-const NARRATIVE_PATTERN='^(?:[^0-9]|\\[E[1-9][0-9]*\\])+$';
+// Wording correction cannot reclassify the task or redefine its evidence needs.
+// The caller validates the actual model paragraph before displaying it.
 function narrativeFormat(){
  return {type:'json_schema',name:'banking_assistant_narrative',strict:true,schema:{
-  type:'object',additionalProperties:false,properties:{replies:{type:'array',minItems:3,maxItems:3,description:'Independent, concise alternative paragraphs answering the same request from the supplied facts. Each must stand alone, include required uncertainty or funding warnings, and cite supplied references when applicable. Use qualitative wording: say the selected period instead of repeating durations, dates, counts or any number words. Exact facts remain in the application cards.',items:{type:'string',pattern:NARRATIVE_PATTERN}}},required:['replies'],
+  type:'object',additionalProperties:false,properties:{reply:{type:'string',description:'Only the concise banking answer for the user, with relevant uncertainty and supplied evidence references. Use qualitative wording such as the selected period or the matching records. Exact figures are displayed in the application cards. Do not include numerical quantities, JSON fragments, code or commentary about generating the response.'}},required:['reply'],
  }};
 }
 function parseNarrative(content){
  const invalid=()=>new HttpError(503,'The assistant returned an invalid wording correction. Retry the request.');
  let value;try{value=JSON.parse(content);}catch{throw invalid();}
- if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join(',')!=='replies'||!Array.isArray(value.replies)||value.replies.length!==3||value.replies.some(reply=>typeof reply!=='string'||!reply.trim()||reply.length>3000||!new RegExp(NARRATIVE_PATTERN).test(reply)))throw invalid();
- return {content:value.replies[0],narrativeCandidates:value.replies};
+ if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join(',')!=='reply'||typeof value.reply!=='string'||!value.reply.trim()||value.reply.length>3000)throw invalid();
+ // Financial meaning and prose still pass the controller's safety checks.
+ return {content:value.reply};
 }
 function parse(content,toolNames){
  const invalid=()=>new HttpError(503,'The assistant returned an invalid response. Retry the request.');

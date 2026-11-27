@@ -20,15 +20,31 @@ function references(runId, results) {
   return results.map((result, i) => ({ id: `E${i + 1}`, runId, step: i + 1, tool: result.tool, label: LABELS[result.tool] || 'Banking evidence' }));
 }
 function narrativeIssue(reply, report, { results = [], evidence = [], requireCitations = false } = {}) {
+  if(/<\/?[a-z][^>]*>|\[E\d+\][.!?,;:。！？、，；：\u3010\u3011]*[\p{L}\p{N}]/iu.test(reply))return 'The answer contains markup or malformed text adjoining an evidence reference. Use plain banking prose with separated references.';
+  if(/[{}\x60]|<\/?(?:analysis|think)>|<\|(?:analysis|final|assistant)\|>|\b(?:JSON|response|output)\s+(?:mode|schema|format|object)\b|\b(?:output|return)\s+only\s+(?:valid\s+)?JSON\b|\b(?:need|ensure|must)\s+(?:no|only)\s+(?:numeric|digits?|numbers?)\b|\b(?:must|need to)\s+(?:meet|follow|satisfy|match)\s+(?:the\s+)?(?:output\s+|response\s+)?format\b|\b(?:format requested object|(?:ensure|need) valid JSON|YIELD_[A-Z_]+)\b/i.test(reply))return 'The answer contains formatting remnants or model drafting instructions. Return only the customer-facing banking explanation.';
   const plain = reply.replace(/[*_`]/g, '').replace(/[\u2018\u2019]/g, "'");
   const preview=results.find(r=>r.tool==='simulate_rule')?.value;
   if(preview?.assessed===0&&!/\b(?:no eligible|no (?:valid |recorded |eligible )?assessments|insufficient (?:eligible )?(?:history|data|coverage)|not enough (?:eligible )?(?:history|data|assessments))\b/i.test(plain))return 'There are no eligible assessments in the rule preview; explicitly state insufficient coverage instead of implying measured rule impact.';
-  const executionClaims=plain.replace(/\bno\s+(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[no execution]');
+  let executionClaims=plain.replace(/\bno\s+(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[no execution]');
+  const investigated=results.filter(r=>r.tool==='investigate_transaction').map(r=>r.value?.transaction);
+  // Describing a retrieved receipt's past status is not executing a payment.
+  // Scope this exception to an unambiguous completed investigation; active,
+  // present-tense and unsupported completion claims still fail below.
+  if(investigated.length===1&&investigated[0]?.status==='completed')executionClaims=executionClaims.replace(/\bthe\s+(?:(?:recorded|investigated|selected)\s+)?(?:payment|transaction)\s+was\s+completed\b(?=\s*(?:[.!?;,]|\[E\d+\]|$))/gi,'[recorded completed status]');
   if (/\b(?:I|we)\s+(?:have\s+)?(?:sent|executed|approved|rejected|cancelled|canceled|settled|debited|credited|changed the rule)\b|\b(?:payment|transfer|transaction|bill)\s+(?:has been|was|is now|successfully)\s+(?:sent|executed|approved|settled|paid|completed)\b/i.test(executionClaims)) return 'An agent claimed an action outside its authority.';
   if (/\b(?:risk\s+|model\s+|combined\s+)?score\s*:?\s*\d+\s*(?:\/|out of)\s*(?!100\b)\d+/i.test(plain)) return 'Invalid risk-score scale.';
   const cited = [...plain.matchAll(/\[(E\d+)\]/g)].map(match => match[1]), valid = new Set(evidence.map(e => e.id));
   if (requireCitations && (!cited.length || cited.some(id => !valid.has(id)))) return 'The interpretation must cite evidence retrieved in this run.';
   let qualitative = plain.replace(/\[E\d+\]/g, '').replace(/^\s*\d+[.)]\s+/gm, '');
+  // A month label from a retrieved report is scope, not an invented amount.
+  // Permit only months overlapping an actual returned read period; arbitrary
+  // years, dates, amounts and account identifiers remain screened below.
+  const periods=results.filter(r=>['get_accounts','get_finance_report','search_transactions','get_company_activity','open_saved_dashboard'].includes(r.tool)).map(r=>r.value?.period).filter(p=>/^\d{4}-\d{2}-\d{2}$/.test(p?.from)&&/^\d{4}-\d{2}-\d{2}$/.test(p?.to));
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  qualitative=qualitative.replace(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/gi,(label,month,year)=>{
+    const prefix=year+'-'+String(months.findIndex(m=>m.toLowerCase()===month.toLowerCase())+1).padStart(2,'0');
+    return periods.some(p=>p.from.slice(0,7)<=prefix&&prefix<=p.to.slice(0,7))?'[retrieved report month]':label;
+  });
   if(!requireCitations)qualitative=qualitative.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
   if (/\d/.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead.';
   // An imperative choice or interrogative pronoun is not a numerical bank fact.
@@ -60,6 +76,7 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const staffActionClaim = /\b(?:I|we)\s+(?:(?:have|successfully|just|now|already)\s+)*(?:notified|alerted|contacted|emailed|messaged)\b|\b(?:case|ticket|investigation|review request)\s+(?:(?:has|have|been|was|is|now|successfully|already)\s+){0,5}(?:created|opened|queued|submitted)\b|\b(?:staff|bank|reviewers?|compliance team)\s+(?:(?:has|have|been|was|were|is|are|now|successfully|already)\s+){0,5}(?:notified|alerted|contacted)\b/i.test(staffClaims);
   if (staffActionClaim && !results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested)) return 'A staff notification or investigation was claimed without a successful permitted review receipt.';
   if(/\b(?:I|we)\s+(?:(?:have|successfully|just|now)\s+)*(?:saved|bookmarked)\b|\b(?:dashboard|view)\s+(?:(?:has|have|been|was|is|now|successfully|privately)\s+){0,5}(?:saved|bookmarked)\b|^\s*(?:saved|bookmarked)\b/i.test(plain) && !results.some(r=>r.tool==='save_company_dashboard' && r.value.saved))return 'A saved dashboard was claimed without a successful save receipt.';
+  if(/\b(?:your|the|this)\s+saved\s+(?:dashboard|view|chart)\s+(?:shows|covers|has|is|presents|uses|includes)\b/i.test(plain)&&!results.some(r=>r.tool==='save_company_dashboard'&&r.value.saved||r.tool==='open_saved_dashboard'&&r.value.view||r.tool==='list_saved_dashboards'&&r.value.views?.length))return 'A generated chart is not a saved dashboard. Describe it as the current chart unless saved-view evidence was retrieved.';
   const investigations=results.filter(r=>r.tool==='investigate_transaction').map(r=>r.value);
   if(report?.humanReview)investigations.push(report);
   const openHumanReview=investigations.some(r=>r.humanReview?.open) || results.some(r=>r.tool==='analyze_market_transactions' && r.value?.transactions?.some(t=>t.humanReview?.open));

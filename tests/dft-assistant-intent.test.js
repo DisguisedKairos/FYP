@@ -41,11 +41,15 @@ pg('A completed draft remains a banking answer instead of being rejected as a ne
 });
 
 test('Wording corrections accept only bounded model paragraphs and cannot redefine intent or tool permissions',()=>{
- const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['replies']);
- const replies=['Inspect the owned records [E1].','Check the displayed facts [E2].','Review the selected period [E10].'];
- assert.deepEqual(response.parseNarrative(JSON.stringify({replies})),{content:replies[0],narrativeCandidates:replies});
- for(const value of [{replies,mode:'general_banking'},{replies,requiredTools:['execute_payment']},{replies,requiresResearch:false},{replies:[]},{replies:[...replies,'extra']},{replies:['',...replies.slice(1)]},{replies:[5,...replies.slice(1)]},{replies:['Your balance is SGD 999.',...replies.slice(1)]},{replies:['x'.repeat(3001),...replies.slice(1)]},{reply:'Legacy wording.'},[],null])assert.throws(()=>response.parseNarrative(JSON.stringify(value)),e=>e.status===503);
+ const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['reply']);
+ const reply='Inspect the owned records [E1].';
+ assert.deepEqual(response.parseNarrative(JSON.stringify({reply})),{content:reply});
+ for(const value of [{reply,mode:'general_banking'},{reply,requiredTools:['execute_payment']},{reply,requiresResearch:false},{reply:''},{reply:5},{reply:'x'.repeat(3001)},{replies:[reply]},[],null])assert.throws(()=>response.parseNarrative(JSON.stringify(value)),e=>e.status===503);
  assert.throws(()=>response.parseNarrative('not JSON'),e=>e.status===503);
+ for(const text of ['Your balance is SGD 999 [E1].','The report is shown below [E1]. }','The report is shown below [E1]. `analysis`']){
+  const parsed=response.parseNarrative(JSON.stringify({reply:text}));
+  assert.ok(require('../banking/agents/evidence').narrativeIssue(parsed.content,null,{evidence:[{id:'E1'}],requireCitations:true}));
+ }
 });
 
 pg('Wording-only corrections preserve the original enquiry intent without requiring new tool selection',async t=>{
@@ -53,24 +57,24 @@ pg('Wording-only corrections preserve the original enquiry intent without requir
  const model=createOpenAIModel({apiKey:'test-only-openai-key-not-a-real-secret',fetchImpl:async(url,options)=>{
   if(String(url).includes('/models/'))return new Response(JSON.stringify({id:'gpt-6-luna'}));
   const body=JSON.parse(options.body);calls++;
-  const text=JSON.stringify(body.text.format.name==='banking_assistant_narrative'?{replies:['There is one account in the retrieved records [E1].','The funds in your owned accounts are shown below [E1].','We have executed the payment [E1].']}:{mode:'banking_evidence',requiresResearch:false,requiredTools:calls===2?['get_accounts']:[],reply:calls===2?'There is one account in the retrieved records [E1].':'The funds in your owned accounts are shown below [E1].'});
+  const text=JSON.stringify(body.text.format.name==='banking_assistant_narrative'?{reply:calls===3?'Your balance is SGD 999 [E1].':'The funds in your owned accounts are shown below [E1].'}:{mode:'banking_evidence',requiresResearch:false,requiredTools:calls===2?['get_accounts']:[],reply:calls===2?'There is one account in the retrieved records [E1].':'The funds in your owned accounts are shown below [E1].'});
   return new Response(JSON.stringify({id:'resp_rewrite_'+calls,status:'completed',model:'gpt-6-luna',output:calls===1?[{type:'function_call',call_id:'call_accounts',name:'get_accounts',arguments:'{}'}]:[{type:'message',role:'assistant',content:[{type:'output_text',text}]}]}));
  }});
  const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'How much have I got available right now?'});
  assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
- assert.equal(calls,3);assert.deepEqual(result.aiAudit.intent.requiredTools,['get_accounts']);
+ assert.equal(calls,4);assert.deepEqual(result.aiAudit.intent.requiredTools,['get_accounts']);
  assert.equal(result.aiAudit.intent.mode,'banking_evidence');assert.deepEqual(result.steps.map(s=>s.tool),['get_accounts']);
  assert.ok(result.items.some(i=>typeof i.amountCents==='number'));assert.doesNotMatch(result.reply,/one account/);
  assert.equal(result.reply,'The funds in your owned accounts are shown below [E1].');
 });
 
-pg('Alternative wording never bypasses financial safeguards when every model paragraph fails',async t=>{
+pg('Wording correction never bypasses financial safeguards when every model paragraph fails',async t=>{
  const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
  const candidates=['There is one account in the retrieved records [E1].','We have executed the payment [E1].','These transactions are definitely safe [E1].'];
  const result=await createAgents({db:f.db,model:provider(async()=>{
   if(++calls===1)return call('get_accounts');
   if(calls===2)return answer('banking_evidence',candidates[0],['get_accounts']);
-  return {content:candidates[0],narrativeCandidates:candidates};
+  return {content:candidates[calls-2]};
  })}).execute(user,'assistant',{message:'How much have I got available right now?'});
  assert.equal(result.narrativeWithheld,true);assert.ok(result.items.some(i=>typeof i.amountCents==='number'));
  assert.doesNotMatch(result.reply,/definitely safe|executed|one account/);assert.equal(result.aiAudit.intent.mode,'banking_evidence');
@@ -342,4 +346,44 @@ pg('A filtered receipt follow-up retains company and account filters instead of 
  const filters=next.actions.find(a=>a.page==='activity').filters;
  assert.equal(filters.q,'Harbour Supplies');assert.equal(filters.accountId,account);assert.equal(filters.from,'2026-10-01');assert.equal(filters.to,'2026-10-31');
  assert.deepEqual(next.steps.map(s=>s.tool),['search_transactions']);assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);
+});
+
+pg('An earlier chart read cannot replace the latest receipt-search context',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),now=()=>Date.parse('2026-11-27T05:00:00Z');let followup=false;
+ const account=(await f.db.query('SELECT id::text FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0].id;
+ const agents=createAgents({db:f.db,now,model:provider(async messages=>{
+  const reads=messages.filter(m=>m.role==='tool');
+  if(followup)return reads.length?answer('banking_evidence','Your matching receipts are shown below [E1].',['search_transactions']):call('search_transactions',{reusePrevious:true});
+  if(!reads.length)return call('get_company_activity',{company:'Harbour Supplies'});
+  if(reads.length===1)return call('search_transactions',{q:'Harbour Supplies',accountId:account});
+  return answer('banking_evidence','Your matching receipts and company activity are shown below [E1] [E2].',['get_company_activity','search_transactions']);
+ })});
+ const first=await agents.execute(user,'assistant',{message:'Find my transactions with Harbour Supplies in November 2026.'});
+ assert.ok(first.companyDashboard);const saved=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[first.runId])).rows[0].context_json;
+ assert.equal(saved.lastReadEnquiry.tool,'search_transactions');assert.deepEqual(saved.lastReadEnquiry.arguments,{q:'Harbour Supplies',accountId:account});
+ followup=true;const next=await agents.execute(user,'assistant',{message:'What about October 2026 for the same company?',previousRunId:first.runId});
+ const filters=next.actions.find(a=>a.page==='activity').filters;
+ assert.equal(filters.q,'Harbour Supplies');assert.equal(filters.accountId,account);assert.equal(filters.from,'2026-10-01');assert.equal(filters.to,'2026-10-31');
+ assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);
+});
+
+pg('A new chart request can correct an unavailable context flag without inheriting filters',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const result=await createAgents({db:f.db,model:provider(async messages=>{
+  if(++calls===1)return call('get_company_activity',{reusePrevious:true});
+  if(calls===2){assert.match(messages.at(-1).content,/previous read filters/i);return call('get_company_activity');}
+  return answer('banking_evidence','Your requested comparison chart is shown below [E1].',['get_company_activity']);
+ })}).execute(user,'assistant',{message:'Compare our inflow and outflow in September and October 2026 as a chart.'});
+ assert.equal(calls,3);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.deepEqual(result.steps.map(s=>s.tool),['get_company_activity']);
+ assert.equal(result.companyDashboard.data.period.from,'2026-09-01');assert.equal(result.companyDashboard.data.period.to,'2026-10-31');
+});
+
+pg('Missing read context can ask for details and repeated invalid context stays bounded',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const result=await createAgents({db:f.db,model:provider(async()=>++calls===1?call('search_transactions',{reusePrevious:true}):answer('clarification','Which company and period would you like me to search?'))}).execute(user,'assistant',{message:'Show the same company for another month.'});
+ assert.equal(calls,2);assert.equal(result.clarification,true);assert.equal(result.steps.length,0);
+ assert.equal((await f.db.query('SELECT count(*)::int AS n FROM agent_tool_calls WHERE run_id=$1',[result.runId])).rows[0].n,0);
+ calls=0;
+ await assert.rejects(createAgents({db:f.db,model:provider(async()=>{calls++;return call('search_transactions',{reusePrevious:true});})}).execute(user,'assistant',{message:'Show the same company for another month.'}),e=>e.status===400);
+ assert.equal(calls,2);
 });

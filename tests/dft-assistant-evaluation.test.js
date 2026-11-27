@@ -15,6 +15,14 @@ async function balances(db) { return (await db.query('SELECT id,balance_cents FR
 
 const cases = [
   ['grounded qualitative explanation', 'Inspect the owned account evidence before authorizing a payment [E1].', context(), false],
+  ['structured-output remnants', 'Your company chart is shown below [E1]. 】【。]} (This is JSON mode exact).', context(), true],
+  ['model drafting instructions', 'Your company chart is shown below [E1]. Ensure no numeric. Output only JSON.', context(), true],
+  ['internal formatting commentary', 'Your chart is shown below [E1]. YIELD_COUNTS? no. Must meet format exact. Need no numeric facts.', context(), true],
+  ['serialized-format drafting commentary', 'Review the recorded payments [E1]. йesponse format? exact JSON object required, valid. We have accidental Cyrillic?', context(), true],
+  ['serialized answer envelope', '{"reply":"Inspect the owned records [E1]."}', context(), true],
+  ['markup in a caption', 'Review the recorded payments [E1].<br>', context(), true],
+  ['malformed citation suffix', 'Your saved chart is listed below [E1]ചચ.', context(), true],
+  ['ordinary structured-format explanation', 'JSON is a structured data format [E1].', context(), false],
   ['qualified model uncertainty', 'This projection does not guarantee funding and is not confirmed fraud [E1].', context(), false],
   ['missing citation', 'The account evidence is available.', context(), true],
   ['fabricated citation', 'Inspect these balances [E99].', context(), true],
@@ -37,10 +45,56 @@ const cases = [
 ];
 for (const [name, reply, c, blocked] of cases) test('Assistant evaluation: ' + name, () => assert.equal(Boolean(narrativeIssue(reply, c.report, c.options)), blocked));
 
+test('Adjacent valid evidence references remain accepted',()=>assert.equal(narrativeIssue('Inspect the permitted records [E1][E2].',null,{evidence:[{id:'E1'},{id:'E2'}],requireCitations:true}),null));
+
+test('Report month labels must belong to the retrieved period and cannot hide financial numbers',()=>{
+ const options={evidence,requireCitations:true,results:[{tool:'get_finance_report',value:{period:{from:'2026-10-01',to:'2026-10-31'}}}]};
+ assert.equal(narrativeIssue('Your October 2026 finance report is ready [E1].',null,options),null);
+ for(const text of ['Your November 2026 report is ready [E1].','Your October 2025 report is ready [E1].','Your 2026 report is ready [E1].','October 2026 has SGD 999 in receipts [E1].','October 2026 has one receipt [E1].'])assert.ok(narrativeIssue(text,null,options),text);
+ assert.ok(narrativeIssue('Your October 2026 report is ready [E1].',null,{...options,results:[]}));
+ assert.ok(narrativeIssue('Your October 2026 report is ready [E1].',null,{...options,results:[{tool:'get_banking_context',value:{period:{from:'2026-10-01',to:'2026-10-31'}}}]}));
+});
+
+test('Generated charts cannot be described as saved without retrieved saved-view evidence',()=>{
+ const reply='Your saved dashboard shows the selected activity [E1].',options={evidence,requireCitations:true};
+ assert.match(narrativeIssue(reply,null,{...options,results:[{tool:'get_company_activity',value:{status:'ready'}}]}),/not a saved dashboard/);
+ for(const result of [{tool:'save_company_dashboard',value:{saved:true}},{tool:'open_saved_dashboard',value:{view:{id:'owned-view'}}},{tool:'list_saved_dashboards',value:{views:[{id:'owned-view'}]}}])assert.equal(narrativeIssue(reply,null,{...options,results:[result]}),null);
+ assert.equal(narrativeIssue('You have no saved dashboards [E1].',null,{...options,results:[{tool:'list_saved_dashboards',value:{views:[]}}]}),null);
+});
+
+pg('Malformed model captions are corrected without exposing discarded formatting instructions',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),before=await balances(f.db);let calls=0;
+ const broken='The account details are shown below [E1]. ]} This is JSON mode exact. Ensure no numeric.';
+ const clean='The current balances for your owned accounts are shown below [E1].';
+ const result=await createAgents({db:f.db,model:model(async(messages,tools)=>{
+  if(++calls===1)return {...tool('get_accounts'),responseItems:[{type:'reasoning',encrypted_content:'opaque-planner-state'}]};
+  if(calls===2)return {content:broken};
+  assert.deepEqual(tools,[]);
+  assert.match(messages[0].content,/friendly, professional/);
+  assert.doesNotMatch(JSON.stringify(messages),/opaque-planner-state|This is JSON mode exact|Use neutral banking terminology/);
+  assert.ok(messages.some(m=>m.role==='tool'&&JSON.parse(m.content).evidenceId==='E1'));
+  assert.ok(messages.some(m=>m.role==='assistant'&&m.tool_calls?.[0].function.name==='get_accounts'));
+  assert.ok(messages.some(m=>m.role==='user'&&m.content==='Show my current balances.'));
+  return {content:clean};
+ })}).execute(user,'assistant',{message:'Show my current balances.'});
+ assert.equal(calls,3);assert.equal(result.reply,clean);assert.equal(result.narrativeWithheld,undefined);
+ assert.ok(result.items.some(i=>Number.isSafeInteger(i.amountCents)));assert.deepEqual(await balances(f.db),before);
+});
+
 test('Explicit no-execution clauses are accepted without masking actual or qualified execution claims',()=>{
  const options={evidence,requireCitations:true};
  for(const reply of ['The draft awaits authorization; no payment was sent. Verify its recipient [E1].','No transfer has been completed [E1].','No payment was sent, and the form remains a draft [E1].'])assert.equal(narrativeIssue(reply,null,options),null,reply);
  for(const reply of ['The payment was sent [E1].','I have approved the transfer [E1].','No payment was sent, but I approved the transfer [E1].','No transfer has been completed; the bill was paid [E1].','No payment was sent until yesterday [E1].'])assert.match(narrativeIssue(reply,null,options),/outside its authority/,reply);
+});
+
+test('An investigation can describe its recorded completed status without claiming execution',()=>{
+ const options={evidence,requireCitations:true,results:[{tool:'investigate_transaction',value:{transaction:{status:'completed'}}}]};
+ assert.equal(narrativeIssue('The transaction was completed; its recorded assessment remains unavailable [E1].',null,options),null);
+ for(const text of ['The transaction was completed [E1].','The recorded payment was completed [E1].']){
+  assert.equal(narrativeIssue(text,null,options),null);
+  for(const results of [[],[{tool:'search_transactions',value:{status:'completed'}}],[{tool:'investigate_transaction',value:{transaction:{status:'pending'}}}], [...options.results,...options.results]])assert.match(narrativeIssue(text,null,{...options,results}),/outside its authority/);
+ }
+ for(const text of ['The transaction is now completed [E1].','Your payment has been completed [E1].','The transaction was completed; I have approved the transfer [E1].','The transaction was completed until yesterday [E1].'])assert.match(narrativeIssue(text,null,options),/outside its authority/);
 });
 
 test('Funding uncertainty accepts explicit negation while actual guarantees remain blocked',()=>{
