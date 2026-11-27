@@ -44,9 +44,15 @@ test('Wording corrections accept only bounded model paragraphs and cannot redefi
  const schema=response.narrativeFormat();assert.equal(schema.strict,true);assert.deepEqual(schema.schema.required,['reply']);
  const reply='Inspect the owned records [E1].';
  assert.deepEqual(response.parseNarrative(JSON.stringify({reply})),{content:reply});
+ const pattern=new RegExp(schema.schema.properties.reply.pattern);
+ for(const text of [reply,'Review the selected period [E1][E2].','Your requested report is ready.\n\nDownload CSV or PDF [E12].'])assert.ok(pattern.test(text));
+ for(const text of ['Your balance is SGD 999 [E1].','The report starts 2026-11-01 [E1].','Use account 1099100101 [E1].','A score of 10/100 was recorded [E1].']){
+  assert.equal(pattern.test(text),false);
+  assert.throws(()=>response.parseNarrative(JSON.stringify({reply:text})),e=>e.status===503);
+ }
  for(const value of [{reply,mode:'general_banking'},{reply,requiredTools:['execute_payment']},{reply,requiresResearch:false},{reply:''},{reply:5},{reply:'x'.repeat(3001)},{replies:[reply]},[],null])assert.throws(()=>response.parseNarrative(JSON.stringify(value)),e=>e.status===503);
  assert.throws(()=>response.parseNarrative('not JSON'),e=>e.status===503);
- for(const text of ['Your balance is SGD 999 [E1].','The report is shown below [E1]. }','The report is shown below [E1]. `analysis`']){
+ for(const text of ['The balance is one million [E1].','The report is shown below [E1]. }','The report is shown below [E1]. `analysis`']){
   const parsed=response.parseNarrative(JSON.stringify({reply:text}));
   assert.ok(require('../banking/agents/evidence').narrativeIssue(parsed.content,null,{evidence:[{id:'E1'}],requireCitations:true}));
  }

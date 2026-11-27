@@ -19,15 +19,17 @@ function format(toolNames,{evidenceTools=[]}={}){
 }
 // Wording correction cannot reclassify the task or redefine its evidence needs.
 // The caller validates the actual model paragraph before displaying it.
+const NARRATIVE_PATTERN='^(?:[^0-9]|\\[E[0-9]+\\])+$';
 function narrativeFormat(){
  return {type:'json_schema',name:'banking_assistant_narrative',strict:true,schema:{
-  type:'object',additionalProperties:false,properties:{reply:{type:'string',description:'Only the concise banking answer for the user, with relevant uncertainty and supplied evidence references. Use qualitative wording such as the selected period or the matching records. Exact figures are displayed in the application cards. Do not include numerical quantities, JSON fragments, code or commentary about generating the response.'}},required:['reply'],
+  type:'object',additionalProperties:false,properties:{reply:{type:'string',pattern:NARRATIVE_PATTERN,description:'Only the concise banking answer for the user, with relevant uncertainty and supplied evidence references. Use qualitative wording such as the selected period or the matching records. Exact figures are displayed in the application cards. Do not include numerical quantities, JSON fragments, code or commentary about generating the response.'}},required:['reply'],
  }};
 }
 function parseNarrative(content){
  const invalid=()=>new HttpError(503,'The assistant returned an invalid wording correction. Retry the request.');
  let value;try{value=JSON.parse(content);}catch{throw invalid();}
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).join(',')!=='reply'||typeof value.reply!=='string'||!value.reply.trim()||value.reply.length>3000)throw invalid();
+ if(!new RegExp(NARRATIVE_PATTERN).test(value.reply))throw invalid();
  // Financial meaning and prose still pass the controller's safety checks.
  return {content:value.reply};
 }
