@@ -47,7 +47,7 @@ The model chooses approved read/draft tools and gives qualitative interpretation
 
 These questions illustrate the features; they are not commands to memorize. Ask in your own words, use ordinary follow-ups, and include the financial details needed for the task. The model interprets the request and selects a permitted tool. For example, asking for money movements as columns selects a bar chart, keeping a displayed chart can use an informal request, and asking for a review form does not require the word "draft". Genuine missing or ambiguous details need clarification.
 
-Updated 27 November 2026. Use the [current nine-login Neon guide](../data/testing/neon/README.md). Sign in as `logistics-business@greenlink.demo` for the customer questions; use `reviewer-tester@greenlink.demo` only for administrator tasks. The administrator does not own the customer's deposits or private charts.
+Updated 28 November 2026. Use the [current nine-login Neon guide](../data/testing/neon/README.md). Sign in as `logistics-business@greenlink.demo` for the customer questions; use `reviewer-tester@greenlink.demo` only for administrator tasks. The administrator does not own the customer's deposits or private charts.
 
 A read-only check of the current database confirmed logistics operating account **1099100101**, logistics reserve **1099100102**, and technology recipient **1099100201**. Confirm these in Business accounts before presenting. The former `108880...` feature-tour accounts are not the current presentation setup. Other industry logins must use their own accounts and recorded companies.
 
@@ -79,6 +79,8 @@ Natural alternatives are supported: “Generate a finance report from 1 to 25 No
 | Reconciliation | Check my accounts for reconciliation exceptions. | Owned discrepancies or an explicit no-exception result; no balance repair. |
 
 Related read-only follow-ups can keep the company and search filters: after a company chart, ask **Show the same company for October 2026 instead.** After a filtered transaction search, ask **What about October 2026 for the same company?** Keep these in the same conversation. The assistant retrieves fresh owned records; it does not reuse old balances or carry payment instructions into a new request. An explicit bar or line chart request overrides the display preference for that chart, and saving the displayed chart retains its style. **Compare our inflow and outflow in September and October 2026 as a chart** covers both months; **Show a dashboard of my transaction trends this quarter** uses the Singapore calendar quarter through today.
+
+Natural form requests can use "one-off" or "one-time" for a single payment. An explicit future date stays in a scheduled review form; an unspecified recurrence still needs clarification. The payment-source list contains your own accounts, so it cannot establish that a supplied recipient is missing. Verify the recipient in the banking form. To save a displayed chart, you can also ask **Pin this visualization as "Supplier review" and refresh it weekly.** The chart verb is distinct from a security PIN; never include security values in chat.
 
 For questions that need background as well as banking records, use these prompts:
 

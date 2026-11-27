@@ -97,7 +97,7 @@ const descriptions = {
   analyze_market_transactions:'Compare up to five recent permitted outgoing payments, or the specified transactionId, against daily official public context and bound pre-payment history. Customers see only their own payments; bank staff may inspect bank payments. Returns eligible signal codes; no payment changes.',
   flag_transaction_for_review:'Request human investigation after a user asks to examine concerning payment activity, interpreting their intent without requiring particular words. Supply a requestQuote from that user request and an exact eligible signalCode from analyze_market_transactions in this run. Do not call for informational, negated or deferred requests. Public news advice stays advisory in chat; market movements alone cannot qualify. No settlement, approval, balance or numeric score change.',
   get_accounts:'Read current owned balances, or historical opening and closing balances when the question supplies a past date range. Dates come only from the message. Current balance is not historical closing balance. Otherwise returns active accounts and available balances, plus a read-only default 30-day scheduled-payment funding check. Use for balance or low-funds enquiries. Returned fundingCheck warnings must be highlighted. No fixed low-balance threshold or payment execution. For a specific upcoming planning period, use project_liquidity.',
-  get_payment_sources:'Read current owned payment-source accounts and available funds before preparing any payment review form. This always reads current funds, even when the proposed schedule is for a future date; it is not a historical balance enquiry. No arguments, no payment execution. Use this before prepare_payment_draft.',
+  get_payment_sources:'Read current owned payment-source accounts and available funds before preparing any payment review form. This is a source list, not a recipient directory: a destination absent from this list is not evidence that it is missing or invalid. Recipient details need verification in the banking form. This always reads current funds, even when the proposed schedule is for a future date; it is not a historical balance enquiry. No arguments, no payment execution. Use this before prepare_payment_draft.',
   get_schedules:'Read up to 50 of the signed-in operator\'s scheduled instructions. No execution or cancellation.',
   search_transactions:'Retrieve individual owned receipt records and matching totals. Use for itemized money movements, individual entries or what happened in an account; the user need not say transaction or history. This is distinct from an aggregate finance report or chart. The date range is parsed by the server from the current message. q is only an explicit company, description or reference term, never dates, generic money-movement words or the whole question. Returns complete matching totals and up to 20 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
   project_liquidity:'Project owned balances using scheduled occurrences over 1-90 days. Includes draft-only funding suggestions.',
@@ -171,7 +171,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
     let message=body.message, previous={};
     if(kind==='assistant'){
       if(typeof message!=='string' || !message.trim() || message.length>1000)throw new HttpError(400,'Enter a message of 1-1,000 characters.');
-      if(SENSITIVE.test(message) && !guidance.SAFE_SECURITY_HELP.test(message.trim()))return {reply:'Keep passwords and security codes out of chat. Use the ordinary authorization screen.',sensitiveInput:true,actions:[],privacy:{externalServices:false}};
+      if(SENSITIVE.test(guidance.credentialText(message)) && !guidance.SAFE_SECURITY_HELP.test(message.trim()))return {reply:'Keep passwords and security codes out of chat. Use the ordinary authorization screen.',sensitiveInput:true,actions:[],privacy:{externalServices:false}};
       if(body.previousRunId){
         if(typeof body.previousRunId!=='string')throw new HttpError(400,'Invalid conversation reference.');
         const saved=(await db.query("SELECT context_json,auth_version,created_at FROM agent_runs WHERE id=$1 AND user_id=$2 AND kind='assistant' AND status='completed'",[body.previousRunId,user.id])).rows[0];
@@ -267,7 +267,10 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         // a different source account must never be inferred by the model.
         const comparable={...expected,fromAccountId:expected.fromAccountId || own.accounts[0]?.id,type:expected.type || (expected.kind==='schedule'?'transfer':expected.kind)};
         for(const [key,value] of Object.entries(args)){
-          const matches=key==='amount' && /^\d+(?:\.\d{1,2})?$/.test(value) && expected.amount!==undefined?Number(value)===Number(expected.amount):value===comparable[key];
+          // An explicit future instruction keeps its date even if the planner
+          // labels the form as an immediate transfer or bill.
+          const promoted=key==='kind'&&expected.kind==='schedule'&&expected.type===value&&Boolean(expected.scheduledAt);
+          const matches=promoted|| (key==='amount' && /^\d+(?:\.\d{1,2})?$/.test(value) && expected.amount!==undefined?Number(value)===Number(expected.amount):value===comparable[key]);
           if(!matches)throw new HttpError(400,'The model draft differs from the details you provided. Use the banking form or clarify the draft.');
         }
         args=expected;

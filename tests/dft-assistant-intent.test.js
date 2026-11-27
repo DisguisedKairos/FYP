@@ -9,6 +9,42 @@ const provider=chat=>({mode:'openai',model:'gpt-6-luna',inspect:async()=>({avail
 const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const actor=async db=>(await db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
 
+pg('Chart pin requests reach the model unchanged while appended credentials never do',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;
+ const message='Pin this visualization as "Saved chart" and refresh it weekly.';
+ const model=provider(async messages=>{
+  calls++;
+  if(calls===1)return call('get_company_activity');
+  if(calls===2)return {role:'assistant',content:'Your chart is displayed below [E1].'};
+  const prompt=messages.find(m=>m.role==='user').content;assert.ok([message,'Could you pin it?'].includes(prompt));
+  if(!messages.some(m=>m.role==='tool'))return call('save_company_dashboard',{...(prompt===message?{title:'Saved chart'}:{}),requestQuote:prompt});
+  return {role:'assistant',content:'Your dashboard is saved for reopening [E1].'};
+ });
+ const agents=createAgents({db:f.db,model});
+ for(const text of ['My PIN is 1234.','Pin this chart; my PIN is 1234.','Please pin this visualization with OTP 123456.','Pin this chart is 1234.','The PIN this chart uses is 1234.',"PIN it's 1234.",'PIN it was 1234.','PIN this 1234.','Pin this chart with password VeryPrivate123!']){
+  const result=await agents.execute(user,'assistant',{message:text});assert.equal(result.sensitiveInput,true);assert.equal(result.privacy.externalServices,false);
+ }
+ assert.equal(calls,0);assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_runs')).rows[0].count),0);
+ const chart=await agents.execute(user,'assistant',{message:'Show my transaction activity as a dashboard.'});
+ const result=await agents.execute(user,'assistant',{message,previousRunId:chart.runId});
+ assert.equal(result.sensitiveInput,undefined);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+ assert.equal(result.companyDashboard.savedView.title,'Saved chart');assert.equal(result.companyDashboard.savedView.refreshCadence,'weekly');assert.equal(calls,4);
+ const pinned=await agents.execute(user,'assistant',{message:'Could you pin it?',previousRunId:result.runId});
+ assert.equal(pinned.sensitiveInput,undefined);assert.equal(pinned.companyDashboard.savedView.id,result.companyDashboard.savedView.id);assert.equal(calls,6);
+});
+
+pg('An explicit future date retains a scheduled review form when the planner selects an immediate transfer',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),source=(await f.db.query('SELECT number FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];let calls=0;
+ const message='Prepare a one-off transfer of SGD 5 from '+source.number+' to 1020002001 tomorrow at 9am.';
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ const model=provider(async()=>++calls===1?call('get_payment_sources'):calls===2?call('prepare_payment_draft',{kind:'transfer',requestQuote:message}):{role:'assistant',content:'Your one-off transfer form is ready for review and authorization [E2].'});
+ const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message});
+ assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);const action=result.actions.find(a=>a.type==='draft_schedule');assert.ok(action);
+ assert.equal(action.draft.frequency,'once');assert.equal(action.draft.amount,'5.00');assert.equal(action.draft.toAccountNumber,'1020002001');
+ assert.equal(new Date(Date.parse(action.draft.scheduledAt)+8*3600000).toISOString().slice(11,16),'09:00');
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.equal(Number((await f.db.query('SELECT count(*) FROM scheduled_payments')).rows[0].count),0);
+});
+
 test('Semantic responses validate routing metadata without granting tools or accepting malformed output',()=>{
  const format=response.format(tools);assert.equal(format.strict,true);assert.equal(format.schema.additionalProperties,false);
  const base={mode:'banking_evidence',reply:'Review the owned records [E1].',requiredTools:['get_accounts'],requiresResearch:false};

@@ -23,6 +23,8 @@ const cases = [
   ['markup in a caption', 'Review the recorded payments [E1].<br>', context(), true],
   ['malformed citation suffix', 'Your saved chart is listed below [E1]ചચ.', context(), true],
   ['ordinary structured-format explanation', 'JSON is a structured data format [E1].', context(), false],
+  ['chart pin instructions', 'Pin this chart using the dashboard controls [E1].', context(), false],
+  ['credential PIN instructions', 'Provide your PIN to continue [E1].', context(), true],
   ['download output format explanation', 'The report is available in CSV and PDF output formats [E1].', context(), false],
   ['download response format explanation', 'Choose the response format using the CSV or PDF download controls [E1].', context(), false],
   ['qualified model uncertainty', 'This projection does not guarantee funding and is not confirmed fraud [E1].', context(), false],
@@ -48,6 +50,22 @@ const cases = [
 for (const [name, reply, c, blocked] of cases) test('Assistant evaluation: ' + name, () => assert.equal(Boolean(narrativeIssue(reply, c.report, c.options)), blocked));
 
 test('Adjacent valid evidence references remain accepted',()=>assert.equal(narrativeIssue('Inspect the permitted records [E1][E2].',null,{evidence:[{id:'E1'},{id:'E2'}],requireCitations:true}),null));
+
+test('Single-payment form wording is supported only by the retrieved recurrence',()=>{
+ const options={evidence,requireCitations:true,results:[{tool:'prepare_payment_draft',value:{draft:{frequency:'once'},complete:true}}]};
+ for(const text of ['Your one-off transfer form is ready for review [E1].','Your one-time schedule requires authorization [E1].']){
+  assert.equal(narrativeIssue(text,null,options),null);
+  assert.ok(narrativeIssue(text,null,{...options,results:[{tool:'prepare_payment_draft',value:{draft:{frequency:'weekly'},complete:true}}]}));
+ }
+ assert.ok(narrativeIssue('Your one-off form includes SGD 999 [E1].',null,options));
+ assert.ok(narrativeIssue('There are two one-off transfers [E1].',null,options));
+});
+
+test('A source-account list cannot establish that a supplied recipient is missing',()=>{
+ const options={evidence,requireCitations:true,results:[{tool:'prepare_payment_draft',value:{draft:{toAccountNumber:'1099100201'},complete:false,missing:['amount']}}]};
+ for(const text of ["The requested destination account wasn't available in the retrieved account records [E1].","The destination account also isn't available among the permitted details returned [E1].",'The recipient is missing [E1].'])assert.match(narrativeIssue(text,null,options),/recipient directory/);
+ assert.equal(narrativeIssue('Please provide the missing amount. The recipient needs verification in the banking form [E1].',null,options),null);
+});
 
 test('Reconciliation counts must match the retrieved category, not merely another number in the report',()=>{
  const value={accountsChecked:31,discrepancies:[],failedSchedules:[{status:'failed'},{status:'active',lastStatus:'retrying'}],notificationExceptions:[{}]};

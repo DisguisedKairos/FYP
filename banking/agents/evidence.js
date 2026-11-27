@@ -64,13 +64,15 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   // Accept only exact counts tied to a single retrieved reconciliation result
   // and their specific nouns. Unrelated numbers and incorrect totals still fail.
   qualitative=withoutReconciliationCounts(qualitative,results);
+  const draftEvidence=results.findLast(r=>r.tool==='prepare_payment_draft')?.value;
+  if(draftEvidence?.draft?.frequency==='once')qualitative=qualitative.replace(/\bone[ \u2010-\u2014-](?:off|time)\b/gi,'[nonrecurring]');
   if(!requireCitations)qualitative=qualitative.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
   if (/\d/.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead.';
   // An imperative choice or interrogative pronoun is not a numerical bank fact.
   // Keep quantities elsewhere (including later in the same sentence) screened.
   const quantities=qualitative.replace(/\b(?:(?:choose|select|pick|specify|provide|give|name|use)\s+(?:just\s+)?one|(?:which|each) one)\b/gi,'[choice]');
   if (/\b(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|million|billion)\b/i.test(quantities)) return 'Written numerical claims must be read from authoritative tool facts instead.';
-  if (/\b(?:password|passcode|otp|pin|recovery code|api key|access token)\b/i.test(plain)) return 'Security credentials do not belong in agent interpretations.';
+  if (/\b(?:password|passcode|otp|pin|recovery code|api key|access token)\b/i.test(require('./guidance').credentialText(plain))) return 'Security credentials do not belong in agent interpretations.';
   const clearanceClaims=plain.replace(/\b(?:I|we)\s+(?:cannot|can't|can not)\s+(?:certify|confirm|establish|guarantee|determine|conclude)\s+(?:(?:compliance|sanctions clearance)\s+or\s+)?(?:that\s+)?(?:a|the|this|that|these|those)\s+compan(?:y|ies)\s+(?:is|are)\s+(?:(?:fully compliant|compliant|not sanctioned|sanctions[- ]free|cleared|safe to pay)(?:\s+(?:or|and)\s+)?)+/gi,'[unverified clearance]');
   if(results.some(r=>['scan_counterparty_news','assess_counterparty_risk'].includes(r.tool))&&/\b(?:sanctions[- ]free|(?:is|are) (?:fully compliant|not sanctioned|cleared)|no (?:sanctions|compliance) issues|safe to (?:pay|deal|transact))\b/i.test(clearanceClaims))return 'Name-based public research cannot establish sanctions clearance or permission to pay.';
   if (/https?:\/\/|www\./i.test(plain)) return 'External destinations are not banking evidence.';
@@ -108,6 +110,7 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   if (assessments.some(a => a.decision === 'allow') && /\b(?:high[ -]risk|flagged|blocked|held|rejected)\b/i.test(plain)) return 'The narrative conflicts with the recorded allow decision.';
   if (assessments.some(a => ['review', 'block'].includes(a.decision)) && /\b(?:approved|allowed|cleared|safe to (?:pay|send))\b/i.test(plain)) return 'The narrative conflicts with the recorded review or block decision.';
   const fundingWarnings=require('./funds').collect(results);
+  if(draftEvidence?.draft?.toAccountNumber&&/\b(?:recipient|destination|payee)(?:\s+account)?\s+(?:also\s+)?(?:(?:is|was|has been)\s+)?(?:missing|unavailable|not\s+(?:found|available|recorded)|(?:wasn't|isn't)\s+available|doesn't\s+exist)\b/i.test(plain))return 'The supplied destination is present in the draft. Owned payment sources are not a recipient directory; do not claim the destination is missing or invalid. Ask only for returned missing fields and explain that the banking form must verify the recipient.';
   const paymentCheck=results.findLast(r=>r.tool==='check_payment_funds')?.value;
   if((paymentCheck?.source||paymentCheck?.paymentReadiness?.source)&&/\b(?:cannot|can't|could not|couldn't|did not|didn't|unable to)\s+(?:match|find|identify|locate|recognize)\b[^.!?\n]{0,100}\b(?:owned|source)\s+(?:source\s+)?account\b|\b(?:source(?: account)?|owned account)\s+(?:(?:is|was|has been)\s+)?(?:unmatched|not (?:found|matched|identified)|missing)\b/i.test(plain))return 'The source account was matched. Ask only for the returned missing details; do not claim the supplied source could not be found.';
   const fundingClaims=plain.replace(/\b(?:(?:do|does|did|will|would|should|may|might|could|can)\s+not|cannot|can't|don't|doesn't|won't|wouldn't|shouldn't|couldn't|not)\s+(?:(?:have|be)\s+)?(?:sufficient funds|enough (?:money|funds)|fully funded|cover all(?:\s+(?:payments|bills))?)/gi,'[funding limitation]').replace(FUNDING_UNCERTAINTY,'[funding uncertainty]');

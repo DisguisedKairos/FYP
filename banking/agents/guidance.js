@@ -3,6 +3,17 @@
 // Only exact, value-free security questions may bypass the credential-word
 // filter. Any appended value or request for somebody's credentials stays blocked.
 const SAFE_SECURITY_HELP = /^(?:(?:how (?:do|can) i|where can i) (?:change|reset) my password|how (?:do|can) i (?:enable|disable) (?:mfa|two-factor authentication)|how (?:do|can) i use recovery codes|test mfa\/recovery and password change\/session revocation through profile & security)[.!?]*$/i;
+function credentialText(message){
+  // Only the chart-bookmark verb is excluded from credential screening. The
+  // original message and every other credential marker remain unchanged.
+  return message.replace(/\bpin\b/gi,(word,offset,text)=>{
+    if(/\b(?:my|your|our|the|a)\s*$/i.test(text.slice(0,offset)))return word;
+    const rest=text.slice(offset+word.length);
+    const target=rest.match(/^\s+(?:(?:this|that|the|my|our|a|an|current|displayed|selected|latest|new|bar|line|monthly|weekly)\s+){0,4}(?:chart|dashboard|graph|visuali[sz]ation|view|report|summary)\b/i)||rest.match(/^\s+(?:it|this|that)\b/i);
+    if(!target||/^\s*(?:(?:is|was|are|were|equals?|reads?|code|number|value)\b|['\u2019]s\b|[:=]|\d)/i.test(rest.slice(target[0].length)))return word;
+    return 'bookmark';
+  });
+}
 const bankingEnquiry = message => /\b(?:accounts?|balances?|banking|banks?|money|cash|funds?|afford|cover|inflow|outflow|liquidity|payments?|pay|paid|transfers?|send|bills?|billers?|invoices?|schedules?|scheduled|transactions?|receipts?|statements?|finance|financial|dashboards?|charts?|trends?|saved|save|bookmarks?|market|news|industry|industries|compan(?:y|ies)|business(?:es)?|counterpart(?:y|ies)|suppliers?|sanctions?|compliance|fraud|risk|rules?|reconcil\w*|scams?|fx|forex|stock|notifications?|onboarding|register|mfa|security|audit|sgd)\b/i.test(message);
 function guidanceFor(message, actor, context = {}) {
   const text = message.trim(), admin = actor.role === 'admin';
@@ -36,4 +47,4 @@ function guidanceFor(message, actor, context = {}) {
 function missingEvidenceReply(message) {
   return bankingEnquiry(message) ? 'This is a supported banking enquiry, but its verified records were not retrieved. Please retry the question or use the relevant banking screen; no banking conclusion can be drawn from this attempt.' : 'That request is outside the scope of this banking app. What banking task can I help you with?';
 }
-module.exports = { SAFE_SECURITY_HELP, bankingEnquiry, guidanceFor, missingEvidenceReply };
+module.exports = { SAFE_SECURITY_HELP, credentialText, bankingEnquiry, guidanceFor, missingEvidenceReply };

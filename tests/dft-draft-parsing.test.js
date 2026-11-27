@@ -23,3 +23,21 @@ test('Explicit tomorrow time is interpreted in Singapore and ambiguous dates are
   for(const time of ['9.30','15:300','9pmfoo','noon'])assert.throws(()=>parse('Schedule transfer SGD 5 tomorrow at '+time+' once'),e=>e.status===400,time);
   assert.throws(()=>parse('Schedule transfer SGD 5 tomorrow at 2030-01-01T01:00:00Z once'),e=>e.status===400);
 });
+
+test('One-off and one-time requests retain their explicit single-payment recurrence and future form',()=>{
+ for(const cadence of ['one-off','one time','one-time','one\u2011off','one\u2013time']){
+  const draft=parse('Please prepare a '+cadence+' transfer of SGD 5 from 1088800101 to 1088800201 tomorrow at 9am.',{kind:'transfer'});
+  assert.equal(draft.kind,'schedule');assert.equal(draft.type,'transfer');assert.equal(draft.frequency,'once');
+  assert.equal(draft.scheduledAt,'2026-10-25T01:00:00.000Z');assert.equal(draft.fromAccountId,'1');assert.equal(draft.toAccountNumber,'1088800201');assert.equal(draft.amount,'5');
+ }
+ const scheduled=parse('Prepare a transfer of SGD 5 to 1088800201 at 2026-10-25T01:00:00Z once',{kind:'transfer'});
+ assert.equal(scheduled.kind,'schedule');assert.equal(scheduled.frequency,'once');
+ assert.equal(parse('Schedule a transfer of SGD 5 to 1088800201 tomorrow').frequency,undefined,'An unspecified recurrence still needs clarification');
+});
+
+test('Quoted billing references do not create payment dates or recurrence',()=>{
+ for(const reference of ['TOMORROW','WEEKLY','ONE-TIME']){
+  const draft=parse('Prepare a PUB bill payment of SGD 5 from 1088800101 with reference "'+reference+'".');
+  assert.equal(draft.kind,'bill');assert.equal(draft.reference,reference);assert.equal(draft.scheduledAt,undefined);assert.equal(draft.frequency,undefined);
+ }
+});

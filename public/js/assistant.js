@@ -13,6 +13,17 @@ let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
 const dashboardFollowup=/^\s*(?:(?:please|can you|could you|yes)[,\s]+)*(?:save|bookmark|keep|add|pin)\s+(?:(?:it|this|that)(?:\s+(?:dashboard|view|chart))?|(?:the|my)\s+(?:dashboard|view|chart)|chart)(?=\s|[.!?]|$)/i;
 const SAFE_SECURITY_HELP = /^(?:(?:how (?:do|can) i|where can i) (?:change|reset) my password|how (?:do|can) i (?:enable|disable) (?:mfa|two-factor authentication)|how (?:do|can) i use recovery codes|test mfa\/recovery and password change\/session revocation through profile & security)[.!?]*$/i;
+function credentialText(message){
+  // Keep this scanner-only normalization aligned with the server. Send the
+  // original chart request; any other PIN or credential marker still blocks it.
+  return message.replace(/\bpin\b/gi,(word,offset,text)=>{
+    if(/\b(?:my|your|our|the|a)\s*$/i.test(text.slice(0,offset)))return word;
+    const rest=text.slice(offset+word.length);
+    const target=rest.match(/^\s+(?:(?:this|that|the|my|our|a|an|current|displayed|selected|latest|new|bar|line|monthly|weekly)\s+){0,4}(?:chart|dashboard|graph|visuali[sz]ation|view|report|summary)\b/i)||rest.match(/^\s+(?:it|this|that)\b/i);
+    if(!target||/^\s*(?:(?:is|was|are|were|equals?|reads?|code|number|value)\b|['\u2019]s\b|[:=]|\d)/i.test(rest.slice(target[0].length)))return word;
+    return 'bookmark';
+  });
+}
 const starters=['What is my balance?','Show my recent transactions','Check my transactions for fraud using daily market trends','Generate a downloadable finance report'];
 const messageTimeFormat=new Intl.DateTimeFormat('en-SG',{timeZone:'Asia/Singapore',day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});
 function thread() { return state.assistant || (state.assistant={messages:[],input:'',busy:false,error:'',retryMessage:'',previousRunId:null,open:false,unread:false}); }
@@ -157,7 +168,7 @@ export async function sendAssistant(message,{retry=false}={}) {
   if(!text)return;
   if(text.length>1000){t.error='Keep your message to 1,000 characters or fewer.';renderThread();return;}
   // Never collect a current password or an authorization field through chat.
-  if(/\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i.test(text) && !SAFE_SECURITY_HELP.test(text)) {
+  if(/\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i.test(credentialText(text)) && !SAFE_SECURITY_HELP.test(text)) {
     t.input='';const input=document.querySelector('#assistant-message');if(input)input.value='';
     t.error='Please keep passwords and security codes out of chat. Enter your password only in the payment review form.';renderThread();return;
   }

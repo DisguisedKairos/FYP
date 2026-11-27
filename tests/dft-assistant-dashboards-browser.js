@@ -9,7 +9,7 @@ function model(){return {mode:'openai',model:'controlled-chat-dashboard',inspect
   if(/saved dashboards|open my saved dashboard/i.test(text))name='list_saved_dashboards';
   else if(/balance/i.test(text))name='get_accounts';
   else {name='get_company_activity';if(/Harbour Supplies/i.test(text))args.company='Harbour Supplies';else if(/Pte\. Ltd\./i.test(text))args.company='Pte. Ltd.';}
- }else if(calls.at(-1).tool_name==='get_company_activity' && /save/i.test(text))name='save_company_dashboard';
+ }else if(calls.at(-1).tool_name==='get_company_activity' && /\b(?:save|pin)\b/i.test(text))name='save_company_dashboard';
  else if(calls.at(-1).tool_name==='list_saved_dashboards' && /open my saved dashboard/i.test(text)){
   const views=JSON.parse(calls.at(-1).content).data.views;if(views.length){name='open_saved_dashboard';args.viewId=views[0].id;}
  }
@@ -49,9 +49,14 @@ test('Requested company charts render inside chat, resolve ambiguity and never n
  await page.click('.from-assistant:last-child [data-company-choice="Acme Trading Pte. Ltd."]');
  await page.waitFor('document.querySelector(".from-assistant:last-child [data-company-dashboard] h3")?.textContent==="Acme Trading Pte. Ltd."');
  assert.equal(await page.evaluate('location.pathname'),url);
- await ask(page,'Save this dashboard');await page.waitFor('!!document.querySelector(".from-assistant:last-child .assistant-saved-notice")');
+ await page.evaluate(`window.pinMessages=[];const originalPinFetch=window.fetch;window.fetch=(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))window.pinMessages.push(JSON.parse(args[1].body).message);return originalPinFetch(...args);};`);
+ await ask(page,'Pin it');await page.waitFor('!!document.querySelector(".from-assistant:last-child .assistant-saved-notice")');
+ assert.deepEqual(await page.evaluate('window.pinMessages'),['Pin it']);
  assert.equal((await f.db.query('SELECT config_json FROM saved_dashboard_views')).rows[0].config_json.company,'Acme Trading Pte. Ltd.');
  assert.equal(Number((await f.db.query('SELECT count(*) FROM saved_dashboard_views')).rows[0].count),1);
+ await page.fill('#assistant-message','Pin this chart; my PIN is 1234.');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('document.querySelector("#assistant-error").textContent.length>0');
+ assert.deepEqual(await page.evaluate('window.pinMessages'),['Pin it'],'Appended credential markers must be blocked before any request');
  assert.equal(await page.evaluate('new Set([...document.querySelectorAll(".assistant-dashboard [id]")].map(el=>el.id)).size===document.querySelectorAll(".assistant-dashboard [id]").length'),true);
  await page.click('[data-action="assistant-close"]');await chat(page);
  assert.equal(await page.evaluate('document.querySelectorAll("#assistant-popup [data-company-dashboard]").length'),3);

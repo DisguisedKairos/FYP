@@ -52,11 +52,12 @@ async function prepareDraft(db,user,input,{now=Date.now}={}) {
 
 function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}={}){
   const text=message.trim();
-  const oncePer=text.match(/\bonce\s+(?:a|per|each|every)\s+(\w+)\b/i);
+  const timingText=text.replace(/\b(?:ref(?:erence)?|description)\s+(?:"[^"\r\n]*"|'[^'\r\n]*')/gi,'[quoted payment detail]');
+  const oncePer=timingText.match(/\bonce\s+(?:a|per|each|every)\s+(\w+)\b/i);
   if(oncePer&&!/^(?:weeks?|months?)$/i.test(oncePer[1]))throw new HttpError(400,'Choose a single payment, weekly or monthly recurrence.');
-  const cadence=text.match(/\b(once\s+(?:a|per|each|every)\s+(?:weeks?|months?)|(?:each|every)\s+(?:week|month)|once|weekly|monthly)\b/i)?.[1].toLowerCase();
-  const frequency=cadence?.includes('week')?'weekly':cadence?.includes('month')?'monthly':cadence;
-  const schedule=/\b(?:schedule|scheduled)\b/i.test(text)||['weekly','monthly'].includes(frequency);
+  const cadence=timingText.match(/\b(once\s+(?:a|per|each|every)\s+(?:weeks?|months?)|(?:each|every)\s+(?:week|month)|one[ \u2010-\u2014-]?(?:off|time)|once|weekly|monthly)\b/i)?.[1].toLowerCase();
+  const frequency=cadence?.includes('week')?'weekly':cadence?.includes('month')?'monthly':cadence?.startsWith('one')?'once':cadence;
+  const schedule=/\b(?:schedule|scheduled)\b/i.test(timingText)||['weekly','monthly'].includes(frequency);
   const payment=/\b(?:pay|payment|bill)\b/i.test(text) && !/\btransfer\b/i.test(text);
   let draft={...previous};
   if(!draft.kind)draft.kind=schedule?'schedule':payment?'bill':'transfer';
@@ -94,21 +95,22 @@ function extractDraft(message,previous={},accounts=[],billers=[],{now=Date.now}=
   if(draft.kind==='schedule'&&!draft.type)draft.type=draft.toAccountNumber?'transfer':biller||payment?'bill':'transfer';
   const reference=text.match(/\b(?:ref(?:erence)?)\s+("[^"\r\n]*"[.!?]?|'[^'\r\n]*'[.!?]?|.+?)(?=\s+(?:from|use|starting|tomorrow|at|on|once|weekly|monthly)\b|$)/i);
   if(reference){const value=reference[1].trim(),quoted=value.match(/^(["'])(.*)\1[.!?]?$/);draft.reference=quoted?quoted[2]:value.replace(/[!?]+$/,'');}
-  const date=text.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/);
+  const date=timingText.match(/\b\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z\b/);
   if(date)draft.scheduledAt=date[0];
-  if(/\btomorrow\b/i.test(text)){
+  if(/\btomorrow\b/i.test(timingText)){
     if(date)throw new HttpError(400,'Choose either tomorrow or an explicit UTC date, not both.');
     const tomorrow=new Date(now()+86400000);
     const sg=new Date(tomorrow.getTime()+8*3600000).toISOString().slice(0,10);
-    const clock=text.match(/\btomorrow\s+(?:(at)\s+)?(\S+)(?:\s+(am|pm)\b)?/i);
+    const clock=timingText.match(/\btomorrow\s+(?:(at)\s+)?(\S+)(?:\s+(am|pm)\b)?/i);
     const clockToken=clock?.[2].replace(/[.,!?]$/,'');
     const explicit=clock && (clock[1] || /^\d/.test(clockToken));
     const time=explicit?(clockToken+(clock[3] || '')).match(/^(\d{1,2})(?::(\d{2}))?(am|pm)?$/i):null;
     let hour=9,minute=0;
     if(time){hour=Number(time[1]);minute=Number(time[2] || 0);if(minute>59 || (time[3]?hour<1 || hour>12:hour>23))throw new HttpError(400,'Choose a valid time for tomorrow in Singapore.');if(time[3])hour=hour%12+(/pm/i.test(time[3])?12:0);}
-    else if(explicit || /\btomorrow\s+(?:at\b|(?:in\s+the\s+)?(?:morning|afternoon|evening|night|noon|midnight)\b)/i.test(text))throw new HttpError(400,'Use a valid time such as tomorrow at 15:30.');
+    else if(explicit || /\btomorrow\s+(?:at\b|(?:in\s+the\s+)?(?:morning|afternoon|evening|night|noon|midnight)\b)/i.test(timingText))throw new HttpError(400,'Use a valid time such as tomorrow at 15:30.');
     draft.scheduledAt=new Date(sg+'T'+String(hour).padStart(2,'0')+':'+String(minute).padStart(2,'0')+':00+08:00').toISOString();
   }
+  if(draft.scheduledAt&&draft.kind!=='schedule'){draft.type=draft.kind;draft.kind='schedule';}
   if(frequency)draft.frequency=frequency;
   return draft;
 }
