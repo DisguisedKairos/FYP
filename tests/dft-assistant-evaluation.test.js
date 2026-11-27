@@ -55,6 +55,16 @@ test('Clarification choices do not bypass checks on financial quantities or cert
  for(const reply of ['Please choose one account with a balance of one million [E1].','Which one has SGD 999999 [E1]?','Choose one hundred dollars [E1].',"I can't guarantee this payment is fraud-free, but I guarantee the next payment [E1].",'Not guaranteed losses; the payment is guaranteed [E1].'])assert.ok(narrativeIssue(reply,null,options),reply);
 });
 
+test('Missing funding details allow explicit uncertainty without masking later claims of coverage',()=>{
+ const options={evidence,requireCitations:true,results:[{tool:'check_payment_funds',value:{complete:false,fundingWarnings:[{code:'payment_details_required'}]}}]};
+ for(const reply of ["I can't determine whether you have enough funds yet. Please provide the payment amount and source account [E1].",'I cannot yet confirm that your account has sufficient funds. Please specify the proposed payment [E1].',"We couldn't establish if the source is fully funded; provide the missing payment details [E1].","I can't assess whether you can pay until the amount and source are supplied [E1]."]){
+  assert.equal(narrativeIssue(reply,null,options),null,reply);
+ }
+ for(const reply of ["I can't determine whether you have enough funds yet, but your funds are sufficient [E1].",'You have enough funds, although I cannot determine whether your account has sufficient funds [E1].',"I can't assess whether you can pay; the payment is covered [E1].",'We cannot confirm that you have enough funds, but you are ready to pay [E1].']){
+  assert.ok(narrativeIssue(reply,null,options),reply);
+ }
+});
+
 test('An affordability question requires the proposed payment check even with scheduled coverage',()=>{
  const coverage={tool:'get_accounts',value:{fundingCheck:{available:true,occurrenceCount:1,days:30,warnings:[]}}};
  for(const message of ['Can I afford SGD 10?','Can I afford a payment from Operating savings?']){

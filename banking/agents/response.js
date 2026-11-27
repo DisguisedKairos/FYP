@@ -12,7 +12,7 @@ function format(toolNames,{evidenceTools=[]}={}){
  const modes=evidenceTools.length?(evidenceTools.every(name=>PUBLIC_TOOLS.includes(name))?['banking_evidence','general_banking']:['banking_evidence']):MODES;
  return {type:'json_schema',name:'banking_assistant_response',strict:true,schema:{
   type:'object',additionalProperties:false,
-  properties:{mode:{type:'string',enum:modes},requiresResearch:{type:'boolean'},requiredTools:{type:'array',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string'}},
+  properties:{mode:{type:'string',enum:modes},requiresResearch:{type:'boolean',description:'True only when this answer needs current public research; false when asking for missing details or declining an unrelated request.'},requiredTools:{type:'array',description:'Tools required for the current answer. For clarification or outside_scope, return an empty array, without listing tools for a possible future request.',...(evidenceTools.length?{minItems:1}:{}),items:{type:'string',enum:toolNames}},reply:{type:'string'}},
   required:['mode','requiresResearch','requiredTools','reply'],
  }};
 }
@@ -35,7 +35,7 @@ function parse(content,toolNames){
  let value;try{value=JSON.parse(content);}catch{throw invalid();}
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).sort().join(',')!=='mode,reply,requiredTools,requiresResearch'||!MODES.includes(value.mode)||typeof value.requiresResearch!=='boolean'||typeof value.reply!=='string'||!value.reply.trim()||value.reply.length>12000||!Array.isArray(value.requiredTools)||value.requiredTools.length>8||new Set(value.requiredTools).size!==value.requiredTools.length||value.requiredTools.some(name=>!toolNames.includes(name)))throw invalid();
  if(value.mode==='banking_evidence'&&!value.requiredTools.length)throw invalid();
- if(['clarification','outside_scope'].includes(value.mode)&&value.requiredTools.length)throw invalid();
+ if(['clarification','outside_scope'].includes(value.mode)&&value.requiredTools.length){const error=invalid();error.code='ASSISTANT_INTENT_CONFLICT';throw error;}
  if(value.mode==='general_banking'&&value.requiredTools.some(name=>!PUBLIC_TOOLS.includes(name)))throw invalid();
  return {content:value.reply,intent:{mode:value.mode,requiresResearch:value.requiresResearch,requiredTools:value.requiredTools}};
 }

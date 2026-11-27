@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const response=require('../banking/agents/response'),{createOpenAIModel}=require('../banking/agents/openai');
 const {createAgents}=require('../banking/agents'),{fixture}=require('./dft-helpers');
-const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','get_company_activity','project_liquidity','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments'];
+const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','get_company_activity','project_liquidity','check_payment_funds','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments'];
 const answer=(mode,reply,requiredTools=[],requiresResearch=false)=>response.parse(JSON.stringify({mode,reply,requiredTools,requiresResearch}),tools);
 const call=(name,args={})=>({role:'assistant',content:'',tool_calls:[{function:{name,arguments:args}}]});
 const provider=chat=>({mode:'openai',model:'gpt-6-luna',inspect:async()=>({available:true}),chat});
@@ -237,6 +237,55 @@ pg('A general explanation is not forced into a draft because it contains payment
  const result=await agents.execute(user,'assistant',{message:'Please prepare a payment review checklist explaining the process in general.'});
  assert.equal(result.answerContext,'general_banking');assert.equal(result.clarification,undefined);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
  assert.deepEqual(result.steps,[]);assert.deepEqual(result.actions,[]);
+});
+
+test('Semantic metadata cannot substitute account balances for a proposed-payment affordability clarification',()=>{
+ const request='Can I afford a payment from Operating savings?';
+ const intent=answer('banking_evidence','The current balances are displayed below [E1].',['get_accounts']).intent;
+ assert.match(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'get_accounts',value:{}}],intent),/check_payment_funds/);
+ assert.equal(require('../banking/agents/evidence').relevanceIssue(request,[{tool:'check_payment_funds',value:{complete:false,missing:['amount']}}],{...intent,requiredTools:['check_payment_funds']}),null);
+ assert.equal(require('../banking/agents/evidence').relevanceIssue('Explain how a company decides whether it can afford a payment.',[],answer('general_banking','A company compares its available funds and obligations.').intent),null);
+});
+
+pg('A balance-only affordability answer retrieves missing payment details before replying',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),source=(await f.db.query('SELECT name FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;let requests=0;
+ const result=await createAgents({db:f.db,model:provider(async()=>{
+  requests++;
+  if(requests===1)return call('get_accounts');
+  if(requests===2)return answer('banking_evidence','Your current balances and scheduled coverage are shown below [E1].',['get_accounts']);
+  if(requests===3)return call('check_payment_funds');
+  return answer('banking_evidence','What payment amount would you like checked from the selected source [E2]?',['get_accounts','check_payment_funds']);
+ })}).execute(user,'assistant',{message:'Can I afford a payment from '+source.name+'?'});
+ assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.equal(requests,4);
+ assert.deepEqual(result.steps.map(step=>step.tool),['get_accounts','check_payment_funds']);
+ assert.ok(result.items.some(item=>item.title==='Please specify payment amount in SGD'));assert.equal(result.actions.length,0);
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+});
+
+pg('A clarification with future-tool metadata is corrected once without treating the metadata as permission',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let requests=0;
+ const model=createOpenAIModel({apiKey:'test-only-openai-key-not-a-real-secret',fetchImpl:async(url,options)=>{
+  if(String(url).includes('/models/'))return new Response(JSON.stringify({id:'gpt-6-luna'}));
+  requests++;
+  const reply={mode:'clarification',requiresResearch:requests===1,requiredTools:requests===1?['research_public_company']:[],reply:'Which public company would you like me to research?'};
+  return new Response(JSON.stringify({id:'resp_clarify_'+requests,status:'completed',model:'gpt-6-luna',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:JSON.stringify(reply)}]}]}));
+ }});
+ const result=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'Research a public company profile.'});
+ assert.equal(requests,2);assert.equal(result.clarification,true);assert.equal(result.narrativeWithheld,undefined);
+ assert.match(result.reply,/Which public company would you like me to research\?/);assert.deepEqual(result.steps,[]);assert.deepEqual(result.actions,[]);
+ assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_tool_calls WHERE run_id=$1',[result.runId])).rows[0].count),0);
+});
+
+pg('Uncorrectable intent metadata fails after a single bounded retry without running tools',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let requests=0;
+ const model=createOpenAIModel({apiKey:'test-only-openai-key-not-a-real-secret',fetchImpl:async(url)=>{
+  if(String(url).includes('/models/'))return new Response(JSON.stringify({id:'gpt-6-luna'}));
+  requests++;
+  return new Response(JSON.stringify({id:'resp_invalid_'+requests,status:'completed',model:'gpt-6-luna',output:[{type:'message',role:'assistant',content:[{type:'output_text',text:JSON.stringify({mode:'clarification',requiresResearch:true,requiredTools:['research_public_company'],reply:'Which public company should I research?'})}]}]}));
+ }});
+ await assert.rejects(createAgents({db:f.db,model}).execute(user,'assistant',{message:'Research a public company profile.'}),error=>error.status===503);
+ assert.equal(requests,2);assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_tool_calls')).rows[0].count),0);
 });
 
 test('Read follow-ups carry only validated filters and never replace a new period or inherit payment instructions',()=>{

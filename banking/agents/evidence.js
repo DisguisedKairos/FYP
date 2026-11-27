@@ -3,6 +3,11 @@
 const DRAFT_INTENT = /^(?!\s*(?:how|what|why|explain)\b)(?![\s\S]*\b(?:do not|don't|dont|never)\s+(?:(?:please|actually)\s+)?(?:prepare|create|draft|set up)\b)(?:(?:(?:please|can you|could you|would you|will you|help me|help us|I (?:want|need|would like) to|I'd like to)\s+)*(?:transfer|send|move|pay|schedule)\b|[\s\S]*\b(?:create|prepare|draft|set up)\b[\s\S]*\b(?:payment|transfer|schedule|bill)\b)/i;
 const LABELS = { get_banking_context:'Sourced public banking background', analyze_news_insights:'Sourced public news implications and chat-only advisory flags', assess_counterparty_risk:'Owned company risk scenarios, recorded exposure and configured AI assessment', scan_counterparty_news:'Owned counterparties with sourced public sanctions/compliance and industry news', get_business_profile:'Owned business profile and activity', get_market_insights:'Sourced public market research', research_public_company:'Sourced public company research', check_payment_funds:'Owned source-account payment funding check', get_finance_report:'Current owned finance activity snapshot', list_saved_dashboards:'Owned saved dashboard definitions', open_saved_dashboard:'Refreshed owned company dashboard', save_company_dashboard: 'Private saved dashboard receipt', get_company_activity: 'Owned company transaction activity', get_daily_market_context: 'Dated official public market and scam context', analyze_market_transactions: 'Permitted payments with market and scam context', flag_transaction_for_review: 'Human investigation request', get_accounts: 'Owned account balances', get_schedules: 'Owned scheduled instructions', search_transactions: 'Owned transaction search', project_liquidity: 'Scheduled-payment liquidity scenario', investigate_transaction: 'Recorded payment risk assessment', get_related_payments: 'Earlier completed payments', simulate_rule: 'Historical rule comparison', reconcile_accounts: 'Ledger and operational checks', prepare_payment_draft: 'Payment form draft' };
 LABELS.get_payment_sources='Owned current payment sources';
+// Screen the claim itself while allowing a bounded clause that explicitly says
+// funding could not be established. Later affirmative clauses remain screened.
+const FUNDING_UNCERTAINTY=new RegExp('\\b(?:cannot|can not|can\'t|could not|couldn\'t)(?:\\s+yet)?\\s+(?:confirm|determine|establish|assess|verify|tell|say)(?:\\s+yet)?\\s+(?:whether|if|that)\\s+'+
+  '(?:you|we|I|it|(?:your|our|the|this)\\s+(?:business|company|account|source))\\s+'+
+  '(?:(?:have|has|(?:will|would)\\s+have)\\s+(?:sufficient funds|enough (?:money|funds))|(?:is|are|will be|would be)\\s+fully funded|(?:can|will|would)\\s+(?:pay|afford|cover))\\b','gi');
 function references(runId, results) {
   return results.map((result, i) => ({ id: `E${i + 1}`, runId, step: i + 1, tool: result.tool, label: LABELS[result.tool] || 'Banking evidence' }));
 }
@@ -58,7 +63,7 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   if (assessments.some(a => a.decision === 'allow') && /\b(?:high[ -]risk|flagged|blocked|held|rejected)\b/i.test(plain)) return 'The narrative conflicts with the recorded allow decision.';
   if (assessments.some(a => ['review', 'block'].includes(a.decision)) && /\b(?:approved|allowed|cleared|safe to (?:pay|send))\b/i.test(plain)) return 'The narrative conflicts with the recorded review or block decision.';
   const fundingWarnings=require('./funds').collect(results);
-  const fundingClaims=plain.replace(/\b(?:(?:do|does|did|will|would|should|may|might|could|can)\s+not|cannot|can't|don't|doesn't|won't|wouldn't|shouldn't|couldn't|not)\s+(?:(?:have|be)\s+)?(?:sufficient funds|enough (?:money|funds)|fully funded|cover all(?:\s+(?:payments|bills))?)/gi,'[funding limitation]');
+  const fundingClaims=plain.replace(/\b(?:(?:do|does|did|will|would|should|may|might|could|can)\s+not|cannot|can't|don't|doesn't|won't|wouldn't|shouldn't|couldn't|not)\s+(?:(?:have|be)\s+)?(?:sufficient funds|enough (?:money|funds)|fully funded|cover all(?:\s+(?:payments|bills))?)/gi,'[funding limitation]').replace(FUNDING_UNCERTAINTY,'[funding uncertainty]');
   if(fundingWarnings.length && /\b(?:no shortfalls?|no funding gaps?|cover all|sufficient funds|enough (?:money|funds)|fully funded|funds (?:are|will be) sufficient)\b/i.test(fundingClaims))return 'The narrative conflicts with a funding shortfall or an incomplete funding check.';
   const planningClaims=fundingClaims.replace(/\b(?:cannot|can't|couldn't|can not|could not|not able to)\s+(?:pay|afford|cover)\b/gi,'[funding limitation]');
   if(fundingWarnings.length && /\b(?:can|able to|ready to)\s+(?:pay|afford)|\bpayment (?:is|will be) (?:covered|funded)\b/i.test(planningClaims))return 'The narrative asserts payment readiness despite an incomplete or shortfall check.';
@@ -90,6 +95,7 @@ function relevanceIssue(message, results, intent) {
       const coverage=[...results].reverse().find(r=>r.value?.fundingCheck)?.value.fundingCheck;
       if(days!==undefined&&(!coverage||typeof coverage.available!=='boolean'||coverage.days!==days))return 'Check the requested '+days+'-day scheduled-payment period with project_liquidity; a default or different horizon does not answer it.';
     }
+    if(!coverageRequest&&/\bafford\b/i.test(message)&&!DRAFT_INTENT.test(message)&&!tools.has('check_payment_funds'))return 'Check the proposed payment using check_payment_funds, including clarification of any missing amount or owned source; general balances or scheduled coverage are insufficient.';
     return null;
   }
   if(tools.has('get_banking_context')&&require('./banking-context').generalQuestion(message))return null;
