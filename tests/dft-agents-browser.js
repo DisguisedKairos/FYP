@@ -273,10 +273,29 @@ test('Assistant expands, restores and resizes without losing drafts, replies or 
  await page.click('[data-action="assistant-clear"]');assert.deepEqual(await popupSize(page),resized);
  await resizePopup(page,-3000,-3000);
  assert.equal(await page.evaluate('(()=>{const p=document.querySelector("#assistant-popup").getBoundingClientRect();return p.left>=11 && p.top>=11 && p.right<=innerWidth && p.bottom<=innerHeight;})()'),true);
- await resizePopup(page,3000,3000);assert.deepEqual(await popupSize(page),{width:340,height:420});
+ await resizePopup(page,3000,3000);assert.deepEqual(await popupSize(page),{width:440,height:560});
  assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
  assert.deepEqual(page.errors,[]);
+});
+
+test('The minimum desktop assistant size keeps privacy text, input and error recovery reachable',async t=>{
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo');
+ const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
+ await page.click('[data-action="assistant-toggle"]');await resizePopup(page,3000,3000);
+ async function controlsFit(){
+  assert.equal(await page.evaluate('[...document.querySelectorAll(".assistant-window-actions button,#assistant-message,#assistant-form button,#assistant-privacy")].every(e=>{const r=e.getBoundingClientRect(),p=document.querySelector("#assistant-popup").getBoundingClientRect();return r.left>=p.left&&r.right<=p.right&&r.top>=p.top&&r.bottom<=p.bottom;})'),true,'Composer, privacy notice and window controls fit inside the resized assistant.');
+  assert.ok(await page.evaluate('document.querySelector("#assistant-thread").clientHeight>=80'),'Conversation retains readable scrolling space.');
+ }
+ await controlsFit();
+ await page.evaluate(`const original=window.fetch;window.fetch=(...args)=>{if(String(args[0])==='/api/agents/assistant'){window.fetch=original;return Promise.resolve(new Response(JSON.stringify({error:'Temporary assistant outage.'}),{status:503,headers:{'Content-Type':'application/json'}}));}return original(...args);};`);
+ await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('!!document.querySelector("[data-action=assistant-retry]")');await controlsFit();
+ await page.click('[data-action="assistant-retry"]');await page.waitFor('!!document.querySelector(".from-assistant") && !document.querySelector("#assistant-form button[type=submit]").disabled');await controlsFit();
+ await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:400,deviceScaleFactor:1,mobile:false});
+ await page.evaluate('document.querySelector("#assistant-privacy").scrollIntoView({block:"nearest"})');
+ assert.equal(await page.evaluate('(()=>{const n=document.querySelector("#assistant-privacy").getBoundingClientRect(),p=document.querySelector("#assistant-popup").getBoundingClientRect();return n.top>=p.top&&n.bottom<=p.bottom;})()'),true,'A short desktop window can scroll to the privacy notice.');
+ assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);assert.deepEqual(page.errors,[]);
 });
 
 test('Assistant popup preserves drafts across banking navigation and receives replies while minimized',async t=>{

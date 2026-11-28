@@ -76,6 +76,36 @@ test('wholesale bank staff use an operations workspace without consumer or compa
   });
 });
 
+test('Desktop transaction statuses and account controls remain visible at laptop widths',async t=>{
+  await bankingPage(t,'desktop-status-columns',{width:1100,height:900},async(page,fixture,downloads)=>{
+    const account=(await fixture.db.query("SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email='jamie@greenlink.demo' ORDER BY a.id LIMIT 1")).rows[0];
+    for(const status of ['pending_review','rejected'])await fixture.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill',$3,-100,'Desktop Status Supplier',$4,now(),now())",[require('node:crypto').randomUUID(),account.id,'Desktop status '+status,status]);
+    await login(page,'jamie@greenlink.demo');await nav(page,'activity');
+    await page.waitFor('document.querySelector("#history-results")?.textContent.includes("Desktop status pending_review")');
+    for(const width of [1100,980]){
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
+      assert.equal(await page.evaluate('[...document.querySelectorAll(".transaction-table th,.transaction-table td:nth-child(3)")].every(e=>e.getBoundingClientRect().width>0)'),true,'Every financial column, including payment status, stays visible.');
+      assert.equal(await page.evaluate('document.querySelector(".heading-actions [data-action=export]").getBoundingClientRect().width>0'),true);
+      assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
+    }
+    await page.click('.heading-actions [data-action=export]');
+    let csvPath;for(let attempt=0;attempt<50&&!csvPath;attempt++){const file=readdirSync(downloads).find(name=>name.endsWith('.csv'));if(file)csvPath=join(downloads,file);else await new Promise(resolve=>setTimeout(resolve,100));}
+    assert.ok(csvPath,'Activity CSV can be downloaded at a narrower desktop width.');assert.match(readFileSync(csvPath,'utf8'),/pending_review/);
+    await page.navigate(fixture.baseUrl+'/accounts?account='+account.id);await page.waitFor('!!document.querySelector(".account-details")');
+    await page.click('[data-action=rename-account]');await page.waitFor('!!document.querySelector("#account-form")');await page.press('Escape');
+  });
+});
+
+test('Account opening dates use Singapore time when the desktop browser is in another timezone',async t=>{
+  await bankingPage(t,'account-opening-timezone',{},async(page,fixture)=>{
+    const account=(await fixture.db.query("UPDATE accounts SET created_at=$1 WHERE user_id=(SELECT id FROM users WHERE email='jamie@greenlink.demo') RETURNING id",['2026-11-01T00:30:00Z'])).rows[0];
+    await page.send('Emulation.setTimezoneOverride',{timezoneId:'America/Los_Angeles'});
+    await login(page,'jamie@greenlink.demo');await page.navigate(fixture.baseUrl+'/accounts?account='+account.id);await page.waitFor('!!document.querySelector(".account-details")');
+    const opened=await page.evaluate('[...document.querySelectorAll(".account-details .review-list>div")].find(e=>e.querySelector("dt").textContent==="Opened").querySelector("dd").textContent');
+    assert.equal(opened,'1 November 2026','The account date must agree with Singapore ledger dates.');
+  });
+});
+
 test('desktop registration, savings management, authorized money movement and activity exports work together', async (t) => {
   await bankingPage(t, 'desktop', {}, async (page, fixture, downloads) => {
     await page.click('[data-action="auth-switch"]'); await page.waitFor(exists('#confirm-password'), 'registration confirmation field');

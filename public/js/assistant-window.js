@@ -11,7 +11,7 @@ function availableSize(popup) {
 }
 function clampSize(popup,size) {
   const max=availableSize(popup);
-  return {width:Math.round(Math.min(max.width,Math.max(Math.min(340,max.width),size.width))),height:Math.round(Math.min(max.height,Math.max(Math.min(420,max.height),size.height)))};
+  return {width:Math.round(Math.min(max.width,Math.max(Math.min(440,max.width),size.width))),height:Math.round(Math.min(max.height,Math.max(Math.min(560,max.height),size.height)))};
 }
 function canResize(popup) {
   return state.user && !state.signingOut && state.assistant?.open && !state.assistant.expanded && popup.isConnected && !popup.closest('[inert]');
