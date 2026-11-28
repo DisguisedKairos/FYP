@@ -2,7 +2,7 @@
 const test=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
 const {fixture}=require('./dft-helpers'),{launchChrome}=require('./chrome');
 async function login(page,email='alex@greenlink.demo'){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=1280){const f=await fixture(t),page=await launchChrome(t,{width,height:950,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
+async function open(t,width=1280){const f=await fixture(t),page=await launchChrome(t,{width,height:950});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
 async function ask(page,message){const n=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+n+' && !document.querySelector("#assistant-form button[type=submit]").disabled');}
 async function due(f){const client=f.client();await client.login();const source=(await client.dashboard()).accounts[0];const result=await client.request('/api/scheduled-payments',{method:'POST',body:{type:'bill',fromAccountId:source.id,billerId:'pub',reference:'VISIBLE-FUNDING',amount:'40000.00',scheduledAt:new Date(Date.now()+86400000).toISOString(),frequency:'once',requestId:randomUUID()}});assert.equal(result.status,201);return source;}
 test('Insufficient payment funds appear as an explicit chat warning with exact source balance and gap',async t=>{
@@ -13,8 +13,8 @@ test('Insufficient payment funds appear as an explicit chat warning with exact s
   await ask(page,'Can I afford SGD '+amount+' from '+source.number+'?');assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-funding-warning").textContent'),/Funding shortfall.*0\.01/s);assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),0);
   await page.click('[data-action=assistant-clear]');assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message").length'),0);assert.deepEqual(page.errors,[]);
 });
-test('Balance and finance-report replies show scheduled shortfall warnings on mobile without a separate view',async t=>{
-  const {f,page}=await open(t,390);await due(f);const route=await page.evaluate('location.pathname');
+test('Balance and finance-report replies show scheduled shortfall warnings on desktop without a separate view',async t=>{
+  const {f,page}=await open(t,1280);await due(f);const route=await page.evaluate('location.pathname');
   await ask(page,'What is my balance?');let text=await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-funding-warning").textContent');assert.match(text,/Scheduled payments may have insufficient funds/);assert.match(text,/Largest projected shortfall/);assert.match(text,/First projected shortfall \(SGT\)/);assert.match(text,/30 days/);
   await ask(page,'Generate a downloadable finance report');assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child .assistant-funding-warning").length'),1);assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-finance-format]").length'),2);assert.equal(await page.evaluate('location.pathname'),route);
   assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response/);assert.deepEqual(page.errors,[]);
@@ -31,14 +31,14 @@ test('A delayed funding warning from an ended session cannot appear in the next 
   await page.evaluate('window.releaseOldFunding();window.oldFunding');assert.equal(await page.evaluate('document.querySelectorAll(".assistant-funding-warning").length'),0);assert.deepEqual(page.errors,[]);
 });
 
-test('An existing scheduled shortfall produces an automatic mobile notice without sending a chat message',async t=>{
+test('An existing scheduled shortfall produces an automatic desktop notice without sending a chat message',async t=>{
   const f=await fixture(t);await due(f);
-  const page=await launchChrome(t,{width:390,height:950,mobile:true});
+  const page=await launchChrome(t,{width:1280,height:950});
   await page.navigate(f.baseUrl+'/login');await login(page);
   await page.waitFor('!!document.querySelector(".assistant-funding-preview:not([hidden])")');
   assert.equal(await page.evaluate('document.querySelector("#assistant-popup").hidden'),true);
   assert.equal(Number((await f.db.query('SELECT count(*) FROM agent_runs')).rows[0].count),0);
-  await page.screenshot('test-results/automatic-funding-mobile.png');
+  await page.screenshot('test-results/automatic-funding-desktop.png');
   await page.click('[data-action=funding-open]');
   await page.waitFor('!!document.querySelector("#automatic-funding .assistant-funding-warning")');
   const text=await page.evaluate('document.querySelector("#automatic-funding").textContent');

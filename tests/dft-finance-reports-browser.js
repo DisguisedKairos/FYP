@@ -2,11 +2,11 @@
 const test=require('node:test'),assert=require('node:assert/strict'),{randomUUID}=require('node:crypto');
 const {fixture}=require('./dft-helpers'),{launchChrome}=require('./chrome');
 async function login(page,email='alex@greenlink.demo'){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=1280,options={}){const f=await fixture(t,options),page=await launchChrome(t,{width,height:950,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
+async function open(t,width=1280,options={}){const f=await fixture(t,options),page=await launchChrome(t,{width,height:950});await page.navigate(f.baseUrl+'/login');await login(page);await page.click('[data-action=assistant-toggle]');return {f,page};}
 async function ask(page,message='Pull a real time finance report for the last 30 days that I can download'){await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector("[data-finance-report]") && !document.querySelector("#assistant-form button[type=submit]").disabled');}
 async function capture(page){await page.evaluate(`window.financeBlobs=[];window.financeNames=[];window.originalObjectURL=URL.createObjectURL;URL.createObjectURL=blob=>{blob.arrayBuffer().then(bytes=>window.financeBlobs.push({mime:blob.type,body:new TextDecoder().decode(bytes)}));return window.originalObjectURL(blob);};window.originalAnchorClick=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){if(this.download?.startsWith('greenlink-finance-')){window.financeNames.push(this.download);return;}return window.originalAnchorClick.call(this);};`);}
 test('Assistant finance CSV and PDF downloads remain in chat and retrieve changes committed after the preview',async t=>{
-  const {f,page}=await open(t,390);await capture(page);const route=await page.evaluate('location.pathname');await ask(page);
+  const {f,page}=await open(t,1280);await capture(page);const route=await page.evaluate('location.pathname');await ask(page);
   assert.match(await page.evaluate('document.querySelector("[data-finance-report]").textContent'),/Each download refreshes the latest committed ledger data/);
   const client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
   assert.equal((await client.request('/api/payments',{method:'POST',body:{fromAccountId:account.id,billerId:'pub',reference:'AFTER-CHAT-FINANCE',amount:'0.01',requestId:randomUUID()}})).status,200);
@@ -21,7 +21,7 @@ test('Assistant finance CSV and PDF downloads remain in chat and retrieve change
   assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child").textContent'),/\[E\d+\]|Evidence for this response/);assert.deepEqual(page.errors,[]);
 });
 test('A shorthand presentation period remains correct in the displayed report and download request',async t=>{
-  const {page}=await open(t,390,{now:()=>Date.parse('2026-11-27T04:00:00Z')});await capture(page);
+  const {page}=await open(t,1280,{now:()=>Date.parse('2026-11-27T04:00:00Z')});await capture(page);
   await ask(page,'Generate a downloadable finance report from 1 to 25 November 2026.');
   assert.match(await page.evaluate('document.querySelector("[data-finance-report]").textContent'),/2026-11-01 to 2026-11-25/);
   await page.evaluate("window.periodFetch=window.fetch;window.financePeriods=[];window.fetch=(...args)=>{if(String(args[0]).startsWith('/api/reports/finance'))window.financePeriods.push(Object.fromEntries(new URL(String(args[0]),location.origin).searchParams));return window.periodFetch(...args);};");
@@ -51,7 +51,7 @@ test('An ended-session finance response cannot download private records or unloc
 });
 
 test('Named report dates produce matching downloads, incomplete dates ask for clarification, and receipt dates carry into Activity',async t=>{
-  const {page}=await open(t,390,{now:()=>Date.parse('2026-11-26T04:00:00Z')});await capture(page);
+  const {page}=await open(t,1280,{now:()=>Date.parse('2026-11-26T04:00:00Z')});await capture(page);
   async function question(text){
     const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');
     await page.fill('#assistant-message',text);await page.click('#assistant-form button[type=submit]');

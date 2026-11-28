@@ -154,7 +154,7 @@ npm run demo:agents
 
 The explicit agent demonstration creates a disposable PostgreSQL schema using `TEST_DATABASE_URL`, seeds synthetic businesses, scores a test payment through the real private FastAPI/OpenAI gateway, and exercises five assistant enquiries with real OpenAI. It verifies investigations do not change financial balances, then removes the schema. Native data is never seeded by this command. OpenAI credentials are required for this optional demonstration; CI exercises the model adapter and tool boundary with controlled responses.
 
-`tests/dft-agents.test.js` covers ownership, CSRF, staff restrictions, multi-turn drafts, schedules, recurrence, value conservation, historical simulations, reconciliation isolation, hostile tool calls, bounded loops, stale authorization and model-origin/narrative checks. `tests/dft-agents-browser.js` covers mobile assistant workflows, removal of the retired workspace, and administrator-only audit access.
+`tests/dft-agents.test.js` covers ownership, CSRF, staff restrictions, multi-turn drafts, schedules, recurrence, value conservation, historical simulations, reconciliation isolation, hostile tool calls, bounded loops, stale authorization and model-origin/narrative checks. `tests/dft-agents-browser.js` covers desktop assistant workflows, removal of the retired workspace, and administrator-only audit access.
 
 ## AI evaluation audit
 

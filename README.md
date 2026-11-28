@@ -4,6 +4,8 @@
 
 Republic Polytechnic wholesale banking prototype. The stack is Node.js, Express, PostgreSQL, Python FastAPI, JavaScript, HTML/CSS and **OpenAI API**. Account balances and transactions are stored in PostgreSQL. Business checks and bill settlement are educational project workflows.
 
+The interface targets desktop web browsers, with a persistent navigation sidebar and a resizable assistant window.
+
 ## OpenAI integration
 
 The default AI provider is now **OpenAI**, using the configurable **gpt-6-luna** model through the Responses API. The assistant, fraud scoring, suspicious-activity analysis, fraud investigation, liquidity planning, rule impact analysis and reconciliation interpretation use the configured provider. FastAPI validates structured fraud output.

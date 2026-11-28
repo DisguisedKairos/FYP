@@ -10,7 +10,7 @@ function model(){return {mode:'openai',model:'controlled-insights-browser',inspe
  return {role:'assistant',content:(calls.some(c=>c.tool_name==='save_company_dashboard')?'Your dashboard is saved privately':'Review the retrieved context and its stated scope')+' [E'+calls.length+'].'};
 }};}
 async function login(page,email='alex@greenlink.demo'){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=1280,{email='alex@greenlink.demo',...options}={}){const f=await fixture(t,{agentModel:model(),...options}),page=await launchChrome(t,{width,height:1000,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page,email);return {f,page};}
+async function open(t,width=1280,{email='alex@greenlink.demo',...options}={}){const f=await fixture(t,{agentModel:model(),...options}),page=await launchChrome(t,{width,height:1000});await page.navigate(f.baseUrl+'/login');await login(page,email);return {f,page};}
 async function ask(page,value){if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',value);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+'&&!document.querySelector("#assistant-form button[type=submit]").disabled');}
 test('A chart can be added in chat, customized on its own page and refreshed weekly without financial actions',async t=>{
  const {f,page}=await open(t);
@@ -32,15 +32,15 @@ test('A chart can be added in chat, customized on its own page and refreshed wee
  assert.equal(await page.evaluate('getComputedStyle(document.querySelector(".trend-line.received")).stroke===getComputedStyle(document.querySelector("[data-custom-card] .activity-swatch.received")).backgroundColor'),true);
  await page.screenshot(path.resolve('test-results','customized-dashboard-desktop.png'));assert.deepEqual(page.errors,[]);
 });
-test('Assistant preferences persist and control later chart style and default trend period on mobile',async t=>{
- const {f,page}=await open(t,390);await page.navigate(f.baseUrl+'/custom-dashboard');await page.waitFor('!!document.querySelector("#assistant-preferences-form")');
+test('Assistant preferences persist and control later chart style and default trend period on desktop',async t=>{
+ const {f,page}=await open(t,1280);await page.navigate(f.baseUrl+'/custom-dashboard');await page.waitFor('!!document.querySelector("#assistant-preferences-form")');
  await page.evaluate('document.querySelector("#assistant-style").value="detailed";document.querySelector("#assistant-months").value="6";document.querySelector("#assistant-chart").value="table";document.querySelector("#assistant-topic").value="trade"');
  await page.click('#assistant-preferences-form button[type=submit]');
  await page.waitFor('document.querySelector("#toast")?.textContent==="Assistant preferences saved."');
  await ask(page,'Show my transaction trends over the past few months');await page.waitFor('!!document.querySelector(".from-assistant:last-child .company-months[open]")');
  const result=await page.evaluate('({rows:document.querySelectorAll(".from-assistant:last-child .company-months tbody tr").length,bars:document.querySelectorAll(".from-assistant:last-child .activity-month-bar").length})');
  assert.equal(result.rows,6);assert.equal(result.bars,0);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
- await page.screenshot(path.resolve('test-results','customized-dashboard-mobile.png'));assert.deepEqual(page.errors,[]);
+ await page.screenshot(path.resolve('test-results','customized-dashboard-desktop.png'));assert.deepEqual(page.errors,[]);
 });
 test('Public company research displays clickable source annotations and the business-profile report stays private',async t=>{
  const {page}=await open(t);

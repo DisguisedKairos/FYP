@@ -6,20 +6,20 @@ async function login(page,email='alex@greenlink.demo'){
   await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
 }
 async function open(t,{email='alex@greenlink.demo',width=1280}={}){
-  const f=await fixture(t,{now}),page=await launchChrome(t,{width,height:950,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page,email);await page.click('[data-action=assistant-toggle]');return {f,page};
+  const f=await fixture(t,{now}),page=await launchChrome(t,{width,height:950});await page.navigate(f.baseUrl+'/login');await login(page,email);await page.click('[data-action=assistant-toggle]');return {f,page};
 }
 async function ask(page,message){
   const n=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');
   await page.waitFor('document.querySelectorAll(".from-assistant").length>'+n+' && !document.querySelector("#assistant-form button[type=submit]").disabled');
 }
-test('Mobile chat shows completed cash flow and a company payment deadline together, while pure summaries still support downloads',async t=>{
-  const {f,page}=await open(t,{email:'jamie@greenlink.demo',width:390}),route=await page.evaluate('location.pathname');
+test('Desktop chat shows completed cash flow and a company payment deadline together, while pure summaries still support downloads',async t=>{
+  const {f,page}=await open(t,{email:'jamie@greenlink.demo',width:1280}),route=await page.evaluate('location.pathname');
   await ask(page,'Summarize my inflow and outflow this month. Do I have enough funds to pay SGD 100 to Harbour Supplies Pte. Ltd. from Operating savings by this month?');
   const text=await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent');
   assert.match(text,/Current funds cover this conservative/);assert.match(text,/Inflow received/);assert.match(text,/Outflow paid/);assert.match(text,/Harbour Supplies Pte. Ltd./);assert.match(text,/2026-11-30/);assert.match(text,/Future credits/);
   assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),0);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));assert.equal(await page.evaluate('location.pathname'),route);
   assert.ok(await page.evaluate('(()=>{const card=document.querySelector(".from-assistant:last-child [data-payment-readiness]"),thread=document.querySelector("#assistant-thread");return card.getBoundingClientRect().top<thread.getBoundingClientRect().bottom;})()'));
-  await page.screenshot('test-results/payment-planning-mobile.png');
+  await page.screenshot('test-results/payment-planning-desktop.png');
   await ask(page,'Summarize inflow and outflow this month');
   assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-payment-readiness]").length'),0);
   assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-finance-format]").length'),2);

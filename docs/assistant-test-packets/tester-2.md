@@ -106,7 +106,7 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 **Role:** Business | **Effect:** Read
 
-**Setup:** Narrow mobile viewport
+**Setup:** Desktop browser at 1024px or wider
 
 **Question or steps:**
 
@@ -960,13 +960,13 @@ Run batches of 10-15 requests and follow the shared account booking. Record repl
 
 **Role:** Business | **Effect:** Read
 
-**Setup:** Narrow mobile viewport; displayed advice; separate Recipient login
+**Setup:** Desktop browser at 1024px or wider; displayed advice; separate Recipient login
 
 **Question or steps:**
 
 > Inspect advisory cards and source links. Clear chat; request again, then sign out and sign in as Recipient.
 
-**Expected:** Readable mobile cards with prominent safe source links, escaped public text and practical checks. Cleared or former-operator reports never appear in the new conversation; customers see no AI audit links.
+**Expected:** Readable desktop cards with prominent safe source links, escaped public text and practical checks. Cleared or former-operator reports never appear in the new conversation; customers see no AI audit links.
 
 **Status:** Not run
 

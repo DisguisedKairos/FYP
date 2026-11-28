@@ -6,7 +6,7 @@ const {randomUUID}=require('node:crypto');
 const {fixture}=require('./dft-helpers');
 const {launchChrome}=require('./chrome');
 async function open(t,width,email,options={}){
-  const f=await fixture(t,options),page=await launchChrome(t,{width,height:900,mobile:width<760});
+  const f=await fixture(t,options),page=await launchChrome(t,{width,height:900});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
   return {f,page};
@@ -19,9 +19,9 @@ async function visit(page,base,route){
   await page.navigate(base+route);await page.waitFor('!!document.querySelector(".app-shell")');
 }
 
-test('General banking explanations are labelled on mobile and support a simple contextual follow-up',async t=>{
+test('General banking explanations are labelled on desktop and support a simple contextual follow-up',async t=>{
  const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({available:true}),chat:async()=>({role:'assistant',content:'Liquidity means having readily available funds to meet business obligations.'})};
- const {f,page}=await open(t,390,'alex@greenlink.demo',{agentModel});
+ const {f,page}=await open(t,1280,'alex@greenlink.demo',{agentModel});
  const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
  await visit(page,f.baseUrl,'/assistant');
  for(const question of ['What is liquidity in wholesale digital banking?','Explain that more simply.']){
@@ -33,7 +33,7 @@ test('General banking explanations are labelled on mobile and support a simple c
  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
 });
 test('Popup accepts value-free security help, blocks appended credentials and opens permitted guidance screens',async t=>{
-  const {f,page}=await open(t,390,'jamie@greenlink.demo');
+  const {f,page}=await open(t,1280,'jamie@greenlink.demo');
   await visit(page,f.baseUrl,'/assistant');
   await page.evaluate(`window.guidanceRequests=0;const original=window.fetch;window.fetch=(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))window.guidanceRequests++;return original(...args);};`);
   async function ask(message){
@@ -60,8 +60,8 @@ test('Popup accepts value-free security help, blocks appended credentials and op
   assert.deepEqual(page.errors,[]);
 });
 
-test('Business users build a multi-turn draft on mobile without an insights workspace',async t=>{
-  const {f,page}=await open(t,390,'jamie@greenlink.demo');
+test('Business users build a multi-turn draft on desktop without an insights workspace',async t=>{
+  const {f,page}=await open(t,1280,'jamie@greenlink.demo');
   await visit(page,f.baseUrl,'/assistant');
   await page.evaluate(`window.originalAgentFetch=window.fetch;window.fetch=async(...args)=>{if(String(args[0]).endsWith('/agents/assistant'))await new Promise(resolve=>{window.releaseAgentResponse=resolve;});return window.originalAgentFetch(...args);};`);
   await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
@@ -79,7 +79,7 @@ test('Business users build a multi-turn draft on mobile without an insights work
 
 test('Evidence starts collapsed, follows explicit requests and preserves manual toggles without exposing customer audit controls',async t=>{
   const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({mode:'openai',available:true,configured:true,model:'controlled-openai'}),chat:async messages=>messages.some(m=>m.role==='user' && m.content==='test')?{role:'assistant',content:'Hello.'}:messages.some(m=>m.role==='tool')?{role:'assistant',content:'Inspect the owned account balances before authorizing a payment [E1].\n\nCheck upcoming obligations before deciding on a payment.'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
-  const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:390,height:900,mobile:true});
+  const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width:1280,height:900});
   await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#email")');
   await page.fill('#email','jamie@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
   await visit(page,f.baseUrl,'/assistant');assert.equal(await page.evaluate('!!document.querySelector("#assistant-engine")'),false);
@@ -124,9 +124,9 @@ test('Evidence starts collapsed, follows explicit requests and preserves manual 
 });
 
 
-test('AI audit supports mobile search, model timeline, owned tool evidence and JSON download',async t=>{
+test('AI audit supports desktop search, model timeline, owned tool evidence and JSON download',async t=>{
  const fs=require('node:fs'),downloadPath=path.resolve('test-results','ai-audit-download');fs.mkdirSync(downloadPath,{recursive:true});
- const {f,page}=await open(t,390,'reviewer@greenlink.demo');
+ const {f,page}=await open(t,1280,'reviewer@greenlink.demo');
  await page.send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath});
  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');await page.waitFor('!!document.querySelector(".from-assistant [data-ai-audit-id]")');
  const runId=await page.evaluate('document.querySelector(".from-assistant [data-ai-audit-id]").dataset.aiAuditId');
@@ -140,7 +140,7 @@ test('AI audit supports mobile search, model timeline, owned tool evidence and J
  await page.click('[data-action="close-dialog"]');await page.fill('#ai-audit-query',runId);await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector("[data-ai-audit-count]")?.textContent.startsWith("1 matching")');
  assert.equal(await page.evaluate('document.querySelector("[data-ai-audit-id]").dataset.aiAuditId'),runId);
  await page.fill('#ai-audit-query','NO-SUCH-AUDIT-RECORD');await page.click('#ai-audit-filters button[type=submit]');await page.waitFor('document.querySelector(".empty-state")?.textContent.includes("No matching AI records")');
- await page.screenshot(path.resolve('test-results','ai-audit-mobile.png'));assert.deepEqual(page.errors,[]);
+ await page.screenshot(path.resolve('test-results','ai-audit-desktop.png'));assert.deepEqual(page.errors,[]);
 });
 
 
@@ -164,7 +164,7 @@ test('AI audit failed searches do not display the previous query results',async 
 
 
 test('Customers cannot open the AI audit page or trigger audit reads and do not see assistant audit links',async t=>{
- const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo');
  assert.equal(await page.evaluate('!!document.querySelector("[data-nav=aiAudit]")'),false);
  await visit(page,f.baseUrl,'/ai-audit');await page.waitFor('location.pathname==="/dashboard"');
  assert.equal(await page.evaluate('!!document.querySelector(".ai-audit-panel,[data-nav=aiAudit]")'),false);
@@ -181,7 +181,7 @@ async function pausePopupReply(page){
 }
 
 test('Assistant timestamps use Singapore time and survive retries, reopening and viewport changes',async t=>{
- const {page}=await open(t,390,'jamie@greenlink.demo');
+ const {page}=await open(t,1280,'jamie@greenlink.demo');
  await page.send('Emulation.setTimezoneOverride',{timezoneId:'America/Los_Angeles'});
  await page.click('[data-action="assistant-toggle"]');
  await page.evaluate(`const timestampFetch=window.fetch;window.fetch=(...args)=>{if(String(args[0])==='/api/agents/assistant'){window.fetch=timestampFetch;return Promise.resolve(new Response(JSON.stringify({error:'Temporary assistant error.'}),{status:503,headers:{'Content-Type':'application/json'}}));}return timestampFetch(...args);};`);
@@ -206,8 +206,8 @@ test('Assistant timestamps use Singapore time and survive retries, reopening and
  for(const time of times)assert.equal(time.text,singapore.format(new Date(time.at))+' SGT');
  await page.click('[data-action="assistant-close"]');await page.click('[data-action="assistant-toggle"]');
  assert.deepEqual(await readTimes(),times);
- for(const [width,height] of [[1280,900],[360,640]]){
-  await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:width<760});
+ for(const [width,height] of [[1280,900],[1024,768]]){
+  await page.send('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
   assert.equal(await page.evaluate('Array.from(document.querySelectorAll(".assistant-message time")).every(t=>{const a=t.getBoundingClientRect(),b=t.closest(".assistant-message").getBoundingClientRect();return a.left>=b.left && a.right<=b.right;})'),true);
   assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
   assert.deepEqual(await readTimes(),times);
@@ -264,11 +264,11 @@ test('Assistant expands, restores and resizes without losing drafts, replies or 
  assert.deepEqual(await popupSize(page),resized);
  assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),'My next unsent question');
  await page.screenshot(path.resolve('test-results','assistant-resized-desktop.png'));
- await page.send('Emulation.setDeviceMetricsOverride',{width:360,height:640,deviceScaleFactor:1,mobile:true});
- await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().width<=336');
+ await page.send('Emulation.setDeviceMetricsOverride',{width:1024,height:768,deviceScaleFactor:1,mobile:false});
+ await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().width<=1000');
  assert.equal(await page.evaluate('(()=>{const p=document.querySelector("#assistant-popup").getBoundingClientRect();return p.left>=0 && p.top>=0 && p.right<=innerWidth && p.bottom<=innerHeight;})()'),true);
  await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:900,deviceScaleFactor:1,mobile:false});
- await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().width==='+resized.width);
+ await page.waitFor('(()=>{const r=document.querySelector("#assistant-popup").getBoundingClientRect();return r.width==='+resized.width+' && r.height==='+resized.height+';})()');
  assert.deepEqual(await popupSize(page),resized);
  await page.click('[data-action="assistant-clear"]');assert.deepEqual(await popupSize(page),resized);
  await resizePopup(page,-3000,-3000);
@@ -276,29 +276,6 @@ test('Assistant expands, restores and resizes without losing drafts, replies or 
  await resizePopup(page,3000,3000);assert.deepEqual(await popupSize(page),{width:340,height:420});
  assert.equal(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),true);
  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
- assert.deepEqual(page.errors,[]);
-});
-
-test('Assistant touch resizing keeps mobile controls reachable and cancels cleanly',async t=>{
- const {page}=await open(t,390,'jamie@greenlink.demo');await page.click('[data-action="assistant-toggle"]');
- const initial=await popupSize(page),point=await page.evaluate('(()=>{const p=document.querySelector(".assistant-resize-handle").getBoundingClientRect();return {x:p.x+13,y:p.y+13};})()');
- await page.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{...point,id:1}]});
- await page.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:point.x+20,y:point.y+80,id:1}]});
- await page.send('Input.dispatchTouchEvent',{type:'touchCancel',touchPoints:[]});
- assert.deepEqual(await popupSize(page),{width:initial.width-20,height:initial.height-80});
- assert.equal(await page.evaluate('document.querySelector("#assistant-popup").classList.contains("assistant-resizing")'),false);
- await page.click('[data-action="assistant-expand"]');
- for(const height of [640,420]){
-  await page.send('Emulation.setDeviceMetricsOverride',{width:360,height,deviceScaleFactor:1,mobile:true});
-  await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().bottom<=innerHeight');
-  assert.equal(await page.evaluate('(()=>{const p=document.querySelector("#assistant-popup").getBoundingClientRect();return p.left>=0 && p.top>=0 && p.right<=innerWidth;})()'),true);
-  assert.equal(await page.evaluate('Array.from(document.querySelectorAll(".assistant-window-actions button,#assistant-form button[type=submit]")).every(e=>{const r=e.getBoundingClientRect(),p=document.querySelector("#assistant-popup").getBoundingClientRect();return r.left>=p.left && r.right<=p.right && r.top>=p.top && r.bottom<=p.bottom;})'),true);
- }
- await page.screenshot(path.resolve('test-results','assistant-expanded-mobile.png'));
- await page.click('[data-action="assistant-expand"]');
- await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:900,deviceScaleFactor:1,mobile:true});
- await page.waitFor('document.querySelector("#assistant-popup").getBoundingClientRect().height==='+ (initial.height-80));
- await page.press('Escape');assert.equal(await page.evaluate('document.activeElement.classList.contains("assistant-launcher")'),true);
  assert.deepEqual(page.errors,[]);
 });
 
@@ -334,12 +311,12 @@ test('Assistant popup preserves drafts across banking navigation and receives re
  assert.deepEqual(page.errors,[]);
 });
 
-test('Mobile popup clears session data and rejects a delayed reply after another operator signs in',async t=>{
- const {f,page}=await open(t,390,'jamie@greenlink.demo');
+test('Desktop popup clears session data and rejects a delayed reply after another operator signs in',async t=>{
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo');
  await page.click('[data-action="assistant-toggle"]');await pausePopupReply(page);
  await page.evaluate('import("/js/assistant.js").then(m=>{window.pendingPopupSend=m.sendAssistant("What is my balance?");return true;})');
  await page.waitFor('typeof window.releasePopupReply==="function"');await page.click('[data-action="assistant-expand"]');await page.click('[data-action="assistant-close"]');
- await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');
+ await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');
  assert.equal(await page.evaluate('document.querySelector("#assistant-root").childElementCount'),0);
  await page.fill('#email','alex@greenlink.demo');await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
  await page.click('[data-action="assistant-toggle"]');await page.evaluate('window.releasePopupReply();window.pendingPopupSend');
@@ -347,16 +324,14 @@ test('Mobile popup clears session data and rejects a delayed reply after another
  assert.equal(await page.evaluate('document.querySelector("#assistant-popup").classList.contains("assistant-sized")'),false);
  assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message").length'),0);
  assert.equal(await page.evaluate('document.querySelector("#assistant-form").getAttribute("aria-busy")'),'false');
- for(const height of [640,420]){
-  await page.send('Emulation.setDeviceMetricsOverride',{width:360,height,deviceScaleFactor:1,mobile:true});
+ for(const height of [900,768]){
+  await page.send('Emulation.setDeviceMetricsOverride',{width:1024,height,deviceScaleFactor:1,mobile:false});
   const bounds=await page.evaluate('({width:innerWidth,height:innerHeight,popup:document.querySelector("#assistant-popup").getBoundingClientRect().toJSON(),send:document.querySelector("#assistant-form button[type=submit]").getBoundingClientRect().toJSON(),page:document.documentElement.scrollWidth})');
   assert.ok(bounds.popup.x>=0 && bounds.popup.right<=bounds.width && bounds.popup.top>=0 && bounds.popup.bottom<=bounds.height,JSON.stringify(bounds));
   assert.ok(bounds.send.top>=bounds.popup.top && bounds.send.bottom<=bounds.popup.bottom,JSON.stringify(bounds));assert.ok(bounds.page<=bounds.width+1);
  }
- await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:1,mobile:true});
- await page.screenshot(path.resolve('test-results','assistant-popup-mobile.png'));
- await page.click('[data-action="menu-open"]');assert.equal(await page.evaluate('document.querySelector("#assistant-root").inert && getComputedStyle(document.querySelector("#assistant-root")).visibility==="hidden"'),true);
- await page.click('[data-action="menu-close"].sidebar-close');assert.equal(await page.evaluate('!document.querySelector("#assistant-popup").hidden && !document.querySelector("#assistant-root").inert'),true);
+ await page.send('Emulation.setDeviceMetricsOverride',{width:1280,height:844,deviceScaleFactor:1,mobile:false});
+ await page.screenshot(path.resolve('test-results','assistant-popup-desktop.png'));
  await page.press('Escape');assert.equal(await page.evaluate('document.activeElement.classList.contains("assistant-launcher")'),true);
  assert.deepEqual(page.errors,[]);
 });
@@ -368,15 +343,15 @@ test('Daily market review retains visible findings with supporting evidence coll
  const source=(await client.dashboard()).accounts[0];
  const paid=await client.request('/api/transfers',{method:'POST',body:{fromAccountId:source.id,toAccountNumber:'1020001001',amount:'100.00',description:'Investment trading top-up',requestId:require('node:crypto').randomUUID()}});assert.equal(paid.status,200);
  const before=JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows);
- const page=await launchChrome(t,{width:390,height:844,mobile:true});await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#auth-form")');
+ const page=await launchChrome(t,{width:1280,height:844});await page.navigate(f.baseUrl+'/login');await page.waitFor('!!document.querySelector("#auth-form")');
  const login=async email=>{await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');};
  await login('jamie@greenlink.demo');await page.click('[data-action="assistant-toggle"]');await page.click('[data-assistant-suggestion="Check my transactions for fraud using daily market trends"]');
  await page.waitFor('document.querySelector(".from-assistant:last-child")?.textContent.includes("referred") && !document.querySelector("#assistant-form button[type=submit]").disabled');
  const reply=await page.evaluate('document.querySelector(".from-assistant:last-child").textContent');assert.match(reply,/USD\/SGD/);assert.match(reply,/ScamShield/);assert.match(reply,/Human review requested/);assert.doesNotMatch(reply,/Evidence for this response|\[E\d+\]/);
  assert.equal(await page.evaluate('document.querySelector(".assistant-evidence").open'),false);
  assert.equal(await page.evaluate('!!document.querySelector("[data-ai-audit-id]")'),false);assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
- await page.click('[data-action="assistant-close"]');await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');await login('reviewer@greenlink.demo');
- await page.click('[data-action="menu-open"]');await page.click('[data-nav="fraud"]');await page.waitFor('!!document.querySelector("[data-fraud-case]")');await page.click('[data-fraud-case]');
+ await page.click('[data-action="assistant-close"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');await login('reviewer@greenlink.demo');
+ await page.click('[data-nav="fraud"]');await page.waitFor('!!document.querySelector("[data-fraud-case]")');await page.click('[data-fraud-case]');
  await page.waitFor('document.querySelector("#modal").textContent.includes("qualitative human review")');assert.match(await page.evaluate('document.querySelector("#modal").textContent'),/No new numeric fraud score/);assert.ok(await page.evaluate('!!document.querySelector("[data-claim-fraud-case]")'));
  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);assert.deepEqual(page.errors,[]);
 });
@@ -386,7 +361,7 @@ test('Daily market review retains visible findings with supporting evidence coll
 
 
 test('Recent transaction replies display the entire bounded receipt list with its full-history action',async t=>{
- const {f,page}=await open(t,390,'jamie@greenlink.demo');
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo');
  const account=(await f.db.query("SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email='jamie@greenlink.demo' ORDER BY a.id LIMIT 1")).rows[0];
  for(let i=0;i<24;i++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill',$3,-100,'Browser Receipt Supplier','pending_review',now(),now())",[randomUUID(),account.id,'Browser receipt '+i]);
  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','Show my recent transactions');await page.click('#assistant-form button[type=submit]');
@@ -400,7 +375,7 @@ test('Recent transaction replies display the entire bounded receipt list with it
 
 test('Opening matching transactions preserves the assistant status and money-out filters',async t=>{
  const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({available:true}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'The matching receipt records are shown below [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'search_transactions',arguments:{q:'Filter Supplier',status:'pending_review',type:'outgoing'}}}]}};
- const {f,page}=await open(t,390,'jamie@greenlink.demo',{agentModel});
+ const {f,page}=await open(t,1280,'jamie@greenlink.demo',{agentModel});
  const account=(await f.db.query("SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email='jamie@greenlink.demo' ORDER BY a.id LIMIT 1")).rows[0];
  await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill','Awaiting filtered invoice',-123,'Filter Supplier','pending_review',now(),now())",[randomUUID(),account.id]);
  await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','List my money-out entries for Filter Supplier that are still waiting for approval.');await page.click('#assistant-form button[type=submit]');
@@ -412,7 +387,7 @@ test('Opening matching transactions preserves the assistant status and money-out
 
 
 test('Banking insights is absent for customers and staff while the chatbot and audit access remain available',async t=>{
- for(const [width,email] of [[390,'jamie@greenlink.demo'],[1280,'reviewer@greenlink.demo']]){
+ for(const [width,email] of [[1280,'jamie@greenlink.demo'],[1280,'reviewer@greenlink.demo']]){
   const {f,page}=await open(t,width,email);
   assert.equal(await page.evaluate('!!document.querySelector("[data-nav=agents],[data-investigate-transaction]")'),false);
   await page.navigate(f.baseUrl+'/banking-insights');await page.waitFor('location.pathname==="/dashboard" && !!document.querySelector(".app-shell")');

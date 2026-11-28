@@ -3,10 +3,10 @@ import {state,icon} from './core.js';
 let resizing=null;
 const directions={ArrowLeft:[1,0],ArrowRight:[-1,0],ArrowUp:[0,1],ArrowDown:[0,-1]};
 function availableSize(popup) {
-  const style=getComputedStyle(popup),viewport=window.visualViewport;
+  const style=getComputedStyle(popup);
   return {
     width:Math.max(1,document.documentElement.clientWidth-parseFloat(style.right)-12),
-    height:Math.max(1,innerHeight-parseFloat(style.bottom)-(viewport?.offsetTop||0)-12),
+    height:Math.max(1,document.documentElement.clientHeight-parseFloat(style.bottom)-12),
   };
 }
 function clampSize(popup,size) {
@@ -25,8 +25,6 @@ export function stopAssistantResize() {
 export function renderAssistantWindow(popup) {
   const t=state.assistant;
   if(!t || !t.open)return;
-  const viewport=window.visualViewport;
-  popup.style.setProperty('--assistant-keyboard-offset',Math.max(0,innerHeight-(viewport?viewport.height+viewport.offsetTop:innerHeight))+'px');
   popup.classList.toggle('assistant-expanded',Boolean(t.expanded));
   popup.closest('#assistant-root').classList.toggle('assistant-window-expanded',Boolean(t.expanded));
   popup.classList.toggle('assistant-sized',Boolean(t.windowSize || t.expanded));
@@ -83,6 +81,4 @@ function viewportChanged() {
   if(popup)renderAssistantWindow(popup);
 }
 window.addEventListener('resize',viewportChanged);
-window.visualViewport?.addEventListener('resize',viewportChanged);
-window.visualViewport?.addEventListener('scroll',viewportChanged);
 window.addEventListener('blur',stopAssistantResize);

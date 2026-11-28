@@ -7,13 +7,13 @@
 | Authorization and customer isolation | Server roles, owned queries, password reauthorization, CSRF/origin | Auth, ledger, HTTP and browser tests |
 | Business savings management and balance enquiry | Approved business accounts, create/rename/close safeguards and company dashboard | HTTP and browser tests |
 | Internal transfers and bill payments | Integer cents, account locks, atomic ledger and mandatory request keys | `dft-ledger.test.js`, HTTP/browser |
-| Scheduled payments | Once/weekly/monthly, occurrence leases, retries and cancellation recovery | `dft-workflows.test.js`, mobile browser |
+| Scheduled payments | Once/weekly/monthly, occurrence leases, retries and cancellation recovery | `dft-workflows.test.js`, desktop browser |
 | History, search and statements | Bound filters, pagination, safe CSV, explicit reconciled baseline | HTTP and browser export checks |
 | Notifications | Transactional outbox and owned read acknowledgement | Workflow/HTTP/browser checks |
 | Transaction authorization | Current password, auth version, independent maker/checker review | Auth and ledger tests |
 | Fraud rules | Admin-only versioned changes and audit, current blocking rules at commit | Risk/ledger and admin browser |
 | Fraud score, flags and explanations | Private FastAPI, bound history, strict schema, deterministic controls | `dft-risk.test.js`, `tests_python/`, real platform smoke |
-| Private banking assistant | Owned reads and form drafts, no chat execution; permission-scoped evidence is sent to OpenAI | HTTP and desktop/mobile browser |
+| Private banking assistant | Owned reads and form drafts, no chat execution; permission-scoped evidence is sent to OpenAI | HTTP and desktop browser |
 | Authenticator and recovery | Encrypted TOTP secrets, atomic counter/recovery consumption | `dft-totp.test.js`, security browser |
 | PostgreSQL data connection | Migrations, bounded pool and transaction helper | All database integration tests |
 | Existing-data and identity maintenance | PostgreSQL provenance, credential-preserving demo identity migration, collision refusal and reconciliation | `dft-identity.test.js`, `dft-postgres.test.js` |
@@ -73,7 +73,7 @@ Login accepts the current password plus either `otp` or `recoveryCode` when enab
 
 `tests/dft-http.test.js` verifies the actual Express routes use the same write guards and authoritative client address. It covers source ownership, role checks, injection attempts, safe exports, statement reconciliation, malformed URLs, proxy trust and password changes during in-flight screening. Ledger/workflow checks also reject stale authorization at review and schedule creation. Existing standing schedules keep their saved consent across password/session changes; future occurrences still run through current financial and fraud controls.
 
-`tests/dft-security-browser.js` verifies password change, authenticator enrollment, login challenge, recovery login, disable and all-device revocation through the real browser screens. Enrollment/recovery secrets clear when the dialog closes. The desktop/mobile banking browser tests cover ordinary account, transfer, bill, schedule, assistant and administrator-review flows.
+`tests/dft-security-browser.js` verifies password change, authenticator enrollment, login challenge, recovery login, disable and all-device revocation through the real browser screens. Enrollment/recovery secrets clear when the dialog closes. The desktop banking browser tests cover ordinary account, transfer, bill, schedule, assistant and administrator-review flows.
 
 ## Responsibility boundary
 

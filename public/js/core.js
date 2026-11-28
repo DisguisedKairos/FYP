@@ -1,7 +1,6 @@
 ﻿// Shared application state and transport. No user records are stored in browser storage.
 export const app = document.querySelector('#app');
 export const modal = document.querySelector('#modal');
-export const mobileQuery = matchMedia('(max-width: 760px)');
 export const ui = {};
 export const pages = {
   overview: { path: '/dashboard', label: 'Overview', icon: 'grid' },
@@ -28,7 +27,7 @@ export const state = {
   authMode: location.pathname === '/register' ? 'register' : 'login', authNotice: '', authBusy: false, signingOut: false,
   hiddenBalance: false, refreshError: '', refreshing: false, filters: emptyFilters(), historyPage: 1, pageSize: 10,
   history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null,
-  menuOpen: false, modalBusy: false, modalOpener: null, pendingMoney: null,
+  modalBusy: false, modalOpener: null, pendingMoney: null,
   moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0,
 };
 let sessionEpoch=0;
@@ -135,8 +134,7 @@ export function clearBankingState() {
   cancelDashboardReads();ui.cancelReads?.();
   closeDialog(true);
   modal.replaceChildren();
-  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, funding: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false, menuOpen: false });
-  document.body.classList.remove('menu-open');
+  Object.assign(state, { modalBusy:false, refreshing:false, data: null, user: null, funding: null, refreshError: '', filters: emptyFilters(), history: { loading: true, error: '', transactions: [], pagination: null, totals: null }, accountActivity: null, ruleAudit:null, aiAudit:null, assistant:null, fraudCaseFilters:null, fraudScanBusy:false, pendingMoney: null, moneyDraft: { transfers: {}, payments: {} }, remote: {}, notifications: [], unreadCount: 0, hiddenBalance: false });
   ui.resetAssistant?.();
 }
 export async function recoverSession(error) {
@@ -190,8 +188,6 @@ export function navigate(page, { account = '', replace = false, focus = true } =
   if (!pages[page] || state.modalBusy || state.signingOut) return;
   if (pages[page].admin && state.user?.role !== 'admin') page = 'overview';
   state.route = { page, account: String(account) };
-  state.menuOpen = false;
-  document.body.classList.remove('menu-open');
   closeDialog();
   const target = routeUrl(state.route);
   if (location.pathname + location.search !== target) history[replace ? 'replaceState' : 'pushState']({}, '', target);

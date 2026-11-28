@@ -95,7 +95,7 @@ class ChromePage {
       return top && (element === top || element.contains(top)) ? point : null;
     })()`;
     await this.waitFor(locate, `clickable ${selector}`);
-    // Wait for layout and mobile navigation transitions to settle before a real
+    // Wait for layout transitions to settle before a real
     // pointer click, as browser drivers do for element actionability.
     let point, previous, stable = 0;
     const deadline = Date.now() + 5000;
@@ -141,7 +141,7 @@ class ChromePage {
   }
 }
 
-async function launchChrome(t, { width = 1440, height = 1000, mobile = false, downloads } = {}) {
+async function launchChrome(t, { width = 1440, height = 1000, downloads } = {}) {
   const executable = process.env.CHROME_PATH || [
     'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
     'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
@@ -197,8 +197,7 @@ async function launchChrome(t, { width = 1440, height = 1000, mobile = false, do
   await page.send('Runtime.enable');
   await page.send('Log.enable');
   await page.send('Network.enable');
-  await page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile });
-  if (mobile) await page.send('Emulation.setTouchEmulationEnabled', { enabled: true });
+  await page.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
   if (downloads) {
     mkdirSync(downloads, { recursive: true });
     await page.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads, eventsEnabled: true });

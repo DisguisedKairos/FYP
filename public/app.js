@@ -8,8 +8,8 @@ import { renderAssistant, toggleAssistant, closeAssistant, resetAssistant, sendA
 import {toggleAssistantSize} from './js/assistant-window.js';
 import { loadRuleAudit, cancelRuleAudit } from './js/audit.js';
 import { loadFraudCases, runFraudScan, openFraudCase, claimFraudCase, submitFraudCaseReview, cancelFraudCases, cancelFraudCaseDetail } from './js/fraud-cases.js';
-import { app, modal, state, ui, api, money, accountById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, cancelDashboardReads, recoverSession, routeFromLocation, routeUrl, navigate, mobileQuery } from './js/core.js';
-import { auth, render, connectionError, extraViews, updateMobileNavigation } from './js/views.js';
+import { app, modal, state, ui, api, money, accountById, emptyFilters, formError, dialog, closeDialog, clearBankingState, toast, loadDashboard, cancelDashboardReads, recoverSession, routeFromLocation, routeUrl, navigate } from './js/core.js';
+import { auth, render, connectionError, extraViews } from './js/views.js';
 import { loadHistory, loadAccountRecent, openTransaction, cancelHistoryReads, cancelDetailRead, updateHistoryFilters, exportActivity, statementDialog, generateStatement } from './js/history.js';
 import { accountNameDialog, closeAccountDialog, authenticate, submitAccount, reviewMoney, transactionDetails, confirmMoney } from './js/workflows.js';
 import { loadExtras, loadNotifications, stopBackgroundReads, notificationsPage, schedulesPage, markNotification, scheduleDialog, changeScheduleType, reviewSchedule, confirmSchedule, scheduleDetails, cancelScheduleDialog, cancelSchedule } from './js/services.js';
@@ -158,8 +158,6 @@ document.addEventListener('click',async event => {
       case 'demo': await authenticate({email:'alex@greenlink.demo',password:'Greenlink123!'},true); break;
       case 'logout': await signOut(control); break;
       case 'balance': state.hiddenBalance = !state.hiddenBalance; render(); app.querySelector('[data-action="balance"]').focus(); break;
-      case 'menu-open': state.menuOpen = true; updateMobileNavigation({focus:true}); break;
-      case 'menu-close': state.menuOpen = false; updateMobileNavigation({focus:true}); break;
       case 'close-dialog': closeDialog(); break;
       case 'new-account': accountNameDialog(); break;
       case 'rename-account': accountNameDialog(control.dataset.id); break;
@@ -215,15 +213,7 @@ document.addEventListener('change',event => {
   } else if (event.target.name === 'fromAccountId') document.querySelector('#available-balance').textContent = `Available balance: ${money(accountById(event.target.value).balanceCents)}`;
 });
 document.addEventListener('keydown',event => {
-  if(event.key==='Escape' && !modal.open && !state.menuOpen && state.assistant?.open){event.preventDefault();closeAssistant();return;}
-  if (!state.menuOpen || !mobileQuery.matches) return;
-  if (event.key === 'Escape') { event.preventDefault(); state.menuOpen = false; updateMobileNavigation({focus:true}); }
-  if (event.key === 'Tab') {
-    const controls = [...app.querySelectorAll('.sidebar a, .sidebar button')].filter(element => !element.disabled && element.getClientRects().length);
-    const first = controls[0], last = controls.at(-1);
-    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
-    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
-  }
+  if(event.key==='Escape' && !modal.open && state.assistant?.open){event.preventDefault();closeAssistant();}
 });
 modal.addEventListener('cancel',event => { if (state.modalBusy) event.preventDefault(); });
 modal.addEventListener('close',() => { if(modal.open)return; cancelDetailRead(); cancelAiAuditDetail(); cancelFraudCaseDetail(); clearSecuritySecrets(); if (state.modalOpener?.isConnected) state.modalOpener.focus(); else app.querySelector('h1')?.focus(); state.modalOpener = null; });
@@ -232,10 +222,9 @@ modal.addEventListener('click',event => {
   const bounds = modal.getBoundingClientRect();
   if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) closeDialog();
 });
-mobileQuery.addEventListener('change',() => { state.menuOpen = false; updateMobileNavigation(); });
 window.addEventListener('popstate',() => {
   if (state.modalBusy) { history.replaceState({},'',routeUrl(state.route)); return; }
-  closeDialog(); state.route = routeFromLocation(); state.menuOpen = false;
+  closeDialog(); state.route = routeFromLocation();
   if (state.data) {
     if (['/login','/register','/'].includes(location.pathname)) history.replaceState({},'','/dashboard');
     if (state.route.page === 'activity') state.filters.account = state.route.account;

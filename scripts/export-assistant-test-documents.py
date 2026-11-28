@@ -152,7 +152,7 @@ class Worksheet:
             ("Website / environment", "environment", "Enter the website URL and environment"),
             ("Deployed app commit", "deployment", "Enter the commit shown in Vercel"),
             ("Session date / time", "session_time", "Record date, start and finish time in Singapore"),
-            ("Browser / viewport", "browser", "Record browser/version and desktop/mobile viewport"),
+            ("Browser / viewport", "browser", "Record browser/version and desktop viewport"),
             ("Login identity", "identity", "Record test email/role only; never a password"),
         ):
             self.row(table, label, tag, prompt)

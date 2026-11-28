@@ -32,22 +32,16 @@ async function login(page, email = 'alex@greenlink.demo') {
   await page.fill('#email', email); await page.fill('#password', 'Greenlink123!'); await submit(page, '#auth-form');
   await page.waitFor(exists('.balance-card'), 'authenticated dashboard');
 }
-async function openMenu(page) {
-  if (await page.evaluate('document.querySelector(".sidebar")?.inert')) {
-    await page.click('[data-action="menu-open"]');
-    await page.waitFor('document.querySelector(".mobile-menu").getAttribute("aria-expanded") === "true"', 'mobile navigation open');
-  }
-}
 async function nav(page, route) {
   if(route==='assistant'){
     if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');
     await page.waitFor('!!document.querySelector("#assistant-popup:not([hidden])")','assistant popup');return;
   }
   if(await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-close"]');
-  await openMenu(page); await page.click(`.nav-items [data-nav="${route}"]`);
+  await page.click(`.nav-items [data-nav="${route}"]`);
   await page.waitFor(`location.pathname === ${JSON.stringify(routes[route])} && !!document.querySelector('#main-content')`, route);
 }
-async function logout(page) { if(await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-close"]'); await openMenu(page); await page.click('[data-action="logout"]'); await page.waitFor(exists('#auth-form'), 'signed out'); }
+async function logout(page) { if(await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-close"]'); await page.click('[data-action="logout"]'); await page.waitFor(exists('#auth-form'), 'signed out'); }
 async function layout(page, context) {
   const size = await page.evaluate('({width:innerWidth,document:document.documentElement.scrollWidth,body:document.body.scrollWidth,modal:document.querySelector("dialog[open]")?.getBoundingClientRect().toJSON()})');
   assert.ok(size.document <= size.width + 1 && size.body <= size.width + 1, `${context}: horizontal overflow ${JSON.stringify(size)}`);
@@ -70,15 +64,15 @@ async function ask(page, message) {
 }
 
 test('wholesale bank staff use an operations workspace without consumer or company deposit navigation',async t=>{
-  await bankingPage(t,'bank-operations',{width:390,height:844,mobile:true},async(page,fixture)=>{
+  await bankingPage(t,'bank-operations',{width:1280,height:844},async(page,fixture)=>{
     await require('../scripts/create-staff').createStaff({db:fixture.db,email:'staff@bank.example.test',name:'Bank Operations',password:'Greenlink123!'});
     await page.fill('#email','staff@bank.example.test');await page.fill('#password','Greenlink123!');await submit(page,'#auth-form');
     await page.waitFor(exists('[data-bank-operations]'),'bank staff workspace');
     assert.equal(await page.evaluate('!!document.querySelector(".nav-items [data-nav=accounts],.nav-items [data-nav=payments],.balance-card")'),false);
-    await layout(page,'wholesale staff mobile workspace');
+    await layout(page,'wholesale staff desktop workspace');
     assert.equal(await page.evaluate('!!document.querySelector("[data-nav=onboarding],[data-review-business]")'),false);
     await page.click('[data-bank-operations] [data-nav=fraud]');await page.waitFor('location.pathname==="/fraud-monitoring"','bank staff fraud monitoring');
-    await layout(page,'wholesale staff mobile fraud monitoring');await page.screenshot(resolve('test-results','wholesale-bank-operations-mobile.png'));
+    await layout(page,'wholesale staff desktop fraud monitoring');await page.screenshot(resolve('test-results','wholesale-bank-operations-desktop.png'));
   });
 });
 
@@ -185,37 +179,35 @@ test('desktop registration, savings management, authorized money movement and ac
   });
 });
 
-test('mobile navigation, payment review, schedules and notifications fit a 390 pixel viewport', async (t) => {
-  await bankingPage(t, 'mobile', { width:390, height:844, mobile:true }, async (page) => {
-    await layout(page, 'mobile sign in'); await page.screenshot(resolve('test-results', 'mobile-login.png'));
-    await login(page); await layout(page, 'mobile overview'); await page.screenshot(resolve('test-results', 'browser-mobile.png'));
-    await page.send('Emulation.setDeviceMetricsOverride', { width:360, height:800, deviceScaleFactor:1, mobile:true });
-    await layout(page, '360 pixel overview'); await page.screenshot(resolve('test-results', 'mobile-360.png'));
-    await page.send('Emulation.setDeviceMetricsOverride', { width:390, height:844, deviceScaleFactor:1, mobile:true });
-    await page.click('[data-action="menu-open"]'); assert.equal(await page.evaluate('document.querySelector(".workspace").inert'), true);
-    await page.press('Escape'); assert.equal(await page.evaluate('document.querySelector(".mobile-menu").getAttribute("aria-expanded")'), 'false');
-    await nav(page, 'payments'); assert.equal(await page.evaluate('document.querySelector(".sidebar").inert'), true);
-    await page.select('#billerId', 'pub'); await page.fill('#reference', 'MOBILE123'); await page.fill('#amount', '1.23'); await submit(page, '#money-form');
-    await layout(page, 'mobile payment review'); await page.screenshot(resolve('test-results', 'mobile-payment-review.png'));
+test('Desktop navigation, payment review, schedules and notifications work at laptop widths', async (t) => {
+  await bankingPage(t, 'desktop', { width:1280, height:844 }, async (page) => {
+    await layout(page, 'desktop sign in'); await page.screenshot(resolve('test-results', 'desktop-login.png'));
+    await login(page); await layout(page, 'desktop overview'); await page.screenshot(resolve('test-results', 'browser-desktop.png'));
+    await page.send('Emulation.setDeviceMetricsOverride', { width:1024, height:768, deviceScaleFactor:1, mobile:false });
+    await layout(page, '1024 pixel overview'); await page.screenshot(resolve('test-results', 'laptop-1024.png'));
+    await page.send('Emulation.setDeviceMetricsOverride', { width:1280, height:844, deviceScaleFactor:1, mobile:false });
+    await nav(page, 'payments'); assert.equal(await page.evaluate('document.querySelector(".sidebar").inert'), false); assert.equal(await page.evaluate('!!document.querySelector("[data-action=menu-open],.sidebar-overlay")'), false);
+    await page.select('#billerId', 'pub'); await page.fill('#reference', 'DESKTOP123'); await page.fill('#amount', '1.23'); await submit(page, '#money-form');
+    await layout(page, 'desktop payment review'); await page.screenshot(resolve('test-results', 'desktop-payment-review.png'));
     await page.press('Escape'); await page.waitFor('!document.querySelector("#modal").open', 'escape closes review');
     assert.equal(await page.evaluate('document.querySelector("#amount").value'), '1.23');
     await submit(page, '#money-form'); await confirm(page, 'Bill payment complete.'); await done(page);
     await nav(page, 'schedules'); await page.waitFor(exists('.schedules-panel'), 'scheduled payments loaded');
     await page.click('[data-action="new-schedule"]'); await page.fill('#schedule-recipient', '1020002001');
-    await page.fill('#schedule-amount', '2.34'); await page.fill('#schedule-description', 'Mobile scheduled payment'); await layout(page, 'mobile schedule form');
+    await page.fill('#schedule-amount', '2.34'); await page.fill('#schedule-description', 'Desktop scheduled payment'); await layout(page, 'desktop schedule form');
     await submit(page, '#schedule-form'); await page.waitFor(exists('#confirm-schedule-form'), 'schedule review');
     await page.fill('#authorizationPassword', 'Greenlink123!'); await submit(page, '#confirm-schedule-form');
     await page.waitFor(exists('.schedule-card'), 'authorized schedule saved'); await page.click('[data-cancel-schedule]'); await submit(page, '#cancel-schedule-form');
     await page.waitFor('document.querySelector(".schedule-card")?.textContent.toLowerCase().includes("cancelled")', 'schedule cancelled');
-    await nav(page, 'notifications'); await page.waitFor(exists('.notification-item.unread'), 'delivered notification'); await layout(page, 'mobile notifications');
+    await nav(page, 'notifications'); await page.waitFor(exists('.notification-item.unread'), 'delivered notification'); await layout(page, 'desktop notifications');
     await page.click('[data-action="notifications-read-all"]'); await page.waitFor('!document.querySelector(".notification-item.unread")', 'notifications acknowledged');
-    await nav(page, 'activity'); await layout(page, 'mobile activity filters'); await page.select('#transaction-type', 'bill'); await page.fill('#transaction-search', 'MOBILE123');
-    await page.waitFor('document.querySelector(".history-result-summary")?.textContent.includes("1 matching")', 'mobile activity search');
-    await page.screenshot(resolve('test-results', 'mobile-activity.png')); assert.equal(totalBalance(await snapshot(page)), 3005050 - 123);
-    await nav(page, 'assistant');const balanceReply=await ask(page, 'What is my balance?');for(const account of (await snapshot(page)).accounts)assert.ok(balanceReply.includes((account.balanceCents/100).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2}))); await layout(page, 'mobile private assistant');
-    await page.send('Emulation.setDeviceMetricsOverride', { width:360, height:800, deviceScaleFactor:1, mobile:true });
-    await layout(page, '360 pixel private assistant'); await page.screenshot(resolve('test-results', 'mobile-assistant.png'));
-    await page.click('[data-action="assistant-clear"]'); await page.waitFor(exists('.assistant-welcome'), 'mobile chat clear'); await logout(page);
+    await nav(page, 'activity'); await layout(page, 'desktop activity filters'); await page.select('#transaction-type', 'bill'); await page.fill('#transaction-search', 'DESKTOP123');
+    await page.waitFor('document.querySelector(".history-result-summary")?.textContent.includes("1 matching")', 'desktop activity search');
+    await page.screenshot(resolve('test-results', 'desktop-activity.png')); assert.equal(totalBalance(await snapshot(page)), 3005050 - 123);
+    await nav(page, 'assistant');const balanceReply=await ask(page, 'What is my balance?');for(const account of (await snapshot(page)).accounts)assert.ok(balanceReply.includes((account.balanceCents/100).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2}))); await layout(page, 'desktop private assistant');
+    await page.send('Emulation.setDeviceMetricsOverride', { width:1024, height:768, deviceScaleFactor:1, mobile:false });
+    await layout(page, '1024 pixel private assistant'); await page.screenshot(resolve('test-results', 'desktop-assistant.png'));
+    await page.click('[data-action="assistant-clear"]'); await page.waitFor(exists('.assistant-welcome'), 'desktop chat clear'); await logout(page);
   });
 });
 
@@ -269,7 +261,7 @@ test('Frontend startup shows a recoverable error for missing modules and unavail
  const hosted=createHostedApplication({environment:{},databaseFactory(){starts++;throw Error('No database access expected.');}});wrapper.use(hosted);
  const server=http.createServer(wrapper);await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
  t.after(async()=>{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));});
- const page=await launchChrome(t,{width:390,height:844,mobile:true}),base='http://127.0.0.1:'+server.address().port;
+ const page=await launchChrome(t,{width:1280,height:844}),base='http://127.0.0.1:'+server.address().port;
  await page.navigate(base+'/');await page.waitFor('!!document.querySelector(".connection-error")','module error recovery');
  assert.equal(await page.evaluate('!!document.querySelector(".initial-loading")'),false);assert.match(await text(page,'.connection-error'),/could not finish loading/);assert.equal(starts,0);
  failModule=false;await page.click('.connection-error button');await page.waitFor('document.querySelector(".connection-error")?.textContent.includes("temporarily unavailable")','API error recovery');

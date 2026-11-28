@@ -17,10 +17,10 @@ function model(){return {mode:'openai',model:'controlled-chat-dashboard',inspect
  return {role:'assistant',content:(calls.some(row=>row.tool_name==='save_company_dashboard')?'Your dashboard is saved and shown here in chat':calls.at(-1)?.tool_name==='list_saved_dashboards'?'Choose a saved dashboard below':'Review the retrieved activity here in chat')+' [E'+calls.length+'].'};
 }};}
 async function login(page,email){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=390){const f=await fixture(t,{agentModel:model()}),page=await launchChrome(t,{width,height:1000,mobile:width<760});await page.navigate(f.baseUrl+'/login');await login(page,'alex@greenlink.demo');return {f,page};}
+async function open(t,width=1280){const f=await fixture(t,{agentModel:model()}),page=await launchChrome(t,{width,height:1000});await page.navigate(f.baseUrl+'/login');await login(page,'alex@greenlink.demo');return {f,page};}
 async function chat(page){if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');}
 async function ask(page,text){await chat(page);const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',text);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+' && !document.querySelector("#assistant-form button[type=submit]").disabled');}
-async function logout(page){await page.click('[data-action="assistant-close"]');if(await page.evaluate('innerWidth<760'))await page.click('[data-action="menu-open"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');}
+async function logout(page){await page.click('[data-action="assistant-close"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');}
 
 test('Requested company charts render inside chat, resolve ambiguity and never navigate away',async t=>{
  const {f,page}=await open(t,1280),url=await page.evaluate('location.pathname');
@@ -100,7 +100,7 @@ test('A delayed inline dashboard cannot return after logout or overwrite another
  assert.deepEqual(page.errors,[]);
 });
 
-test('Inline charts retain real amounts, status counts, pagination and empty states on mobile',async t=>{
+test('Inline charts retain real amounts, status counts, pagination and empty states on desktop',async t=>{
  const {f,page}=await open(t),client=f.client();await client.login();const account=(await client.dashboard()).accounts[0];
  for(const status of ['pending_review','rejected'])await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'transfer','Chat status fixture',-100000,'Harbour Supplies Pte. Ltd.',$3,$4,$4)",[randomUUID(),account.id,status,new Date().toISOString()]);
  for(let index=0;index<7;index++)await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,'credit','Chart receipt',100,$3,'completed',$4,$4,$4,nextval('settlement_sequence'))",[randomUUID(),account.id,'Additional Company '+index,new Date().toISOString()]);
@@ -121,7 +121,7 @@ test('Inline charts retain real amounts, status counts, pagination and empty sta
  assert.equal(await page.evaluate('document.querySelector(".from-assistant:last-child .activity-status-total").textContent'),'0');
  assert.doesNotMatch(await page.evaluate('document.querySelector(".from-assistant:last-child .company-visual-grid").innerHTML'),/NaN|Infinity/);
  assert.ok(await page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'));
- await page.screenshot(path.resolve('test-results','assistant-inline-dashboard-mobile.png'));
+ await page.screenshot(path.resolve('test-results','assistant-inline-dashboard-desktop.png'));
  assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
  assert.deepEqual(page.errors,[]);
 });
