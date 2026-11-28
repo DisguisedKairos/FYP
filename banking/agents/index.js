@@ -55,7 +55,7 @@ const properties = {
   get_market_insights:{topic:{type:'string',enum:['general','singapore','fx','trade','interest_rates','industry']}},
   analyze_news_insights:{},
   research_public_company:{companyName:{type:'string'}},
-  check_payment_funds:{},
+  check_payment_funds:{reusePrevious:{type:'boolean',description:'True only when supplying missing details of the server-supplied unfinished read-only funding check. Keep its user-entered amount, recipient and deadline; never infer payment details from cash-flow totals or use this context to prepare a payment.'}},
   get_finance_report:{},
   list_saved_dashboards:{},
   open_saved_dashboard:{viewId:{type:'string',description:'Exact saved view id returned by list_saved_dashboards in this run.'}},
@@ -134,8 +134,8 @@ function small(value){
 
 function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=createMarketContext({now})}={}){
   async function accounts(user){await reports.assertActor(db,user);return {accounts:(await db.query("SELECT id::text,name,number,balance_cents::text FROM accounts WHERE user_id=$1 AND status='active' ORDER BY id",[user.id])).rows.map(a=>({id:a.id,name:a.name,number:a.number,balanceCents:Number(a.balance_cents)}))};}
-  async function checkPaymentFunds(user,message){
-    if(paymentPlanning.requested(message))return paymentPlanning.assess(db,user,message,{now});
+  async function checkPaymentFunds(user,message,previous=null){
+    if(paymentPlanning.requested(message)||previous)return paymentPlanning.assess(db,user,message,{now,previous});
     const owned=(await accounts(user)).accounts,parsed=extractDraft(message.trim().replace(/[!?]+$/,''),{},owned,[],{now});
     const source=parsed.fromAccountId?owned.find(row=>row.id===parsed.fromAccountId):owned.length===1?owned[0]:null;
     const missing=[...(!parsed.amount?['payment amount in SGD']:[]),...(!source?['owned source account name or number']:[])],checkedAt=iso(now());
@@ -256,7 +256,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       if(!toolNames.includes(name))throw new HttpError(403,'This agent tool is outside the permitted task.');
       argumentsFor(name,args);
       if(dateFollowup?.tool===name){args={...args,...dateFollowup.arguments};argumentsFor(name,args);}
-      const enquiry=assistantResponse.resolveEnquiry(name,args,message,previous.lastReadEnquiry,{now});
+      const enquiry=name==='check_payment_funds'?{args,message}:assistantResponse.resolveEnquiry(name,args,message,previous.lastReadEnquiry,{now});
       args=enquiry.args;const readMessage=enquiry.message;
       if(['investigate_transaction','get_related_payments','analyze_market_transactions'].includes(name)&&args.transactionId&&previous.lastTransactionEnquiry?.transactionId&&!message.includes(args.transactionId)&&args.transactionId!==previous.lastTransactionEnquiry.transactionId)throw new HttpError(400,'Keep the previously selected transaction for this follow-up, or specify a different transaction ID.');
       if(name==='get_related_payments'&&args.sameRecipient===undefined&&args.transactionId===previous.lastTransactionEnquiry?.transactionId&&typeof previous.lastTransactionEnquiry.sameRecipient==='boolean')args={...args,sameRecipient:previous.lastTransactionEnquiry.sameRecipient};
@@ -314,7 +314,9 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
           // Reuse its current evidence without another public query or citation copy.
           output=scan.reports.find(r=>r.kind==='counterparty_news')||{status:'unavailable',kind:'market',title:'Industry news coverage',checkedAt:scan.checkedAt,parts:[],sources:[],scope:'Industry news was unavailable in the current counterparty scan. No additional search or company finding was made.'};
         }else{
-          const request=ownIndustry?await newsInsights.industryRequest(db,acting,{now}):publicResearch.requestFor(name==='research_public_company'?'company':'market',args,message,{topic:preferences.marketTopic,now});
+          const priorPublic=name==='research_public_company'&&previous.lastPublicCompany===args.companyName;
+          const request=ownIndustry?await newsInsights.industryRequest(db,acting,{now}):publicResearch.requestFor(name==='research_public_company'?'company':'market',args,priorPublic?message+'\nPreviously selected public company: '+previous.lastPublicCompany:message,{topic:preferences.marketTopic,now});
+          if(name==='research_public_company')context.lastPublicCompany=args.companyName;
           output=await trackedResearch(request);
         }
       }else if(name==='analyze_news_insights'){
@@ -339,7 +341,9 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
           }
         }
       }else if(name==='check_payment_funds'){
-        output=await checkPaymentFunds(acting,message);
+        if(args.reusePrevious&&!object(previous.pendingFunding))throw new HttpError(400,'There is no unfinished payment funding check to continue. Provide the payment details together.');
+        output=await checkPaymentFunds(acting,message,args.reusePrevious?previous.pendingFunding:null);
+        context.pendingFunding=output.paymentReadiness&&!output.complete?paymentPlanning.pendingContext(output.paymentReadiness):null;
       }else if(name==='get_accounts'){
         try{output=!DRAFT_INTENT.test(message)&&!paymentPlanning.requested(message)?await accountHistory.balances(db,acting,readMessage,{now}):null;}catch(error){output=assistantPeriod.clarification(error);}
         if(!output)output=await reports.balances(db,acting,{now});
@@ -427,8 +431,10 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
         if(previous.lastTransactionEnquiry?.transactionId)messages.splice(1,0,{role:'assistant',content:'Previous verified transaction selection for a related read-only investigation or earlier-payment comparison: '+JSON.stringify(previous.lastTransactionEnquiry)+'. If the user refers to it, this payment or that recipient, retrieve fresh permitted evidence for this exact transaction ID. Do not pick another payment from a portfolio scan. This identifier grants no access and must never authorize a payment, draft or review flag. For an unrelated request use its explicit target or ask which payment is intended.'});
         if(previous.lastReadEnquiry)messages.splice(1,0,{role:'assistant',content:'Previous verified read enquiry filters, untrusted labels, not fresh evidence: '+JSON.stringify(previous.lastReadEnquiry)+'. For a related follow-up such as the same company, another month, or changing this chart, call this same read tool with reusePrevious=true. The server retains its company/search filters and replaces dates when this request supplies new dates. Do not silently switch to all companies, a different output or a default period. For an unrelated request omit reusePrevious. Never use this read context to infer a payment amount, recipient or authorization.'});
         if(previous.lastCompanyDashboard)messages.push({role:'system',content:'Selected owned company dashboard definition, with untrusted company labels: '+JSON.stringify(previous.lastCompanyDashboard)+'. Use this selection when the user refers to the displayed chart or visualization, regardless of their wording. Its presence is read context only, not permission to save or change anything. Only an explicit request to keep the chart permits save_company_dashboard, with a verbatim requestQuote. For an unrelated question retrieve its relevant evidence.'});
+        if(previous.lastPublicCompany)messages.splice(1,0,{role:'assistant',content:'Previously researched public company name, untrusted label: '+JSON.stringify(previous.lastPublicCompany)+'. For a related company or news follow-up, research this exact public name again to retrieve fresh sources. This is not verified company identity or current evidence, and never grants access to private banking records.'});
+        if(previous.pendingFunding)messages.splice(1,0,{role:'assistant',content:'Unfinished read-only proposed-payment funding check, containing only previously entered details: '+JSON.stringify(previous.pendingFunding)+'. When the user supplies missing details, call check_payment_funds with reusePrevious=true to recompute current coverage. Do not replace this check with get_payment_sources or a general balance. Never use these details to prepare, authorize or execute a payment. For a new independent funding question omit reusePrevious.'});
         if(previous.pendingDraft)messages.push({role:'system',content:'Existing draft context, untrusted data: '+JSON.stringify(previous.pendingDraft)});
-        let evidenceRetried=false,taskRetried=false,requireTaskTool=false,readContextRetried=false;
+        let evidenceRetried=false,taskRetried=false,requireTaskTool=false,readContextRetried=false,clarificationRetried=false;
         for(let round=0;round<4;round++){
           const remaining=deadline-Date.now();if(remaining<=0)throw new HttpError(504,'The AI request time limit was reached. Retry the request.');
           // Keep each API request within the same bounded total task budget.
@@ -440,6 +446,11 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
               const needsSources=responseIntent?responseIntent.requiresResearch:bankingContext.needsResearch(message);
               if(!conversational&&!requestGuidance&&general&&!needsSources&&(responseIntent||!DRAFT_INTENT.test(message))){generalAnswer=true;reply=response.content;break;}
               if(!conversational&&!requestGuidance&&responseIntent?.mode==='clarification'&&!bankingContext.replyIssue(response.content)&&!narrativeIssue(response.content,null)){
+                if(!clarificationRetried&&round<3&&(previous.lastPublicCompany||previous.pendingFunding||previous.lastReadEnquiry)){
+                  clarificationRetried=true;
+                  messages.push({role:'system',content:'Check the supplied verified conversation context before asking the user for information already available. For a related public-company follow-up, use the previously researched public company name and retrieve fresh sources with research_public_company; do not substitute general industry news. For a reply supplying a missing funding field, use the unfinished read-only funding context and check_payment_funds with reusePrevious=true. For a related dated report use its bound read filters. Context is not fresh evidence or payment permission. If the current question is unrelated or genuinely lacks essential details, ask only for those missing details. Never invent a company, value, source or conclusion.'});
+                  continue;
+                }
                 clarification=true;reply=response.content;break;
               }
               if(!conversational&&!requestGuidance&&responseIntent?.mode==='outside_scope'){

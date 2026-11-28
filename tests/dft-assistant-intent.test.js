@@ -2,12 +2,58 @@
 const test=require('node:test'),assert=require('node:assert/strict');
 const response=require('../banking/agents/response'),{createOpenAIModel}=require('../banking/agents/openai');
 const {createAgents}=require('../banking/agents'),{fixture}=require('./dft-helpers');
-const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','get_company_activity','project_liquidity','check_payment_funds','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments'];
+const tools=['get_accounts','get_schedules','get_banking_context','get_finance_report','search_transactions','get_company_activity','project_liquidity','check_payment_funds','analyze_news_insights','simulate_rule','investigate_transaction','get_related_payments','research_public_company'];
 const answer=(mode,reply,requiredTools=[],requiresResearch=false)=>response.parse(JSON.stringify({mode,reply,requiredTools,requiresResearch}),tools);
 const call=(name,args={})=>({role:'assistant',content:'',tool_calls:[{function:{name,arguments:args}}]});
 const provider=chat=>({mode:'openai',model:'gpt-6-luna',inspect:async()=>({available:true}),chat});
 const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const actor=async db=>(await db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+
+pg('Public company follow-ups retain the verified research target and retrieve fresh sources',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),requests=[];
+ const model={...provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','The public company information is shown with its sources [E1].',['research_public_company'],true):call('research_public_company',{companyName:'DBS Group'})),research:async request=>{
+  requests.push(request);return {status:'ready',kind:'company',title:request.title,checkedAt:request.checkedAt,parts:[{text:'DBS Group publishes information about its banking business.',annotations:[]}],sources:[{title:'DBS Group',url:'https://www.dbs.com/'}]};
+ }};
+ const agents=createAgents({db:f.db,model}),first=await agents.execute(user,'assistant',{message:'Research the public company profile of DBS Group.'});
+ const next=await agents.execute(user,'assistant',{message:'What has been in the news about it recently?',previousRunId:first.runId});
+ assert.equal(requests.length,2);assert.ok(requests.every(request=>request.query.includes('DBS Group')));assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);
+ assert.deepEqual(next.steps.map(s=>s.tool),['research_public_company']);
+ const other=(await f.db.query("SELECT * FROM users WHERE email='jamie@greenlink.demo'")).rows[0];
+ await assert.rejects(agents.execute(other,'assistant',{message:'What about its latest news?',previousRunId:first.runId}),e=>e.status===404);
+});
+
+pg('A needless public-company clarification gets one context correction before returning to fresh research',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db);let corrected=false,researchCalls=0;
+ const model={...provider(async messages=>{
+  const followup=messages.find(m=>m.role==='user').content.includes('its news');
+  if(messages.some(m=>m.role==='tool'))return answer('banking_evidence','The sourced public company information is shown below [E1].',['research_public_company'],true);
+  if(followup&&!messages.some(m=>m.content?.startsWith('Check the supplied verified conversation context')))return answer('clarification','Which company do you mean?');
+  if(followup)corrected=true;return call('research_public_company',{companyName:'DBS Group'});
+ }),research:async request=>{researchCalls++;return {status:'ready',kind:'company',title:request.title,checkedAt:request.checkedAt,parts:[],sources:[{url:'https://www.dbs.com/',title:'DBS Group'}]};}};
+ const agents=createAgents({db:f.db,model}),first=await agents.execute(user,'assistant',{message:'Research DBS Group.'});
+ const result=await agents.execute(user,'assistant',{message:'What about its news?',previousRunId:first.runId});
+ assert.equal(corrected,true);assert.equal(researchCalls,2);assert.equal(result.clarification,undefined);assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+});
+
+pg('Missing payment funding details can be completed in a read-only follow-up',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),source=(await f.db.query('SELECT id::text,number FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];let followup=false;
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ const model=provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence',followup?'The proposed payment funding check is shown below [E1].':'Please specify the source account for this funding check [E1].',['check_payment_funds']):call('check_payment_funds',followup?{reusePrevious:true}:{}));
+ const agents=createAgents({db:f.db,model}),first=await agents.execute(user,'assistant',{message:'Will we have enough to pay SGD 1000 to Harbour Supplies by the end of this month?'});
+ assert.equal(first.paymentReadiness.complete,false);followup=true;
+ const next=await agents.execute(user,'assistant',{message:'Use account '+source.number+' as the source.',previousRunId:first.runId});
+ assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);assert.equal(next.paymentReadiness.complete,true);assert.equal(next.paymentReadiness.source.id,source.id);
+ assert.equal(next.paymentReadiness.amountCents,100000);assert.equal(next.paymentReadiness.company,'Harbour Supplies');assert.ok(next.paymentReadiness.deadline.date.endsWith('-30')||next.paymentReadiness.deadline.date.endsWith('-31')||next.paymentReadiness.deadline.date.endsWith('-28'));
+ assert.deepEqual(next.actions,[]);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+});
+
+pg('A month-only follow-up replaces the finance report period rather than retaining its prior month',async t=>{
+ const now=()=>Date.parse('2026-11-28T04:00:00Z'),f=await fixture(t,{http:false,now}),user=await actor(f.db);let followup=false;
+ const model=provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','The requested finance report is ready [E1].',['get_finance_report']):call('get_finance_report',followup?{reusePrevious:true}:{}));
+ const agents=createAgents({db:f.db,model,now}),first=await agents.execute(user,'assistant',{message:'Generate a finance report from 1 to 25 November 2026.'});followup=true;
+ const next=await agents.execute(user,'assistant',{message:'What about October instead?',previousRunId:first.runId});
+ assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);assert.equal(next.financeReport.period.from,'2026-10-01');assert.equal(next.financeReport.period.to,'2026-10-31');
+});
 
 pg('Chart pin requests reach the model unchanged while appended credentials never do',async t=>{
  const f=await fixture(t,{http:false}),user=await actor(f.db);let calls=0;

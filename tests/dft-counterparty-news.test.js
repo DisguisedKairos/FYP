@@ -21,6 +21,8 @@ test('Counterparty requests contain only bounded public names and a fixed indust
  const requests=scan.requestsFor(input),text=JSON.stringify(requests);
  assert.equal(requests.length,2);assert.equal(requests[0].kind,'counterparty_sanctions');assert.equal(requests[1].kind,'counterparty_news');assert.match(text,/logistics and transport/);assert.doesNotMatch(text,/9988776655|1088800101|999000|private marker|balanceCents/);
  assert.ok(requests.every(r=>r.query.length<=1800));assert.deepEqual(scan.requestsFor({...input,companies:[]}),[]);
+ assert.ok(scan.requestsFor({...input,companies:Array.from({length:5},(_,i)=>String(i)+'x'.repeat(119))}).every(r=>r.query.length<=1800));
+ for(const source of research.OFFICIAL_SOURCES)assert.ok(requests[0].query.includes(source.url));
  assert.equal(scan.industryTopic('Private custom text 9988776655'),'general business');
 });
 test('Official sanctions research rejects non-official citations and categorical clearance claims',()=>{

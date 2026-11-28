@@ -11,6 +11,6 @@ export function paymentReadinessHtml(message){
     '<h4>Additional proposed payment</h4><p>'+esc(plan.company||'Recipient company not specified')+(plan.company?' &middot; name as entered; recipient not verified':'')+'</p>'+
     (plan.deadline?'<p><strong>Payment deadline (SGT): '+esc(plan.deadline.date)+'</strong> &middot; end of day</p>':'')+
     metrics([['Current source balance',plan.source?.balanceCents],['Active outgoing schedules through deadline',plan.scheduledOutgoingCents],['Proposed payment',plan.amountCents],['Remaining after schedules and payment',plan.afterPaymentCents],['Additional settled funds needed',plan.shortageCents],['Scheduled incoming credits excluded',plan.scheduledIncomingCents]])+
-    (plan.missing?.length?'<ul class="payment-plan-missing">'+plan.missing.map(text=>'<li>'+esc(text)+'</li>').join('')+'</ul><p>Include the amount, source account and deadline together in your next question.</p>':'')+
+    (plan.missing?.length?'<ul class="payment-plan-missing">'+plan.missing.map(text=>'<li>'+esc(text)+'</li>').join('')+'</ul><p>Reply with the missing details to continue this funding check.</p>':'')+
     '<details><summary>Planning assumptions</summary><ul>'+plan.notes.map(text=>'<li>'+esc(text)+'</li>').join('')+'</ul></details><small>Checked '+esc(fullDate(plan.generatedAt))+' SGT. This snapshot can change before payment authorization.</small></section>';
 }

@@ -55,23 +55,31 @@ function deadlineFor(message,now){
   if(until<=now || until-now>90*DAY)return {error:'Choose a payment deadline from today through the next 90 days.'};
   return {date:exclusive?sgDay(start-1):date,until,exclusiveUntil:iso(until),timeZone:'Asia/Singapore'};
 }
-function details(message,accounts,now){
+function details(message,accounts,now,previous=null){
   const missing=[],clean=message.trim().replace(/[!?]+$/,'');
   let amountCents;
-  const monetary=[...clean.matchAll(/(?:\b(?:SGD|amount)\s*|S\$\s*|\$\s*)([^\s]+)/gi)];
-  const token=monetary.length===1?monetary[0][1]:!monetary.length?clean.match(/\b(?:pay|payment of|send|transfer)\s+([-+\d][^\s]*)/i)?.[1]:null;
-  if(/\b(?:USD|EUR|MYR|AUD|GBP|CNY|HKD)\b|US\$/i.test(clean))missing.push('Use SGD; foreign-currency payment amounts are not supported by this check.');
+  const monetary=[...clean.matchAll(/(?:\bSGD\s*|S\$\s*|\$\s*)([^\s]+)/gi),...clean.matchAll(/\bamount(?:\s+(?:is|of))?\s+([-+\d][^\s]*)/gi)];
+  const bareAmount=previous&&previous.amountCents==null&&previous.sourceAccountId&&!accounts.some(a=>a.number===clean.replace(/[.!?]+$/,''))?clean.match(/^([-+\d][\d,.]*)[.!?]?$/)?.[1]:null;
+  const rawToken=monetary.length===1?monetary[0][1]:!monetary.length?clean.match(/\b(?:pay|payment of|send|transfer)\s+([-+\d][^\s]*)/i)?.[1]||bareAmount:null;
+  const token=rawToken?.replace(/[;:,.]$/,'');
+  const foreign=/\b(?:USD|EUR|MYR|AUD|GBP|CNY|HKD)\b|US\$/i.test(clean);
+  if(foreign)missing.push('Use SGD; foreign-currency payment amounts are not supported by this check.');
+  const hasAmount=monetary.length>0||Boolean(rawToken)||foreign||/\bamount\b/i.test(clean);
   if(token && /^(?:\d{1,11}|\d{1,3}(?:,\d{3})+)(?:\.\d{1,2})?$/.test(token)){
     try{amountCents=parseAmount(token.replace(/,/g,''));}catch{missing.push('Enter a positive SGD amount within the supported limit.');}
-  }else missing.push('Give one proposed payment amount in SGD, with at most two decimal places.');
-  const sourceMatches=accounts.filter(a=>[a.name,a.number].some(value=>new RegExp('\\bfrom\\s+(?:(?:my|account)\\s+)*'+literal(value)+'(?=\\s+(?:to|by|before|until|on|for|in|this|next|today|tomorrow|and|with)\\b|[.!?,;]?\\s*$)','i').test(clean)));
-  const source=sourceMatches.length===1?sourceMatches[0]:!/\bfrom\b/i.test(clean) && accounts.length===1?accounts[0]:null;
-  if(!source)missing.push('Specify an unambiguous owned source account name or number after "from".');
+  }else if(!hasAmount&&Number.isSafeInteger(previous?.amountCents)&&previous.amountCents>0)amountCents=previous.amountCents;
+  if(amountCents===undefined)missing.push('Give one proposed payment amount in SGD, with at most two decimal places.');
+  const hasSource=/\b(?:from|using|use|source)\b/i.test(clean);
+  const selection=previous?clean.replace(/^(?:(?:my|the)\s+)?(?:(?:source\s+)?account\s+(?:is\s+)?|source\s+(?:is\s+)?)?/i,'').replace(/[.!?]+$/,'').trim().toLowerCase():null;
+  const sourceMatches=accounts.filter(a=>[a.name,a.number].some(value=>selection===value.toLowerCase()||new RegExp('\\b(?:from|using|use)\\s+(?:(?:my|the|account)\\s+)*'+literal(value)+'(?=\\s*[,;]?\\s+(?:to|by|before|until|on|for|in|this|next|today|tomorrow|and|with|as (?:the )?source)\\b|[.!?,;]?\\s*$)','i').test(clean)));
+  const source=sourceMatches.length===1?sourceMatches[0]:!hasSource&&previous?accounts.find(a=>a.id===previous.sourceAccountId)||null:!hasSource&&accounts.length===1?accounts[0]:null;
+  if(!source)missing.push('Specify an unambiguous owned source account name or number.');
   const target=clean.match(/\bto\s+(?!pay\b)(.+?)(?=\s+(?:from|by|before|until|on|using|this month|next month)\b|[!?]?\s*$)/i)?.[1]?.trim().replace(/^["']|["']$/g,'');
-  const company=target && !/^(?:another|other|a|the)\s+compan(?:y|ies)$/i.test(target)?target:null;
+  const company=target && !/^(?:another|other|a|the)\s+compan(?:y|ies)$/i.test(target)?target:!target&&!/\bto\s+(?!pay\b)/i.test(clean)&&typeof previous?.company==='string'?previous.company:null;
   if(company && (company.length>120 || /[\x00-\x1f\x7f]/.test(company)))missing.push('Use a company name of at most 120 characters.');
-  if(!company && /\b(?:another|other|a|the)\s+compan(?:y|ies)\b/i.test(clean))missing.push('Name the proposed recipient company after "to".');
-  const deadline=deadlineFor(clean,now);
+  if(!company && (previous?.requiresCompany||/\b(?:another|other|a|the)\s+compan(?:y|ies)\b/i.test(clean)))missing.push('Name the proposed recipient company after "to".');
+  const hasDeadline=/\b(?:by|before|until|deadline|today|tomorrow|(?:this|current|next) month|month.end)\b|\b\d{4}-\d{2}|\b\d{1,2}\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(clean);
+  const deadline=!hasDeadline&&previous&&previous.deadlineDate===null?{error:'Specify a valid payment deadline.'}:deadlineFor(!hasDeadline&&previous?.deadlineDate?'by '+previous.deadlineDate:clean,now);
   if(deadline.error)missing.push(deadline.error);
   return {source,company,amountCents,deadline:deadline.error?null:deadline,missing};
 }
@@ -82,14 +90,15 @@ const NOTES=[
   'The proposed payment is additional to existing schedules and is placed at the end of the chosen Singapore date. Other accounts are not combined automatically.',
   'This is a funding scenario, not a forecast or payment authorization. Future receipts, cancelled schedules and other new spending can change it. Recipient, business and security checks still apply.'
 ];
-async function assess(db,user,message,{now=Date.now}={}){
+async function assess(db,user,message,{now=Date.now,previous=null}={}){
   return snapshot(db,async client=>{
     await assertCurrentUser(client,user);
     const generated=now(),generatedAt=iso(generated),today=sgDay(generated);
     const accounts=(await client.query("SELECT id::text,name,number,balance_cents FROM accounts WHERE user_id=$1 AND status='active' ORDER BY id",[user.id])).rows.map(row=>({id:row.id,name:row.name,number:row.number,balanceCents:cents(row.balance_cents)}));
-    const input=details(message,accounts,generated);
+    const input=details(message,accounts,generated,previous);
     let from=today.slice(0,7)+'-01',to=today;
-    if(/\blast month\b/i.test(message)){to=sgDay(Date.parse(from+'T00:00:00+08:00')-1);from=to.slice(0,7)+'-01';}
+    const keepPreviousMonth=previous?.flowMonth==='previous'&&!/\b(?:inflow|outflow|cash.?flow)\b[^.!?]*\b(?:this|current) month\b/i.test(message);
+    if(/\blast month\b/i.test(message)||keepPreviousMonth){to=sgDay(Date.parse(from+'T00:00:00+08:00')-1);from=to.slice(0,7)+'-01';}
     const rows=(await client.query("SELECT a.id::text AS account_id,COALESCE(sum(t.amount_cents) FILTER(WHERE t.amount_cents>0),0)::text AS income,COALESCE(sum(-t.amount_cents) FILTER(WHERE t.amount_cents<0),0)::text AS outgoing FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND t.status='completed' AND NOT t.internal AND NOT(t.type='credit' AND (t.reference='DEMO-OPENING' OR lower(btrim(t.description))='opening balance')) AND t.completed_at>=$2 AND t.completed_at<$3 AND t.completed_at<=$4 GROUP BY a.id",[user.id,from+'T00:00:00+08:00',iso(Date.parse(to+'T00:00:00+08:00')+DAY),generatedAt])).rows;
     const total=key=>cents(rows.reduce((sum,row)=>sum+BigInt(row[key]),0n)),incomeCents=total('income'),outgoingCents=total('outgoing'),sourceFlow=rows.find(row=>row.account_id===input.source?.id);
     const flow={period:{from,to,timeZone:'Asia/Singapore'},incomeCents,outgoingCents,netCents:cents(BigInt(incomeCents)-BigInt(outgoingCents)),source:input.source?{incomeCents:cents(sourceFlow?.income||0),outgoingCents:cents(sourceFlow?.outgoing||0)}:null};
@@ -113,4 +122,7 @@ async function assess(db,user,message,{now=Date.now}={}){
     return {complete:plan.complete,missing:plan.missing,paymentReadiness:plan,fundingWarnings:warnings,items:[],actions:[]};
   });
 }
-module.exports={requested,deadlineFor,details,assess};
+function pendingContext(plan){
+  return {amountCents:plan.amountCents,sourceAccountId:plan.source?.id||null,company:plan.company,deadlineDate:plan.deadline?.date||null,requiresCompany:plan.missing.some(field=>field.startsWith('Name the proposed recipient')),flowMonth:plan.flow.period.from.slice(0,7)===sgDay(Date.parse(plan.generatedAt)).slice(0,7)?'current':'previous'};
+}
+module.exports={requested,deadlineFor,details,assess,pendingContext};

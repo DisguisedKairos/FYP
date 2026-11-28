@@ -49,6 +49,27 @@ test('Combined cash-flow questions recognize whether a business can pay without 
     assert.deepEqual(input.missing,[]);assert.equal(input.source.id,'1');assert.equal(input.deadline.date,'2026-11-30');assert.equal(input.amountCents,1000);
   }
 });
+test('Read-only funding continuations preserve entered fields but never replace invalid details or closed sources',()=>{
+ const own=[{id:'1',name:'Operating savings',number:'1020001001'},{id:'2',name:'Reserve',number:'1020001002'}],previous={amountCents:100000,sourceAccountId:'1',company:'Harbour Supplies',deadlineDate:'2026-11-20'};
+ const completed=planning.details('Use account 1020001002 as the source.',own,NOW,previous);
+ assert.deepEqual(completed.missing,[]);assert.equal(completed.source.id,'2');assert.equal(completed.amountCents,100000);assert.equal(completed.company,'Harbour Supplies');assert.equal(completed.deadline.date,'2026-11-20');
+ for(const reply of ['1020001002','Reserve','The source account is 1020001002.'])assert.equal(planning.details(reply,own,NOW,previous).source.id,'2');
+ assert.equal(planning.details('Make the amount SGD 2000.',own,NOW,previous).amountCents,200000);
+ assert.equal(planning.details('1000',own,NOW,{...previous,amountCents:null}).amountCents,100000);
+ assert.equal(planning.details('1020001002',own,NOW,{...previous,amountCents:null}).amountCents,undefined);
+ for(const text of ['Use account 9999999999 as the source.','from an unknown account']){const p=planning.details(text,own,NOW,previous);assert.equal(p.source,null);assert.ok(p.missing.some(s=>/source/i.test(s)));}
+ for(const text of ['The amount is SGD 1e3','The amount is SGD 12,34','Use USD 1000'])assert.ok(planning.details(text,own,NOW,previous).missing.length);
+ const closed=planning.details('Use the same details.',[own[1]],NOW,previous);assert.equal(closed.source,null);assert.ok(closed.missing.length);
+ for(const deadlineDate of [null,'2026-11-11'])assert.ok(planning.details('from Reserve',own,NOW,{...previous,deadlineDate}).missing.some(s=>/deadline/i.test(s)));
+ assert.ok(planning.details('from Reserve',own,NOW,{...previous,company:null,requiresCompany:true}).missing.some(s=>/recipient company/i.test(s)));
+ assert.deepEqual(planning.details('Can I pay SGD 1000, to Harbour Supplies from Reserve by 2026-11-20?',own,NOW).missing,[]);
+});
+pg('Funding detail replies keep the requested cash-flow month without retaining old balances',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),source=(await accounts(f.db))[0];
+ const first=await planning.assess(f.db,user,'Summarize inflow and outflow last month. Can I pay SGD 1000 to Harbour Supplies by 2026-11-20?',{now});
+ const pending=planning.pendingContext(first.paymentReadiness);assert.equal(pending.flowMonth,'previous');assert.doesNotMatch(JSON.stringify(pending),/balance|income|outgoing|flowCents/);
+ const next=await planning.assess(f.db,user,'from '+source.number,{now,previous:pending});assert.equal(next.complete,true);assert.deepEqual(next.paymentReadiness.flow.period,first.paymentReadiness.flow.period);
+});
 pg('A dated company check counts only schedules through the Singapore cutoff and never counts historical flow or future credits as new cash',async t=>{
   const f=await fixture(t,{now,poolMax:1}),client=f.client();await client.login();const user=await actor(f.db),own=await accounts(f.db),source=own[0];
   await schedule(client,source);await schedule(client,source,{amount:'40.00',at:'2026-11-20T16:00:00Z'});

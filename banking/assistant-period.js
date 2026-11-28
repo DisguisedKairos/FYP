@@ -108,7 +108,7 @@ function requestedPeriod(message,{now=Date.now}={}){
     const end=new Date(Date.UTC(start.getUTCFullYear(),start.getUTCMonth()+3,0)).toISOString().slice(0,10);
     return {from:start.toISOString().slice(0,10),to:quarter[1].match(/this|current/i)?today:end};
   }
-  const month=candidates.find(m=>m[2]||/\b(?:in|for|during|month of)\s*$/i.test(message.slice(0,m.index))||/^[\s.!?]*$/.test(message.slice(m.index+m[0].length)));
+  const month=candidates.find(m=>m[2]||/\b(?:in|for|during|month of)\s*$/i.test(message.slice(0,m.index))||/^\s*(?:instead(?:\s*,?\s*please)?|please)?[\s.!?]*$/i.test(message.slice(m.index+m[0].length)));
   if(month){
     if(/\b(?:last|previous|next)\s*$/i.test(message.slice(0,month.index))||new RegExp('\\b(?:from|between)\\s+(?:'+MONTHS+')\\b','i').test(message))throw fail();
     const y=Number(month[2]||year),m=names.indexOf(month[1].slice(0,3).toLowerCase())+1;

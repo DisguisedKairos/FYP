@@ -5,8 +5,8 @@ const NOW=Date.parse('2026-11-12T04:00:00Z'),now=()=>NOW;
 async function login(page,email='alex@greenlink.demo'){
   await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');
 }
-async function open(t,{email='alex@greenlink.demo',width=1280}={}){
-  const f=await fixture(t,{now}),page=await launchChrome(t,{width,height:950});await page.navigate(f.baseUrl+'/login');await login(page,email);await page.click('[data-action=assistant-toggle]');return {f,page};
+async function open(t,{email='alex@greenlink.demo',width=1280,agentModel}={}){
+  const f=await fixture(t,{now,...(agentModel?{agentModel}:{})}),page=await launchChrome(t,{width,height:950});await page.navigate(f.baseUrl+'/login');await login(page,email);await page.click('[data-action=assistant-toggle]');return {f,page};
 }
 async function ask(page,message){
   const n=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',message);await page.click('#assistant-form button[type=submit]');
@@ -45,6 +45,17 @@ test('An incomplete company question shows missing details and still returns his
   await ask(page,'Can I pay SGD 100 to Harbour Supplies Pte. Ltd. from Operating savings by 2026-11-20?');
   text=await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent');
   assert.match(text,/Current funds cover this conservative/);assert.doesNotMatch(text,/\[E\d+\]|Evidence for this response/);assert.deepEqual(page.errors,[]);
+});
+test('Desktop chat completes a funding check when the customer replies with only the missing account',async t=>{
+ const agentModel={mode:'openai',model:'controlled-funding-followup',inspect:async()=>({available:true}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'The current funding check and any missing details are shown below [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'check_payment_funds',arguments:messages.some(m=>m.content?.startsWith('Unfinished read-only proposed-payment'))?{reusePrevious:true}:{}}}]}};
+ const {f,page}=await open(t,{agentModel}),source=(await f.db.query("SELECT a.number FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email='alex@greenlink.demo' ORDER BY a.id LIMIT 1")).rows[0];
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ await ask(page,'Can I pay SGD 1000 to Harbour Supplies by this month?');
+ assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent'),/More details are needed/);
+ await ask(page,source.number);
+ const text=await page.evaluate('document.querySelector(".from-assistant:last-child [data-payment-readiness]").textContent');
+ assert.match(text,/Current funds cover this conservative/);assert.match(text,/Harbour Supplies/);assert.match(text,/2026-11-30/);assert.doesNotMatch(text,/More details are needed/);
+ assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),0);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);assert.deepEqual(page.errors,[]);
 });
 test('Chat asks for one deadline when relative alternatives are given and accepts the clarified date',async t=>{
   const {f,page}=await open(t),before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;

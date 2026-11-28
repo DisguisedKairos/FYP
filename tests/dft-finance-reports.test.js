@@ -21,6 +21,8 @@ test('Month comparisons and calendar quarters retain all requested months in Sin
  assert.deepEqual(requestedPeriod('current quarter',{now:boundary}),{from:'2027-01-01',to:'2027-01-01'});
  assert.deepEqual(requestedPeriod('previous quarter',{now:boundary}),{from:'2026-10-01',to:'2026-12-31'});
  assert.deepEqual(requestedPeriod('Show May Logistics activity in October 2026',{now}),{from:'2026-10-01',to:'2026-10-31'});
+ for(const wording of ['What about October instead?','October instead, please.','How about October please?'])assert.deepEqual(requestedPeriod(wording,{now}),{from:'2026-10-01',to:'2026-10-31'});
+ assert.deepEqual(requestedPeriod('Show payments about May Logistics',{now}),{});
  for(const wording of ['October and September 2026','July and August and September 2026'])assert.throws(()=>requestedPeriod(wording,{now}),e=>e.status===400);
 });
 
