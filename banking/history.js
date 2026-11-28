@@ -50,13 +50,20 @@ async function filters(db, userId, params) {
     const columns = ['t.description', 't.counterparty', 't.reference', 'a.name', 'a.number', 't.id', 'COALESCE(t.payee,t.counterparty)'];
     conditions.push(`(${columns.map(column => `${column} ILIKE ${index} ESCAPE '\\'`).join(' OR ')})`);
   }
+  const counterparty=parameter(params,'counterparty').trim().replace(/\s+/g,' '),externalOnly=parameter(params,'externalOnly'),dateBasis=parameter(params,'dateBasis');
+  if(counterparty.length>120||/[\x00-\x1f\x7f]/.test(counterparty))throw new HttpError(400,'Choose a valid recorded company name.');
+  if(counterparty)conditions.push(`lower(btrim(regexp_replace(t.counterparty,'[[:space:]]+',' ','g')))=lower(${add(counterparty)})`);
+  if(externalOnly&&!['true','false'].includes(externalOnly))throw new HttpError(400,'Choose a valid external-activity scope.');
+  if(externalOnly==='true')conditions.push("NOT t.internal AND NOT(t.type='credit' AND (t.reference='DEMO-OPENING' OR lower(btrim(t.description))='opening balance'))");
+  if(dateBasis&&dateBasis!=='activity')throw new HttpError(400,'Choose a valid transaction date basis.');
   const type = parameter(params, 'type');
   if (type) { if (!['transfer', 'bill', 'incoming','outgoing'].includes(type)) throw new HttpError(400, 'Choose transfer, bill, incoming or outgoing activity.'); conditions.push(type === 'incoming' ? 't.amount_cents>0' : type==='outgoing'?'t.amount_cents<0':`t.type=${add(type)}`); }
   const status = parameter(params, 'status');
   if (status) { if (!['completed', 'pending_review', 'rejected'].includes(status)) throw new HttpError(400, 'Choose a valid transaction status.'); conditions.push(`t.status=${add(status)}`); }
   const range = dateRange(params);
-  if (range.start) conditions.push(`t.created_at>=${add(range.start)}::timestamptz`);
-  if (range.end) conditions.push(`t.created_at<${add(range.end)}::timestamptz`);
+  const when=dateBasis==='activity'?'COALESCE(t.completed_at,t.requested_at)':'t.created_at';
+  if (range.start) conditions.push(`${when}>=${add(range.start)}::timestamptz`);
+  if (range.end) conditions.push(`${when}<${add(range.end)}::timestamptz`);
   return { where: conditions.join(' AND '), values };
 }
 async function snapshot(db, work) { return db.transaction(work, { isolation: 'REPEATABLE READ', readOnly: true }); }

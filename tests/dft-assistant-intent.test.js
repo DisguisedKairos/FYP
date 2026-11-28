@@ -192,6 +192,8 @@ test('A model interpretation cannot substitute a default period or summary for t
  const grouped={tool:'get_company_activity',value:{status:'ready'}};
  assert.match(relevanceIssue('Show my recent transactions.',[grouped],{mode:'banking_evidence',requiresResearch:false,requiredTools:['get_company_activity']}),/receipt|search_transactions/);
  assert.match(relevanceIssue('Show a dashboard of my transactions.',[{tool:'search_transactions',value:{}}],interpreted(['search_transactions'])),/dashboard|chart/);
+ assert.match(relevanceIssue('Give me a bar graph comparing money in and money out over the past three months.',[{tool:'get_finance_report',value:{}}],interpreted(['get_finance_report'])),/dashboard|chart/);
+ assert.equal(relevanceIssue('Keep my transaction graph for later.',[{tool:'save_company_dashboard',value:{saved:true}}],{mode:'banking_evidence',requiresResearch:false,requiredTools:['save_company_dashboard']}),null);
  assert.equal(relevanceIssue('Show my current balances and explain the general liquidity context.',[accounts],interpreted(['get_accounts'])),null);
  assert.equal(relevanceIssue('What is a downloadable finance report?',[],answer('general_banking','A finance report summarizes recorded activity.').intent),null);
  assert.equal(relevanceIssue('Save my transaction dashboard.',[{tool:'save_company_dashboard',value:{saved:true}}],{mode:'banking_evidence',requiresResearch:false,requiredTools:['save_company_dashboard']}),null);

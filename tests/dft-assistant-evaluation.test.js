@@ -15,6 +15,9 @@ async function balances(db) { return (await db.query('SELECT id,balance_cents FR
 
 const cases = [
   ['grounded qualitative explanation', 'Inspect the owned account evidence before authorizing a payment [E1].', context(), false],
+  ['unfilled balance template', 'The opening balance was S$[opening balance] [E1].', context(), true],
+  ['unfilled closing value', 'The closing value is [closing balance] [E1].', context(), true],
+  ['unicode numeric claim', 'Your balance is SGD ９９９ [E1].', context(), true],
   ['structured-output remnants', 'Your company chart is shown below [E1]. 】【。]} (This is JSON mode exact).', context(), true],
   ['model drafting instructions', 'Your company chart is shown below [E1]. Ensure no numeric. Output only JSON.', context(), true],
   ['internal formatting commentary', 'Your chart is shown below [E1]. YIELD_COUNTS? no. Must meet format exact. Need no numeric facts.', context(), true],

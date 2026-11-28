@@ -225,7 +225,7 @@ export function applyBankingAction(action) {
     const aliases={dashboard:'overview',transactions:'activity','scheduled-payments':'schedules','bill-payments':'payments','fraud-monitoring':'fraud','fraud-rules':'rules'};
     const page=aliases[action.page] || action.page;
     if(page==='activity' && action.filters){
-      const f=action.filters;state.filters={...emptyFilters(),search:typeof f.q==='string'?f.q.slice(0,120):'',from:/^\d{4}-\d{2}-\d{2}$/.test(f.from||'')?f.from:'',to:/^\d{4}-\d{2}-\d{2}$/.test(f.to||'')?f.to:'',account:allAccounts().some(a=>sameId(a.id,f.accountId))?String(f.accountId):'',status:['completed','pending_review','rejected'].includes(f.status)?f.status:'',type:['transfer','bill','incoming','outgoing'].includes(f.type)?f.type:''};state.historyPage=1;
+      const f=action.filters;state.filters={...emptyFilters(),search:typeof f.q==='string'?f.q.slice(0,120):'',from:/^\d{4}-\d{2}-\d{2}$/.test(f.from||'')?f.from:'',to:/^\d{4}-\d{2}-\d{2}$/.test(f.to||'')?f.to:'',account:allAccounts().some(a=>sameId(a.id,f.accountId))?String(f.accountId):'',status:['completed','pending_review','rejected'].includes(f.status)?f.status:'',type:['transfer','bill','incoming','outgoing'].includes(f.type)?f.type:'',...(f.externalOnly==='true'?{externalOnly:'true'}:{}),...(f.dateBasis==='activity'?{dateBasis:'activity'}:{}),...(typeof f.counterparty==='string'&&f.counterparty.length<=120?{counterparty:f.counterparty}:{})};state.historyPage=1;
     }
     if(pages[page]){
       closeAssistant({focus:false});navigate(page,{account:page==='activity'?state.filters.account:''});

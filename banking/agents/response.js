@@ -87,18 +87,33 @@ function enquiryFor(tool,value){
  if(tool==='get_company_activity'&&value.scopeType!=='all'&&value.company)args.company=value.company;
  if(tool==='search_transactions'){
   const filters=value.actions?.find(a=>a.page==='activity')?.filters||{};
-  for(const key of ['q','accountId','status','type'])if(typeof filters[key]==='string'&&filters[key])args[key]=filters[key];
+  for(const key of ['q','accountId','status','type','counterparty','externalOnly','dateBasis'])if(typeof filters[key]==='string'&&filters[key])args[key]=filters[key];
  }
  const p=value.period;
  return {tool,arguments:args,...(p?.from&&p?.to?{period:{from:p.from,to:p.to}}:{})};
 }
+function compatibleEnquiry(tool,previous){
+ if(!FILTERED_READS.includes(tool)||!FILTERED_READS.includes(previous?.tool))return null;
+ if(previous.tool===tool)return previous;
+ const source=previous.arguments||{};
+ if(previous.tool==='get_company_activity'&&tool==='search_transactions')return {...previous,tool,arguments:{...(source.company?{q:source.company,counterparty:source.company}:{}),externalOnly:'true',dateBasis:'activity'}};
+ // A chart cannot represent a free-text, account, direction or status filter.
+ // Refuse conversion rather than silently expanding its scope.
+ if(Object.values(source).some(value=>value!==undefined&&value!==''))return null;
+ if(previous.period)return {...previous,tool,arguments:{}};
+ return null;
+}
 function resolveEnquiry(tool,args,message,previous,{now=Date.now}={}){
  const {reusePrevious,...current}=args;
  if(!reusePrevious)return {args:current,message};
- if(!FILTERED_READS.includes(tool)||previous?.tool!==tool)throw new HttpError(400,'Retrieve the relevant account report, transaction search or company chart before referring to its filters.');
- const resolved={...previous.arguments,...current};
+ const compatible=compatibleEnquiry(tool,previous);
+ if(!compatible)throw new HttpError(400,'Retrieve a compatible account report, transaction search or company chart before referring to its filters.');
+ const resolved={...compatible.arguments,...current};
+ // These phrases refer to a bound period, not an unfilled date field. Keep
+ // every explicit new date intact, including invalid dates needing correction.
+ if(compatible.period)message=message.replace(/\b(?:the same|those|these|same|original|selected|shown|existing)\s+(?:dates?|date range|period|range)\b/gi,'the reporting window');
  let period;try{period=require('../assistant-period').requestedPeriod(message,{now});}catch{return {args:resolved,message,boundCompany:previous.arguments?.company,resumed:true};}
- const readMessage=!period.from&&previous.period?message+'\nFor the period '+previous.period.from+' to '+previous.period.to:message;
+ const readMessage=!period.from&&compatible.period?message+'\nFor the period '+compatible.period.from+' to '+compatible.period.to:message;
  return {args:resolved,message:readMessage,boundCompany:previous.arguments?.company,resumed:true};
 }
-module.exports={INSTRUCTIONS:INSTRUCTIONS+' '+SCOPE_INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,actionRequested,savedOptions,enquiryFor,resolveEnquiry,FILTERED_READS};
+module.exports={INSTRUCTIONS:INSTRUCTIONS+' '+SCOPE_INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,actionRequested,savedOptions,enquiryFor,resolveEnquiry,compatibleEnquiry,FILTERED_READS};

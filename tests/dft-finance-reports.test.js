@@ -31,6 +31,15 @@ test('Currency values and account numbers never become calendar dates in a natur
  assert.deepEqual(requestedPeriod('Show transactions in account 1099100101 between 2026-10-01 and 2026-10-31 for SGD 10.00',{now}),{from:'2026-10-01',to:'2026-10-31'});
  assert.throws(()=>requestedPeriod('Show transactions from 1 to date',{now}),e=>e.status===400);
 });
+test('Named quarters and month-only date clarifications never silently use a default period',()=>{
+ const now=()=>Date.parse('2026-11-28T04:00:00Z');
+ for(const wording of ['Q3 2026','the third quarter of 2026','3rd quarter 2026'])assert.deepEqual(requestedPeriod(wording,{now}),{from:'2026-07-01',to:'2026-09-30'});
+ assert.deepEqual(requestedPeriod('Q4 2026',{now}),{from:'2026-10-01',to:'2026-11-28'});
+ assert.throws(()=>requestedPeriod('Q5 2026',{now}),e=>e.status===400);
+ for(const wording of ['October','October please','1 to 25 October 2026','Q3 2026','the third quarter of 2026'])assert.equal(require('../banking/assistant-period').isDateReply(wording),true);
+ assert.equal(require('../banking/assistant-period').isDateReply('October Trading Ltd.'),false);
+ assert.deepEqual(requestedPeriod('Show payments to Q3 Logistics',{now}),{});
+});
 const actor=async(db,email='alex@greenlink.demo')=>(await db.query('SELECT * FROM users WHERE email=$1',[email])).rows[0];
 async function row(db,{email='alex@greenlink.demo',amount=-100,status='completed',at='2026-01-15T00:00:00Z',requested=at,internal=false,label='Test Supplier',description='Finance test payment',reference='FINANCE-TEST'}={}){
   const account=(await db.query('SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email=$1 ORDER BY a.id LIMIT 1',[email])).rows[0];

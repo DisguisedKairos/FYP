@@ -22,6 +22,33 @@ async function chat(page){if(!await page.evaluate('!!document.querySelector("#as
 async function ask(page,text){await chat(page);const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',text);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+' && !document.querySelector("#assistant-form button[type=submit]").disabled');}
 async function logout(page){await page.click('[data-action="assistant-close"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');}
 
+test('Chart receipt searches retain company and date scope in Activity, filter changes and CSV exports',async t=>{
+ const agentModel=model(),originalChat=agentModel.chat;
+ agentModel.chat=async messages=>{
+  const text=messages.find(row=>row.role==='user').content;
+  if(!text.includes('individual receipts'))return originalChat(messages);
+  return messages.some(row=>row.role==='tool')?{content:'The matching chart receipts are shown below [E1].'}:{tool_calls:[{function:{name:'search_transactions',arguments:{reusePrevious:true}}}]};
+ };
+ const {page}=await open(t,1280,agentModel);
+ await ask(page,'Show a dashboard with Harbour Supplies for the last 30 days.');
+ await ask(page,'Show the individual receipts behind that chart.');
+ await page.click('.from-assistant:last-child [data-assistant-action]');
+ await page.waitFor('!!document.querySelector("#history-filters") && !document.querySelector("#history-results").getAttribute("aria-busy")?.includes("true")');
+ assert.equal(await page.evaluate('document.querySelector("#history-filters [name=counterparty]").value'),'Harbour Supplies Pte. Ltd.');
+ assert.equal(await page.evaluate('document.querySelector("#history-filters [name=externalOnly]").value'),'true');
+ assert.equal(await page.evaluate('document.querySelector("#history-filters [name=dateBasis]").value'),'activity');
+ assert.match(await page.evaluate('document.querySelector("[data-chart-receipt-scope]").textContent'),/settlement/);
+ await page.evaluate('window.activityRequests=[];window.activityFetch=window.fetch;window.fetch=(...args)=>{if(String(args[0]).includes("/transactions?"))window.activityRequests.push(String(args[0]));return window.activityFetch(...args);};document.querySelector("#transaction-status").value="rejected";document.querySelector("#transaction-status").dispatchEvent(new Event("change",{bubbles:true}));');
+ await page.waitFor('window.activityRequests.length>0 && document.querySelector("#history-results").getAttribute("aria-busy")==="false"');
+ const filtered=new URL(await page.evaluate('window.activityRequests.at(-1)'), 'https://bank.invalid');
+ assert.equal(filtered.searchParams.get('counterparty'),'Harbour Supplies Pte. Ltd.');assert.equal(filtered.searchParams.get('externalOnly'),'true');assert.equal(filtered.searchParams.get('dateBasis'),'activity');assert.equal(filtered.searchParams.get('status'),'rejected');
+ const exported=await page.evaluate("import('/js/history.js').then(m=>m.historyQuery({paginated:false}).toString())");
+ assert.equal(new URLSearchParams(exported).get('counterparty'),'Harbour Supplies Pte. Ltd.');
+ await page.click('[data-action=clear-filters]');await page.waitFor('!document.querySelector("#history-filters [name=externalOnly]")');
+ assert.equal(await page.evaluate("import('/js/history.js').then(m=>m.historyQuery({paginated:false}).has('dateBasis'))"),false);
+ assert.deepEqual(page.errors,[]);
+});
+
 test('Requested company charts render inside chat, resolve ambiguity and never navigate away',async t=>{
  const {f,page}=await open(t,1280),url=await page.evaluate('location.pathname');
  const user=(await f.db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];

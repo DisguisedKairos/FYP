@@ -13,7 +13,7 @@ export function cancelHistoryReads() {
 function validUser(id) { return state.user && !state.signingOut && sameId(state.user.id,id); }
 export function historyQuery({ filters = state.filters, page = state.historyPage, paginated = true } = {}) {
   const params = new URLSearchParams();
-  for (const [field, param] of [['search','q'],['account','accountId'],['type','type'],['status','status'],['from','from'],['to','to']]) {
+  for (const [field, param] of [['search','q'],['account','accountId'],['type','type'],['status','status'],['from','from'],['to','to'],['counterparty','counterparty'],['externalOnly','externalOnly'],['dateBasis','dateBasis']]) {
     if (filters[field]) params.set(param,String(filters[field]).trim());
   }
   if (paginated) { params.set('page',String(page)); params.set('pageSize',String(state.pageSize)); }

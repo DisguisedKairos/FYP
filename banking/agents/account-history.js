@@ -34,14 +34,15 @@ async function search(db,user,args,message,{now=Date.now}={}){
   const range=rangeFor(message,now),filters={...args,...(range?{from:range.from,to:range.to}:{})};
   for(const key of ['status','type'])if(filters[key]==='all')delete filters[key];
   const result=await history.list(db,user,new URLSearchParams({...filters,pageSize:'20'}));
-  const period=range?{from:range.from,to:range.to,timeZone:'Asia/Singapore',dateBasis:'Receipt date'}:null;
+  const period=range?{from:range.from,to:range.to,timeZone:'Asia/Singapore',dateBasis:filters.dateBasis==='activity'?'Completed date for settled payments; request date for pending or rejected payments.':'Receipt date'}:null;
   return {total:result.pagination.total,totals:result.totals,period,filters,transactions:result.transactions,
-    items:[...(period?[{title:'Transaction period',detail:period.from+' to '+period.to+' (inclusive, SGT); receipt dates'}]:[]),
+    items:[...(period?[{title:'Transaction period',detail:period.from+' to '+period.to+' (inclusive, SGT); '+period.dateBasis}]:[]),
+      ...(filters.externalOnly==='true'?[{title:'Chart receipt scope',detail:'External activity only; own-account transfers and opening funds excluded.'}]:[]),
       ...(filters.status||filters.type?[{title:'Transaction filters',detail:[filters.status&&'Status: '+({completed:'Completed',pending_review:'Awaiting review',rejected:'Rejected'}[filters.status]),filters.type&&'Type: '+({transfer:'Transfers',bill:'Bill payments',incoming:'Money in',outgoing:'Money out'}[filters.type])].filter(Boolean).join('; ')}]:[]),
       {title:'Matching transactions',detail:String(result.pagination.total)+' matching receipts; showing '+result.transactions.length+(result.pagination.total>result.transactions.length?'. Open Activity to view all matching records.':'.')},
       {title:'Completed money received in this search',amountCents:result.totals.incomeCents},
       {title:'Completed money paid in this search',amountCents:result.totals.outgoingCents},
-      ...result.transactions.map(t=>({title:t.description,amountCents:t.amountCents,status:t.status,date:t.createdAt,detail:t.counterparty}))],
+      ...result.transactions.map(t=>({title:t.description,amountCents:t.amountCents,status:t.status,date:filters.dateBasis==='activity'?t.completedAt||t.requestedAt:t.createdAt,detail:t.counterparty}))],
     actions:[{type:'navigate',page:'activity',label:'View matching transactions',filters}]};
 }
 module.exports={balances,search};

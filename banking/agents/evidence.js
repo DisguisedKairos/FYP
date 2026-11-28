@@ -39,6 +39,8 @@ function withoutReconciliationCounts(text, results) {
   return text;
 }
 function narrativeIssue(reply, report, { results = [], evidence = [], requireCitations = false } = {}) {
+  reply=reply.normalize('NFKC');
+  if(/\[(?!(?:E\d+)\])[^\]\n]{1,120}\]|\b(?:SGD|S?\$)\s*(?:\[|\{|<)|\b(?:insert|replace with)\s+(?:the\s+)?(?:amount|balance|figure|value)\b/i.test(reply))return 'The answer contains an unresolved placeholder. Refer to the retrieved figures in the application instead of inserting template text.';
   if(/<\/?[a-z][^>]*>|\[E\d+\][.!?,;:。！？、，；：\u3010\u3011]*[\p{L}\p{N}]/iu.test(reply))return 'The answer contains markup or malformed text adjoining an evidence reference. Use plain banking prose with separated references.';
   if(/[{}\x60]|<\/?(?:analysis|think)>|<\|(?:analysis|final|assistant)\|>|\bJSON\s+(?:mode|schema|format|object)\b|\b(?:response|output)\s+(?:mode|schema|object)\b|\b(?:output|return)\s+only\s+(?:valid\s+)?JSON\b|\b(?:need|ensure|must)\s+(?:no|only)\s+(?:numeric|digits?|numbers?)\b|\b(?:must|need to)\s+(?:meet|follow|satisfy|match)\s+(?:the\s+)?(?:output\s+|response\s+)?format\b|\b(?:format requested object|(?:ensure|need) valid JSON|YIELD_[A-Z_]+)\b/i.test(reply))return 'The answer contains formatting remnants or model drafting instructions. Return only the customer-facing banking explanation.';
   const plain = reply.replace(/[*_`]/g, '').replace(/[\u2018\u2019]/g, "'");
@@ -135,8 +137,8 @@ function relevanceIssue(message, results, intent) {
   if(intent){
     const interpreted=require('./response').issue(intent,results);
     if(interpreted||intent.mode!=='banking_evidence')return interpreted;
-    const chart=/\b(?:dashboard|chart|graph)\b/i.test(message)&&/\b(?:my|our)\b/i.test(message)&&/\b(?:transactions?|activity|inflows?|outflows?|cash[ -]?flow)\b/i.test(message)&&!require('../dashboard-views').saveIntent(message)&&!/\b(?:saved|bookmarked)\b/i.test(message);
-    if(chart&&!tools.has('get_company_activity')&&!tools.has('open_saved_dashboard'))return 'Retrieve the requested owned dashboard/chart, not only a receipt list or written summary.';
+    const chart=/\b(?:dashboard|chart|graph|visuali[sz]ation)\b/i.test(message)&&(/\b(?:transactions?|activity|inflows?|outflows?|cash[ -]?flow|money (?:in|out)|income|expenses?|payments?)\b/i.test(message)||intent.requiredTools.some(name=>['get_finance_report','search_transactions','get_accounts','get_company_activity'].includes(name)))&&!require('../dashboard-views').saveIntent(message)&&!/\b(?:saved|bookmarked)\b/i.test(message);
+    if(chart&&!tools.has('get_company_activity')&&!tools.has('open_saved_dashboard')&&!results.some(r=>r.tool==='save_company_dashboard'&&r.value?.saved))return 'Retrieve the requested owned dashboard/chart, not only a receipt list or written summary.';
     if(!chart&&/\b(?:show|list|retrieve|find|search|get)\b[^.!?]*\b(?:my|our)\s+(?:recent\s+)?transactions?\b|\b(?:my|our)\s+transaction history\b/i.test(message)&&!tools.has('search_transactions'))return 'Retrieve the requested individual receipt list using search_transactions.';
     if(/\b(?:download(?:able)?|export|pdf|csv)\b/i.test(message)&&/\b(?:finance|financial)\s+(?:activity\s+)?reports?\b/i.test(message)&&!tools.has('get_finance_report'))return 'Generate the requested downloadable finance report; account balances do not provide that output.';
     const coverageRequest=obligationsOnly(message)&&/\b(?:cover|enough|sufficient|funding|shortfalls?|short|afford)\b/i.test(message)&&!DRAFT_INTENT.test(message);

@@ -241,6 +241,17 @@ test('Desktop navigation, payment review, schedules and notifications work at la
   });
 });
 
+test('Background renders retain desktop sidebar scrolling so navigation targets stay in place',async t=>{
+  await bankingPage(t,'sidebar-refresh',{},async page=>{
+    await login(page);
+    const before=await page.evaluate('(()=>{const sidebar=document.querySelector(".sidebar");sidebar.scrollTop=sidebar.scrollHeight;return sidebar.scrollTop;})()');
+    assert.ok(before>0,'the administrator navigation needs scrolling at this desktop height');
+    await page.evaluate("import('/js/views.js').then(m=>m.render())");
+    assert.equal(await page.evaluate('document.querySelector(".sidebar").scrollTop'),before);
+    await logout(page);
+  });
+});
+
 test('administrators configure real risk rules and independently review held payments', async (t) => {
   await bankingPage(t, 'risk', {}, async (page) => {
     await login(page); const before = await snapshot(page);
