@@ -16,6 +16,19 @@ const pg=(name,fn)=>test(name,{skip:!process.env.TEST_DATABASE_URL},fn);
 const actor=async db=>(await db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
 async function financial(db){return {accounts:(await db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,transactions:(await db.query('SELECT id,status,amount_cents FROM transactions ORDER BY id')).rows,cases:(await db.query('SELECT * FROM fraud_cases ORDER BY id')).rows,rules:(await db.query('SELECT * FROM fraud_rules ORDER BY id')).rows};}
 
+pg('Public-company business advice finishes after valid planning calls without requiring exact news wording',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),model=provider(),before=await financial(f.db);let calls=0;
+ const plan=[['get_business_profile',{}],['research_public_company',{companyName:'DBS Group'}],['get_market_insights',{topic:'industry'}],['analyze_news_insights',{}]];
+ model.chat=async(messages,tools)=>{
+  const step=plan[calls++];
+  if(step)return {tool_calls:[{function:{name:step[0],arguments:step[1]}}]};
+  assert.deepEqual(tools,[],'finish using existing evidence rather than requiring an unrelated owned-company risk assessment');
+  return {content:'Review the sourced business developments and the conditional implications for your company [E2] [E4].',intent:{mode:'banking_evidence',requiresResearch:true,requiredTools:plan.map(p=>p[0])}};
+ };
+ const result=await createAgents({db:f.db,model,now}).execute(user,'assistant',{message:'Research DBS Group and explain what business risks or developments are relevant to our company.'});
+ assert.equal(calls,5);assert.equal(result.newsInsights.status,'completed');assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.deepEqual(await financial(f.db),before);
+});
+
 pg('An invalid structured advisory retains its cited briefing without inventing flags or reporting a failed whole request',async t=>{
  const f=await fixture(t,{http:false,now}),user=await actor(f.db),model=provider(),original=model.chat,before=await financial(f.db);
  model.assessNews=async()=>{throw Object.assign(new Error('Controlled schema rejection'),{code:'NEWS_ADVISORY_INVALID',validationAttempts:2});};

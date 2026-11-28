@@ -152,7 +152,10 @@ function relevanceIssue(message, results, intent) {
   }
   if(tools.has('get_banking_context')&&require('./banking-context').generalQuestion(message))return null;
   if(tools.has('get_banking_context'))message=require('./banking-context').withoutGeneralClauses(message);
-  const newsAdvice=require('../news-insights').requested(message);
+  // A completed news tool also identifies this purpose when a paraphrase
+  // omits the word news. Do not demand an unrelated private risk assessment
+  // before the final semantic answer can be requested and validated.
+  const newsAdvice=require('../news-insights').requested(message)||tools.has('analyze_news_insights');
   if(newsAdvice&&!tools.has('analyze_news_insights'))return 'Retrieve sourced public news and its advisory analysis before offering the requested news advice or flags.';
   // Public implications are not requests for an account projection. Remove only
   // those qualified phrases; retain owned metrics and separate banking clauses.
