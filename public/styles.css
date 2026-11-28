@@ -307,50 +307,50 @@ dialog.wide-dialog { width:900px; }
 .assistant-popup { position:fixed; right:max(24px,env(safe-area-inset-right)); bottom:calc(86px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; width:440px; max-width:calc(100vw - 32px); height:min(680px,calc(100vh - 110px)); height:min(680px,calc(100dvh - 110px - env(safe-area-inset-bottom))); overflow:hidden; border:1px solid var(--line); border-radius:16px; background:#fff; box-shadow:0 16px 64px #17345933; }
 .assistant-window-actions { display:flex; flex:0 0 auto!important; align-items:center; gap:12px; }
 .assistant-window-actions .icon-button { width:32px; height:32px; }
-.assistant-disclosure { padding:11px 18px; background:#f1f5fb; border-bottom:1px solid var(--line); color:var(--muted); font-size:12px; line-height:1.6; flex-shrink:0; }
+.assistant-disclosure { padding:11px 18px; background:#f1f5fb; border-bottom:1px solid var(--line); color:var(--muted); font-size:14px; line-height:1.6; flex-shrink:0; }
 .assistant-panel-heading { display:flex; align-items:center; gap:13px; padding:15px 18px; border-bottom:1px solid var(--line); flex-shrink:0; }
 .assistant-panel-heading>div { flex:1; min-width:0; }
-.assistant-panel-heading h2 { font-size:18px; }
+.assistant-panel-heading h2 { font-size:20px; }
 .assistant-panel-heading p { font-size:12px; color:var(--muted); line-height:1.6; margin-top:4px; }
 .assistant-thread { flex:1; min-height:0; overflow-y:auto; padding:18px; display:flex; flex-direction:column; gap:16px; overscroll-behavior:contain; }
 .assistant-welcome { text-align:center; margin:auto; padding:12px 8px; max-width:360px; }
 .assistant-welcome>.icon { color:var(--green); width:28px; height:28px; margin-bottom:10px; }
-.assistant-welcome h3 { font-size:18px; line-height:1.5; }
-.assistant-welcome p { color:var(--muted); font-size:14px; line-height:1.7; margin-top:8px; }
+.assistant-welcome h3 { font-size:22px; line-height:1.5; }
+.assistant-welcome p { color:var(--muted); font-size:18px; line-height:1.7; margin-top:8px; }
 .assistant-message { width:96%; max-width:100%; padding:13px 14px; border:1px solid var(--line); border-radius:10px 10px 10px 0; background:#f6f8fc; align-self:flex-start; }
 .assistant-message.from-user { align-self:flex-end; width:auto; max-width:85%; background:var(--pine); color:#fff; border-color:var(--pine); border-radius:10px 10px 0 10px; }
 .assistant-message-header { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:4px 10px; margin-bottom:9px; }
-.assistant-message-author { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:650; color:#315b89; }
-.assistant-message-time { font-size:12px; line-height:1.5; color:#64748b; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.assistant-message-author { display:flex; align-items:center; gap:6px; font-size:14px; font-weight:650; color:#315b89; }
+.assistant-message-time { font-size:14px; line-height:1.5; color:#64748b; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .assistant-message.from-user .assistant-message-time { color:#c8dcf6; }
 .assistant-message-author .icon { width:13px; height:13px; }
 .assistant-message.from-user .assistant-message-author { color:#c8dcf6; }
-.assistant-message-text { font-size:16px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
+.assistant-message-text { font-size:20px; line-height:1.7; white-space:pre-wrap; overflow-wrap:anywhere; }
 .from-assistant .assistant-message-text { margin:0; white-space:pre-line; }
 .assistant-items { list-style:none; padding:0; margin:15px 0 0; }
-.assistant-items>li { display:flex; justify-content:space-between; gap:16px; border-top:1px solid #e0e7f2; padding:13px 0; font-size:14px; }
-.assistant-items strong { display:block; font-size:14px; line-height:1.6; }
-.assistant-items small { display:block; font-size:12px; color:var(--muted); margin-top:5px; line-height:1.7; overflow-wrap:anywhere; }
+.assistant-items>li { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px 16px; border-top:1px solid #e0e7f2; padding:13px 0; font-size:16px; }
+.assistant-items strong { display:block; font-size:16px; line-height:1.6; overflow-wrap:anywhere; }
+.assistant-items small { display:block; font-size:14px; color:var(--muted); margin-top:5px; line-height:1.7; overflow-wrap:anywhere; }
 .assistant-items>li>span { flex-shrink:0; font-weight:600; line-height:1.7; }
-.assistant-items ul { padding-left:16px; font-size:13px; color:var(--muted); line-height:1.9; margin:10px 0 0; }
+.assistant-items ul { padding-left:16px; font-size:16px; color:var(--muted); line-height:1.9; margin:10px 0 0; }
 .assistant-actions { display:flex; flex-wrap:wrap; gap:9px; margin-top:16px; }
-.assistant-actions .button { font-size:13px; }
-.assistant-evidence { margin-top:14px; border-top:1px solid #e0e7f2; padding-top:10px; font-size:13px; color:var(--muted); }
+.assistant-actions .button { font-size:16px; }
+.assistant-evidence { margin-top:14px; border-top:1px solid #e0e7f2; padding-top:10px; font-size:16px; color:var(--muted); }
 .assistant-evidence summary { cursor:pointer; width:fit-content; font-weight:600; }
 .assistant-evidence summary:focus-visible { outline:2px solid var(--pine); outline-offset:4px; }
 .assistant-evidence ul { padding-left:18px; line-height:1.8; overflow-wrap:anywhere; }
-.assistant-response-status { min-height:20px; margin:0 18px; flex-shrink:0; font-size:13px; color:var(--green); line-height:1.8; }
+.assistant-response-status { min-height:20px; margin:0 18px; flex-shrink:0; font-size:14px; color:var(--green); line-height:1.8; }
 .assistant-error { margin:5px 18px 10px; max-height:110px; min-height:0; overflow:auto; flex-shrink:1; }
 .assistant-suggestions { display:flex; flex-wrap:wrap; gap:6px; padding:0 18px 12px; max-height:100px; min-height:0; overflow:auto; flex-shrink:1; }
 .assistant-suggestions:empty, .assistant-response-status:empty { display:none; }
-.assistant-suggestion { border:1px solid #dce5f1; background:#fff; border-radius:18px; padding:7px 10px; color:#315b89; font-size:13px; line-height:1.5; text-align:left; }
+.assistant-suggestion { border:1px solid #dce5f1; background:#fff; border-radius:18px; padding:7px 10px; color:#315b89; font-size:14px; line-height:1.5; text-align:left; }
 .assistant-suggestion:hover { background:#edf3fb; }
 .assistant-form { padding:12px 18px 14px; border-top:1px solid var(--line); flex-shrink:0; }
-.assistant-form>label { display:block; font-size:13px; font-weight:600; margin-bottom:9px; }
+.assistant-form>label { display:block; font-size:14px; font-weight:600; margin-bottom:9px; }
 .assistant-composer { display:flex; gap:12px; align-items:flex-end; }
-.assistant-composer textarea { display:block; flex:1; min-width:0; resize:none; min-height:64px; max-height:100px; border:1px solid #dce5f1; border-radius:7px; padding:12px; font-size:16px; line-height:1.8; color:var(--ink); }
-.assistant-composer .button { flex-shrink:0; font-size:13px; }
-.assistant-form>small { display:block; color:var(--muted); font-size:12px; line-height:1.6; margin-top:8px; }
+.assistant-composer textarea { display:block; flex:1; min-width:0; resize:none; min-height:64px; max-height:100px; border:1px solid #dce5f1; border-radius:7px; padding:12px; font-size:20px; line-height:1.8; color:var(--ink); }
+.assistant-composer .button { flex-shrink:0; font-size:16px; }
+.assistant-form>small { display:block; color:var(--muted); font-size:13px; line-height:1.6; margin-top:8px; }
 @media(max-width:600px) {
   .history-totals { gap:8px; }
   .history-totals strong { font-size:12px; }
@@ -368,7 +368,6 @@ dialog.wide-dialog { width:900px; }
   .assistant-message { width:94%; padding:14px; }
   .assistant-message.from-user { max-width:94%; }
   .assistant-welcome { padding:20px 5px; }
-  .assistant-welcome h3 { font-size:18px; }
   .assistant-items>li { flex-wrap:wrap; gap:8px; }
   .assistant-actions .button { width:100%; }
   .assistant-form { padding:10px 15px 12px; }
@@ -376,7 +375,6 @@ dialog.wide-dialog { width:900px; }
   .assistant-composer textarea { min-height:60px; }
   .assistant-composer .button { padding:10px 12px; }
   .assistant-suggestions { padding:0 15px 14px; }
-  .assistant-suggestion { font-size:10px; }
   .assistant-response-status { margin:0 15px; }
   .assistant-error { margin:5px 15px 12px; }
 }
