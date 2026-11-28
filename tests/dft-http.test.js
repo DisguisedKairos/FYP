@@ -68,6 +68,16 @@ pgTest('DFT search escapes SQL and LIKE metacharacters, validates filters and ex
   assert.equal(corrupt.status,409,'Positive drift must not be invented as an opening balance.');
 });
 
+pgTest('Money-out history and CSV apply the same owned status/type filters',async t=>{
+ const f=await fixture(t),client=f.client();await client.login();const before=await client.dashboard(),main=accountNamed(before,'Operating savings');
+ const id=randomUUID();await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill','Awaiting filtered invoice',-123,'Filter Supplier','pending_review',now(),now())",[id,main.id]);
+ const result=await client.history({type:'outgoing',status:'pending_review'});assert.equal(result.pagination.total,1);assert.equal(result.transactions[0].id,id);assert.ok(result.transactions.every(r=>r.amountCents<0&&r.status==='pending_review'));
+ const csv=await client.request('/api/transactions/export?type=outgoing&status=pending_review',{responseType:'text'});assert.equal(csv.status,200);assert.match(csv.data,new RegExp(id));assert.equal(csv.data.trim().split('\r\n').length,2);
+ assert.ok((await client.history({type:'outgoing'})).transactions.every(r=>r.amountCents<0));assert.ok((await client.history({type:'incoming'})).transactions.every(r=>r.amountCents>0));
+ for(const query of ['type=outgoings','type=all','status=all'])assert.equal((await client.request('/api/transactions?'+query)).status,400);
+ assert.equal(totalBalance(await client.dashboard()),totalBalance(before));
+});
+
 pgTest('DFT private assistant uses owned PostgreSQL data, redacts secrets and only prepares authorized form drafts',async t=>{
   const f=await fixture(t),client=f.client();await client.login();const before=await client.dashboard();
   const ask=message=>client.request('/api/assistant/messages',{method:'POST',body:{message}});

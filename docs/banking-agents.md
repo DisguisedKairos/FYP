@@ -80,6 +80,8 @@ Natural alternatives are supported: “Generate a finance report from 1 to 25 No
 
 Related read-only follow-ups can keep the company and search filters: after a company chart, ask **Show the same company for October 2026 instead.** After a filtered transaction search, ask **What about October 2026 for the same company?** Keep these in the same conversation. The assistant retrieves fresh owned records; it does not reuse old balances or carry payment instructions into a new request. An explicit bar or line chart request overrides the display preference for that chart, and saving the displayed chart retains its style. **Compare our inflow and outflow in September and October 2026 as a chart** covers both months; **Show a dashboard of my transaction trends this quarter** uses the Singapore calendar quarter through today.
 
+Receipt searches also support natural status and type requests, such as **Show only my payments still waiting for approval**, **List the payments that were turned down**, **Show money received**, or **Show my bill payments**. Filters apply to the full owned history before selecting the displayed receipts. Related follow-ups can change or clear a status/type while retaining the company, account and dates. **View matching transactions** carries those same filters into Activity and its CSV export. Money out includes outgoing transfers and bills; it is distinct from transfer-only activity.
+
 Natural form requests can use "one-off" or "one-time" for a single payment. An explicit future date stays in a scheduled review form; an unspecified recurrence still needs clarification. The payment-source list contains your own accounts, so it cannot establish that a supplied recipient is missing. Verify the recipient in the banking form. To save a displayed chart, you can also ask **Pin this visualization as "Supplier review" and refresh it weekly.** The chart verb is distinct from a security PIN; never include security values in chat.
 
 Payment forms also accept comma- or semicolon-separated fields and explicit Singapore times such as tomorrow at noon or midnight. Vague times such as afternoon still need a precise time. Company-risk and counterparty research tools accept the model's interpretation of a relationship question without requiring reputation, sanctions or news keywords; ownership, source isolation and identity limitations remain enforced.
@@ -111,6 +113,8 @@ For administrator demonstrations, sign out of the customer account and sign in a
 4. Open **AI audit** using the administrator navigation. It shows permitted structured model/tool activity, not hidden model reasoning or other users' private conversations.
 
 After investigating a specific payment, ask **How does it compare with earlier completed payments to that recipient?** The conversation retains only the verified transaction selection and retrieves fresh evidence for that payment. An unrelated enquiry clears this selection; changing the target requires specifying the new transaction ID. Previous read context cannot authorize a payment or create a review flag.
+
+Same-recipient comparisons filter by the recorded recipient identifier before limiting the history. When that identifier is unavailable, the comparison uses the recorded company label and says identity is unverified. A similar label cannot merge different recorded recipient identifiers. Ask for **all recipients on that source account** to widen the comparison explicitly; the fact card labels the selected scope.
 
 ## Guidance and missing details
 

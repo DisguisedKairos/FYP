@@ -21,7 +21,7 @@ The browser uses same-origin `/api`. `GET /api/session` establishes/loads the op
 | PATCH/DELETE | `/api/accounts/:id` | Rename `{name}` / safe zero-balance closure |
 | POST | `/api/transfers` | Authorized transfer |
 | POST | `/api/payments` | Authorized bill |
-| GET | `/api/transactions` | Owned filtered/paginated history |
+| GET | `/api/transactions` | Owned filtered/paginated history; `q`, `accountId`, `type` (`transfer`, `bill`, `incoming`, `outgoing`), `status` (`completed`, `pending_review`, `rejected`), `from`, `to`, `page`, `pageSize` |
 | GET | `/api/transactions/:id` | Owned transaction receipt |
 | GET | `/api/transactions/export` | Filtered CSV |
 | GET | `/api/statements` | Reconciled statement; required `accountId`, optional `from`,`to` |

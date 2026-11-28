@@ -87,7 +87,7 @@ function enquiryFor(tool,value){
  if(tool==='get_company_activity'&&value.scopeType!=='all'&&value.company)args.company=value.company;
  if(tool==='search_transactions'){
   const filters=value.actions?.find(a=>a.page==='activity')?.filters||{};
-  for(const key of ['q','accountId'])if(typeof filters[key]==='string'&&filters[key])args[key]=filters[key];
+  for(const key of ['q','accountId','status','type'])if(typeof filters[key]==='string'&&filters[key])args[key]=filters[key];
  }
  const p=value.period;
  return {tool,arguments:args,...(p?.from&&p?.to?{period:{from:p.from,to:p.to}}:{})};

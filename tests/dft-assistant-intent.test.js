@@ -198,6 +198,25 @@ pg('An investigation follow-up reuses the verified transaction selection and rej
  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });
 
+pg('Same-recipient comparisons filter before limiting history and never merge another recipient with the same label',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),target=(await f.db.query('SELECT t.* FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE a.user_id=$1 AND t.amount_cents<0 ORDER BY t.requested_at DESC LIMIT 1',[user.id])).rows[0];
+ const recipient='recipient-binding-test';await f.db.query('UPDATE transactions SET payee=$2 WHERE id=$1',[target.id,recipient]);
+ const ids=[];let net=0;
+ for(let i=0;i<28;i++){
+  const id=require('node:crypto').randomUUID(),matches=i<2,stamp=new Date(Date.parse(target.requested_at)-(matches?100000:10000)-i*100).toISOString();if(matches)ids.push(id);
+  await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,payee,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,'transfer','Recipient comparison boundary',-100,$3,$4,'completed',$5,$5,$5,nextval('settlement_sequence'))",[id,target.account_id,i===0||i===2?target.counterparty:matches?'Alternate recorded label':'Other recipient',matches?recipient:'other-recipient-'+i,stamp]);net-=100;
+ }
+ await f.db.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1',[target.account_id,net]);const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ let args={transactionId:target.id,sameRecipient:true};const agents=createAgents({db:f.db,model:provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','The requested earlier payment records are shown below [E1].',['get_related_payments']):call('get_related_payments',args))});
+ const first=await agents.execute(user,'assistant',{message:'Show earlier payments to the same recipient as '+target.id+'.'});assert.equal(first.narrativeWithheld,undefined,first.narrativeIssue);
+ const selected=(await agents.detail(user,first.runId)).steps[0].result;assert.deepEqual(selected.payments.map(p=>p.id).sort(),ids.sort());assert.equal(selected.scope,'same_recipient');assert.equal(selected.recipientMatch,'recorded_identifier');assert.ok(first.items.some(i=>i.title==='Earlier completed payments shown'&&i.detail.includes('same recorded recipient')));
+ args={transactionId:target.id};const repeat=await agents.execute(user,'assistant',{message:'Show that comparison again.',previousRunId:first.runId});assert.deepEqual((await agents.detail(user,repeat.runId)).steps[0].result.payments.map(p=>p.id).sort(),ids);
+ args.sameRecipient=false;const all=await agents.execute(user,'assistant',{message:'Include all recipients on that source account.',previousRunId:repeat.runId});const whole=(await agents.detail(user,all.runId)).steps[0].result;assert.equal(whole.scope,'source_account');assert.equal(whole.payments.length,20);assert.ok(whole.payments.some(p=>p.counterparty!==target.counterparty));
+ await f.db.query('UPDATE transactions SET payee=NULL WHERE id=$1',[target.id]);args.sameRecipient=true;const named=await agents.execute(user,'assistant',{message:'Compare earlier payments to the same recorded company as '+target.id+'.'});const fallback=(await agents.detail(user,named.runId)).steps[0].result;assert.equal(fallback.recipientMatch,'recorded_name');assert.ok(fallback.payments.every(p=>p.counterparty.trim().toLowerCase()===target.counterparty.trim().toLowerCase()));assert.match(fallback.limitation,/do not independently verify legal identity/);
+ const foreign=(await f.db.query("SELECT * FROM users WHERE email='jamie@greenlink.demo'")).rows[0];await assert.rejects(agents.execute(foreign,'assistant',{message:'Compare earlier payments for '+target.id+'.'}),e=>e.status===404);
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+});
+
 pg('Natural fraud rule requests advertise canonical identifiers and supported review actions',async t=>{
  const f=await fixture(t,{http:false}),user=(await f.db.query("SELECT * FROM users WHERE email='reviewer@greenlink.demo'")).rows[0];
  const agents=createAgents({db:f.db,model:provider(async(messages,schemas)=>{
@@ -410,6 +429,33 @@ pg('A filtered receipt follow-up retains company and account filters instead of 
  const filters=next.actions.find(a=>a.page==='activity').filters;
  assert.equal(filters.q,'Harbour Supplies');assert.equal(filters.accountId,account);assert.equal(filters.from,'2026-10-01');assert.equal(filters.to,'2026-10-31');
  assert.deepEqual(next.steps.map(s=>s.tool),['search_transactions']);assert.equal(next.narrativeWithheld,undefined,next.narrativeIssue);
+});
+
+pg('Receipt status and type filters query the full owned history and can be changed or cleared in follow-ups',async t=>{
+ const f=await fixture(t,{http:false}),user=await actor(f.db),source=(await f.db.query('SELECT id FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const supplier='Filter Boundary Supplier',ids=[],stamp=new Date(Date.now()-86400000).toISOString();let net=0;
+ for(const [status,type,amount]of [['pending_review','bill',-123],['rejected','transfer',-200],['completed','credit',300],['completed','bill',-50]]){
+  const id=require('node:crypto').randomUUID();ids.push(id);
+  await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,CASE WHEN $7='completed' THEN nextval('settlement_sequence') ELSE NULL END)",[id,source.id,type,'Filter boundary entry',amount,supplier,status,stamp,status==='completed'?stamp:null]);if(status==='completed')net+=amount;
+ }
+ for(let i=0;i<25;i++){await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at,completed_at,settlement_seq) VALUES($1,$2,'credit','Newer unrelated entry',1,'Other Supplier','completed',now(),now(),now(),nextval('settlement_sequence'))",[require('node:crypto').randomUUID(),source.id]);net++;}
+ await f.db.query('UPDATE accounts SET balance_cents=balance_cents+$2 WHERE id=$1',[source.id,net]);
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;let args={q:supplier,status:'pending_review',type:'outgoing',accountId:String(source.id)};
+ const agents=createAgents({db:f.db,model:provider(async messages=>messages.some(m=>m.role==='tool')?answer('banking_evidence','The matching receipt records are shown below [E1].',['search_transactions']):call('search_transactions',args))});let previousRunId;
+ const cases=[
+  ['Find my outgoing receipts for '+supplier+' awaiting approval in the last 90 days.',args,[ids[0]]],
+  ['Include all statuses for the same company and period.',{reusePrevious:true,status:'all'},[ids[0],ids[1],ids[3]]],
+  ['Now only money received, keeping that company and period.',{reusePrevious:true,type:'incoming'},[ids[2]]],
+  ['Include all transaction types, but only completed ones.',{reusePrevious:true,type:'all',status:'completed'},[ids[2],ids[3]]],
+  ['Include all statuses again.',{reusePrevious:true,status:'all'},ids],
+ ];
+ for(const [message,nextArgs,expected]of cases){args=nextArgs;const r=await agents.execute(user,'assistant',{message,...(previousRunId?{previousRunId}:{})});previousRunId=r.runId;assert.equal(r.narrativeWithheld,undefined,r.narrativeIssue);
+  const read=(await agents.detail(user,r.runId)).steps[0].result;assert.equal(read.total,expected.length);assert.deepEqual(read.transactions.map(x=>x.id).sort(),[...expected].sort());
+  const filters=r.actions.find(a=>a.page==='activity').filters;assert.equal(filters.q,supplier);assert.equal(filters.accountId,String(source.id));assert.ok(filters.from&&filters.to);assert.notEqual(filters.status,'all');assert.notEqual(filters.type,'all');
+ }
+ for(const invalid of [{status:'approved'},{type:'debit'},{status:"rejected' OR 1=1 --"}]){args=invalid;await assert.rejects(agents.execute(user,'assistant',{message:'Show my individual receipts.'}),e=>e.status===400);}
+ const foreign=(await f.db.query('SELECT id FROM accounts WHERE user_id<>$1 ORDER BY id LIMIT 1',[user.id])).rows[0];args={accountId:String(foreign.id),status:'completed'};await assert.rejects(agents.execute(user,'assistant',{message:'Show my completed receipts.'}),e=>e.status===404);
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });
 
 pg('An earlier chart read cannot replace the latest receipt-search context',async t=>{

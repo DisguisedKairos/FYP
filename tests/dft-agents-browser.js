@@ -398,6 +398,18 @@ test('Recent transaction replies display the entire bounded receipt list with it
  assert.deepEqual(page.errors,[]);
 });
 
+test('Opening matching transactions preserves the assistant status and money-out filters',async t=>{
+ const agentModel={mode:'openai',model:'controlled-openai',inspect:async()=>({available:true}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'The matching receipt records are shown below [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'search_transactions',arguments:{q:'Filter Supplier',status:'pending_review',type:'outgoing'}}}]}};
+ const {f,page}=await open(t,390,'jamie@greenlink.demo',{agentModel});
+ const account=(await f.db.query("SELECT a.id FROM accounts a JOIN users u ON u.id=a.user_id WHERE u.email='jamie@greenlink.demo' ORDER BY a.id LIMIT 1")).rows[0];
+ await f.db.query("INSERT INTO transactions(id,account_id,type,description,amount_cents,counterparty,status,created_at,requested_at) VALUES($1,$2,'bill','Awaiting filtered invoice',-123,'Filter Supplier','pending_review',now(),now())",[randomUUID(),account.id]);
+ await visit(page,f.baseUrl,'/assistant');await page.fill('#assistant-message','List my money-out entries for Filter Supplier that are still waiting for approval.');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('!!document.querySelector(".from-assistant [data-assistant-action]") && document.querySelector("#assistant-form").getAttribute("aria-busy")==="false"');
+ await page.click('.from-assistant [data-assistant-action]');await page.waitFor('location.pathname==="/activity" && !!document.querySelector("#history-results .transaction-table")');
+ assert.equal(await page.evaluate('document.querySelector("#transaction-type").value'),'outgoing');assert.equal(await page.evaluate('document.querySelector("#transaction-status").value'),'pending_review');assert.equal(await page.evaluate('document.querySelector("#transaction-search").value'),'Filter Supplier');
+ assert.equal(await page.evaluate('document.querySelectorAll("#history-results tbody tr").length'),1);assert.match(await page.evaluate('document.querySelector("#history-results").textContent'),/Awaiting filtered invoice/);assert.deepEqual(page.errors,[]);
+});
+
 
 test('Banking insights is absent for customers and staff while the chatbot and audit access remain available',async t=>{
  for(const [width,email] of [[390,'jamie@greenlink.demo'],[1280,'reviewer@greenlink.demo']]){

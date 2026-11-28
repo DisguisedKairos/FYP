@@ -220,7 +220,7 @@ function assistantItems(name,value){
     ];
   }
   if(name==='get_related_payments')return [
-    {title:'Earlier completed payments shown',value:String(value.payments.length),detail:'Up to 20 payments completed before the selected payment on the same source account.'},
+    {title:'Earlier completed payments shown',value:String(value.payments.length),detail:value.scope==='same_recipient'?'Up to 20 earlier payments to the same recorded recipient on this source account. Recorded identity is unverified.':'Up to 20 payments completed before the selected payment on the same source account; all recipients.'},
     ...value.payments.map(payment=>({title:payment.description,amountCents:payment.amountCents,date:payment.completedAt,detail:payment.counterparty+'; receipt '+payment.id})),
   ];
   if(name==='simulate_rule')return [

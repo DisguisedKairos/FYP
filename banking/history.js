@@ -51,7 +51,7 @@ async function filters(db, userId, params) {
     conditions.push(`(${columns.map(column => `${column} ILIKE ${index} ESCAPE '\\'`).join(' OR ')})`);
   }
   const type = parameter(params, 'type');
-  if (type) { if (!['transfer', 'bill', 'incoming'].includes(type)) throw new HttpError(400, 'Choose transfer, bill or incoming activity.'); conditions.push(type === 'incoming' ? 't.amount_cents>0' : `t.type=${add(type)}`); }
+  if (type) { if (!['transfer', 'bill', 'incoming','outgoing'].includes(type)) throw new HttpError(400, 'Choose transfer, bill, incoming or outgoing activity.'); conditions.push(type === 'incoming' ? 't.amount_cents>0' : type==='outgoing'?'t.amount_cents<0':`t.type=${add(type)}`); }
   const status = parameter(params, 'status');
   if (status) { if (!['completed', 'pending_review', 'rejected'].includes(status)) throw new HttpError(400, 'Choose a valid transaction status.'); conditions.push(`t.status=${add(status)}`); }
   const range = dateRange(params);

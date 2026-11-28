@@ -65,9 +65,9 @@ const properties = {
   analyze_market_transactions:{transactionId:{type:'string'}},
   flag_transaction_for_review:{transactionId:{type:'string'},signalCode:{type:'string'}},
   get_accounts:{},get_payment_sources:{},get_schedules:{},reconcile_accounts:{},
-  search_transactions:{q:{type:'string'},accountId:{type:'string'}},
+  search_transactions:{q:{type:'string'},accountId:{type:'string',description:'Optional exact owned account ID, not its account number. Retrieve get_accounts if an ID is needed.'},status:{type:'string',enum:['completed','pending_review','rejected','all'],description:'Interpret the requested lifecycle status: awaiting approval/review is pending_review; turned down is rejected. Use all only when explicitly clearing a previous status filter.'},type:{type:'string',enum:['transfer','bill','incoming','outgoing','all'],description:'Interpret the requested activity: money received is incoming, money leaving is outgoing, utility/biller receipts are bill. Use all only when explicitly clearing a previous type filter.'}},
   project_liquidity:{days:{type:'integer'}},
-  investigate_transaction:{transactionId:{type:'string'}},get_related_payments:{transactionId:{type:'string'}},
+  investigate_transaction:{transactionId:{type:'string'}},get_related_payments:{transactionId:{type:'string'},sameRecipient:{type:'boolean',description:'True when comparing earlier payments to the same recipient/payee/company; false only for all recipients on the source account. Interpret the requested scope rather than filtering a bounded mixed list in prose.'}},
   simulate_rule:{ruleId:{type:'string',enum:['high_value','new_payee','velocity','balance_utilization','daily_limit'],description:'Canonical rule ID: high_value (payment amount), new_payee (new recipient amount), velocity (recent payment count), balance_utilization (balance percentage), daily_limit (daily outgoing amount).'},threshold:{type:'number',exclusiveMinimum:0,description:'SGD for amount rules, whole payment count for velocity, or percentage up to 100 for balance_utilization.'},enabled:{type:'boolean'},action:{type:'string',enum:['review','block']},days:{type:'integer',minimum:1,maximum:90}},
   prepare_payment_draft:Object.fromEntries(['kind','type','fromAccountId','toAccountNumber','billerId','reference','amount','description','scheduledAt','frequency'].map(key=>[key,{type:'string'}])),
 };
@@ -99,10 +99,10 @@ const descriptions = {
   get_accounts:'Read current owned balances, or historical opening and closing balances when the question supplies a past date range. Dates come only from the message. Current balance is not historical closing balance. Otherwise returns active accounts and available balances, plus a read-only default 30-day scheduled-payment funding check. Use for balance or low-funds enquiries. Returned fundingCheck warnings must be highlighted. No fixed low-balance threshold or payment execution. For a specific upcoming planning period, use project_liquidity.',
   get_payment_sources:'Read current owned payment-source accounts and available funds before preparing any payment review form. This is a source list, not a recipient directory: a destination absent from this list is not evidence that it is missing or invalid. Recipient details need verification in the banking form. This always reads current funds, even when the proposed schedule is for a future date; it is not a historical balance enquiry. No arguments, no payment execution. Use this before prepare_payment_draft.',
   get_schedules:'Read up to 50 of the signed-in operator\'s scheduled instructions. No execution or cancellation.',
-  search_transactions:'Retrieve individual owned receipt records and matching totals. Use for itemized money movements, individual entries or what happened in an account; the user need not say transaction or history. This is distinct from an aggregate finance report or chart. The date range is parsed by the server from the current message. q is only an explicit company, description or reference term, never dates, generic money-movement words or the whole question. Returns complete matching totals and up to 20 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
+  search_transactions:'Retrieve individual owned receipt records and matching totals. Use for itemized money movements, individual entries or what happened in an account; the user need not say transaction or history. This is distinct from an aggregate finance report or chart. The date range is parsed by the server from the current message. q is only an explicit company, description or reference term, never dates, lifecycle status, activity type, generic money-movement words or the whole question. Apply status and type as separate filters by meaning, rather than filtering a bounded recent list in prose. For a related follow-up use reusePrevious=true to retain the company/account/period and change only explicitly requested filters; use all to clear a status or type. Returns complete matching totals and up to 20 receipts, labelled with the exact Singapore date period and truncation. A filtered Activity action shows all matches.',
   project_liquidity:'Project owned balances using scheduled occurrences over 1-90 days. Includes draft-only funding suggestions.',
   investigate_transaction:'Bank staff only: inspect a specific outgoing payment, original risk assessment, latest saved monitoring signals and current human investigation status/outcome. Distinguish later findings from the original payment decision.',
-  get_related_payments:'Compare up to 20 earlier completed payments on the source account of a permitted transaction.',
+  get_related_payments:'Compare up to 20 earlier completed payments before the selected transaction on its source account. Set sameRecipient=true for the same payee/recipient/company; the server filters before limiting results. Set false for all recipients on that source. The response labels its scope and name-only matching limitations. This is a read-only comparison, never a fraud clearance or a payment action.',
   simulate_rule:'Bank staff only: replay a proposed rule threshold/status/action against recorded assessment snapshots; no live changes. Select an exact canonical ruleId from its enum, including high_value for a high-value payment threshold. Report skipped inputs and eligible coverage; no eligible snapshots means impact is unknown.',
   reconcile_accounts:'Read ledger reconciliation and schedule/notification exceptions. Staff see bank operations; operators see only their accounts.',
   prepare_payment_draft:'Prepare a transfer, bill or scheduled payment review form, recognizing the user intent without requiring command words. First call get_payment_sources for current source funds, irrespective of future schedule dates. Pass kind and a requestQuote from a direct user request; for missing-detail replies in an existing draft omit requestQuote. The server reads exact amounts, owned sources, recipients, references, recurrence and Singapore dates/times from the user message or existing draft context. Do not calculate or send those values yourself. Do not call for explanations, hypothetical examples, negations or deferred requests. Missing details are returned for clarification. Never submits money.',
@@ -112,6 +112,7 @@ function argumentsFor(name,args){
   for(const [key,value] of Object.entries(args)){
     const type=properties[name][key].type;
     if(type==='integer'?!Number.isSafeInteger(value):typeof value!==type)throw new HttpError(400,'An invalid agent tool argument was refused.');
+    if(name==='search_transactions'&&properties[name][key].enum&&!properties[name][key].enum.includes(value))throw new HttpError(400,'An invalid transaction filter was refused.');
     if(typeof value==='string' && (value.length>(key==='requestQuote'?1000:150) || /[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(value)))throw new HttpError(400,'An invalid agent tool argument was refused.');
     if(typeof value==='number' && !Number.isFinite(value))throw new HttpError(400,'An invalid numeric tool argument was refused.');
   }
@@ -143,11 +144,13 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
     return {checkedAt,missing,source:source?{id:source.id,name:source.name}:null,complete:!missing.length,fundingWarnings:warnings,items:[...(source?[{title:source.name,amountCents:source.balanceCents,subtitle:'Available in this source account now'}]:owned.map(row=>({title:row.name,accountNumber:row.number,amountCents:row.balanceCents}))),...(requiredCents!==undefined?[{title:'Proposed payment amount',amountCents:requiredCents}]:[]),...missing.map(field=>({title:'Please specify '+field}))],actions:[]};
   }
   async function schedules(user){await reports.assertActor(db,user);return {schedules:(await db.query('SELECT id,type,payload_json,amount_cents::text,frequency,status,next_run_at FROM scheduled_payments WHERE user_id=$1 ORDER BY created_at DESC LIMIT 50',[user.id])).rows.map(s=>({id:s.id,type:s.type,fromAccountId:String(s.payload_json.fromId),amountCents:Number(s.amount_cents),frequency:s.frequency,status:s.status,nextRunAt:s.next_run_at?iso(s.next_run_at):null}))};}
-  async function related(user,transactionId){
+  async function related(user,transactionId,sameRecipient=false){
     const actor=await reports.assertActor(db,user);
-    const source=(await db.query(`SELECT t.account_id,t.requested_at FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.id=$1 ${actor.role==='admin'?'':'AND a.user_id=$2'}`,actor.role==='admin'?[transactionId]:[transactionId,user.id])).rows[0];
+    const source=(await db.query(`SELECT t.account_id,t.requested_at,t.payee,t.counterparty FROM transactions t JOIN accounts a ON a.id=t.account_id WHERE t.id=$1 ${actor.role==='admin'?'':'AND a.user_id=$2'}`,actor.role==='admin'?[transactionId]:[transactionId,user.id])).rows[0];
     if(!source)throw new HttpError(404,'Transaction not found.');
-    return {transactionId,payments:(await db.query("SELECT id,description,-amount_cents::bigint AS cents,counterparty,completed_at FROM transactions WHERE account_id=$1 AND amount_cents<0 AND status='completed' AND completed_at<$2 AND id<>$3 ORDER BY completed_at DESC LIMIT 20",[source.account_id,source.requested_at,transactionId])).rows.map(t=>({id:t.id,description:t.description,amountCents:Number(t.cents),counterparty:t.counterparty,completedAt:iso(t.completed_at)}))};
+    const identified=Boolean(source.payee?.trim()),values=[source.account_id,source.requested_at,transactionId],condition=sameRecipient?(identified?' AND payee=$4':" AND lower(btrim(counterparty))=lower(btrim($4))"):'';
+    if(sameRecipient)values.push(identified?source.payee:source.counterparty);
+    return {transactionId,scope:sameRecipient?'same_recipient':'source_account',...(sameRecipient?{counterparty:source.counterparty,recipientMatch:identified?'recorded_identifier':'recorded_name',limitation:'Recorded identifiers or labels do not independently verify legal identity.'}:{}),payments:(await db.query("SELECT id,description,-amount_cents::bigint AS cents,counterparty,completed_at FROM transactions WHERE account_id=$1 AND amount_cents<0 AND status='completed' AND completed_at<$2 AND id<>$3"+condition+" ORDER BY completed_at DESC,id DESC LIMIT 20",values)).rows.map(t=>({id:t.id,description:t.description,amountCents:Number(t.cents),counterparty:t.counterparty,completedAt:iso(t.completed_at)}))};
   }
   const handlers={
     get_daily_market_context:async()=>{const context=await marketContext.get();return {...context,items:marketRisk.publicItems(context)};},
@@ -156,7 +159,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
     project_liquidity:(user,args)=>reports.liquidity(db,user,{...args,now}),
     reconcile_accounts:(user)=>reports.reconciliation(db,user,{now}),
     investigate_transaction:(user,args)=>reports.investigation(db,user,{...args,now}),
-    get_related_payments:(user,args)=>related(user,args.transactionId),
+    get_related_payments:(user,args)=>related(user,args.transactionId,args.sameRecipient),
     simulate_rule:(user,args)=>{const {ruleId,days,...patch}=args;return reports.simulation(db,user,{ruleId,patch,days,now});},
     prepare_payment_draft:(user,args)=>prepareDraft(db,user,args,{now}),
 
@@ -254,6 +257,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       const enquiry=assistantResponse.resolveEnquiry(name,args,message,previous.lastReadEnquiry,{now});
       args=enquiry.args;const readMessage=enquiry.message;
       if(['investigate_transaction','get_related_payments','analyze_market_transactions'].includes(name)&&args.transactionId&&previous.lastTransactionEnquiry?.transactionId&&!message.includes(args.transactionId)&&args.transactionId!==previous.lastTransactionEnquiry.transactionId)throw new HttpError(400,'Keep the previously selected transaction for this follow-up, or specify a different transaction ID.');
+      if(name==='get_related_payments'&&args.sameRecipient===undefined&&args.transactionId===previous.lastTransactionEnquiry?.transactionId&&typeof previous.lastTransactionEnquiry.sameRecipient==='boolean')args={...args,sameRecipient:previous.lastTransactionEnquiry.sameRecipient};
       if(name==='flag_transaction_for_review'&&newsInsights.requested(message))throw new HttpError(400,'News advice produces chat-only advisory flags. A payment investigation requires a separate, supported fraud-review request.');
       if(kind==='assistant' && name==='prepare_payment_draft'){
         const {requestQuote,...draftArgs}=args;
@@ -394,7 +398,7 @@ function createAgents({db,now=Date.now,model=createOpenAIModel(),marketContext=c
       }else output=await handlers[name](acting,args);
       const readEnquiry=assistantResponse.enquiryFor(name,output);if(readEnquiry)context.lastReadEnquiry=readEnquiry;
       if(name==='investigate_transaction'&&output.transaction?.id)context.lastTransactionEnquiry={transactionId:output.transaction.id};
-      if(name==='get_related_payments'&&output.transactionId)context.lastTransactionEnquiry={transactionId:output.transactionId};
+      if(name==='get_related_payments'&&output.transactionId)context.lastTransactionEnquiry={transactionId:output.transactionId,sameRecipient:output.scope==='same_recipient'};
       if(Object.hasOwn(dateTasks,name)&&output.needsClarification)context.pendingDateEnquiry={tool:name,arguments:args};
       if(Buffer.byteLength(JSON.stringify(output))>500000)throw new HttpError(413,'The investigation output is too large.');
       await db.query('INSERT INTO agent_tool_calls(run_id,step,tool_name,arguments_json,result_json,created_at) VALUES($1,$2,$3,$4,$5,$6)',[id,step,name,args,output,iso(now())]);
