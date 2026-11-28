@@ -28,6 +28,50 @@ test('Saved chart positions use the displayed order and cannot select deleted or
  assert.equal(response.requestedSavedDashboard('Open the first one, Receipts.',fresh,previous),null);
  assert.equal(response.requestedSavedDashboard('Open the third chart.',fresh,previous),null);
  assert.equal(response.requestedSavedDashboard('Reopen Receipts.',fresh,previous).id,second.id);
+ assert.equal(response.requestedSavedDashboard('Open my only saved chart.',[first]).id,first.id);
+ assert.equal(response.requestedSavedDashboard("I'd like to reopen my saved chart; it's useful.",[first]).id,first.id);
+ assert.equal(response.requestedSavedDashboard('Reopen "Missing view".',[first]),null);
+ const short={id:'short',title:'Operations'},long={id:'long',title:'Operations 2025'};
+ assert.equal(response.requestedSavedDashboard('Open "Operations 2025".',[short,long]).id,long.id);
+ assert.equal(response.requestedSavedDashboard('Open Wholesales.',[{id:'sales',title:'Sales'}]),null);
+});
+
+pg('Saved chart reopening never substitutes a sole remaining view for a missing requested target',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),views=require('../banking/dashboard-views');
+ await views.save(f.db,user,{title:'Suppliers',definition:{scope:'all',company:'',period:{kind:'rolling',days:30}}},{now});
+ let listOnly=false,staleId=null;
+ const agents=createAgents({db:f.db,now,model:provider(async messages=>{
+  const tools=messages.filter(m=>m.role==='tool');
+  if(!tools.length)return call('list_saved_dashboards');
+  if(listOnly)return reply('list_saved_dashboards','Your saved charts are listed below [E1].');
+  if(tools.length===1)return call('open_saved_dashboard',{viewId:staleId||JSON.parse(tools[0].content).data.views[0].id});
+  const result=JSON.parse(tools.at(-1).content).data;
+  return reply('open_saved_dashboard',result.selectionRequired?'Please choose the saved chart you intend to reopen [E2].':'The selected saved chart is shown below [E2].');
+ })});
+ const missing=await agents.execute(user,'assistant',{message:'Reopen "Missing view".'});
+ assert.equal(missing.companyDashboard,undefined);assert.equal((await agents.detail(user,missing.runId)).steps.at(-1).result.selectionRequired,true);
+ const sole=await agents.execute(user,'assistant',{message:'Open my only saved chart.'});assert.ok(sole.companyDashboard);
+ await views.save(f.db,user,{title:'Receipts',definition:{scope:'all',company:'',period:{kind:'rolling',days:60}}},{now});
+ listOnly=true;const listed=await agents.execute(user,'assistant',{message:'List my saved charts.'}),prior=(await agents.detail(user,listed.runId)).steps[0].result.views;
+ await f.db.query('DELETE FROM saved_dashboard_views WHERE id=$1',[prior[0].id]);
+ listOnly=false;const deleted=await agents.execute(user,'assistant',{message:'Open the first one.',previousRunId:listed.runId});
+ assert.equal(deleted.companyDashboard,undefined);assert.equal((await agents.detail(user,deleted.runId)).steps.at(-1).result.selectionRequired,true);
+ staleId=prior[0].id;
+ const stale=await agents.execute(user,'assistant',{message:'Open the first one.',previousRunId:listed.runId});
+ assert.equal(stale.companyDashboard,undefined);assert.equal((await agents.detail(user,stale.runId)).steps.at(-1).result.selectionRequired,true);
+});
+
+pg('Relative reporting endpoints agree in finance reports, historical balances and receipt searches',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db);let selection={name:'get_finance_report',args:{}};
+ const agents=createAgents({db:f.db,now,model:planner(()=>selection)}),before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;
+ for(const name of ['get_finance_report','get_accounts','search_transactions']){
+  selection.name=name;
+  const result=await agents.execute(user,'assistant',{message:({get_finance_report:'Generate a finance report',get_accounts:'Show historical account balances',search_transactions:'List my receipts'})[name]+' from last month to today.'});
+  assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);
+  const value=(await agents.detail(user,result.runId)).steps[0].result;
+  assert.equal(value.period.from,'2026-10-01');assert.equal(value.period.to,'2026-11-28');
+ }
+ assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });
 
 test('Public research reaches the model beyond its opening paragraphs without cutting JSON or financial fields',()=>{

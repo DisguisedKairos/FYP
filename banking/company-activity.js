@@ -88,8 +88,16 @@ async function summary(db,user,params,{now=Date.now}={}){
 }
 function definition(data,message=''){
   message=normalizeDurations(message);
-  const selected=requestedPeriod(message),monthWindow=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message),relative=/\b(?:last|past)\s+(\d+)\s+(days?|weeks?)\b/i.exec(message);
-  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period:monthWindow?{kind:'months',months:Number(monthWindow[1])}:relative?{kind:'rolling',days:Number(relative[1])*(relative[2].toLowerCase().startsWith('week')?7:1)}:!selected.from && !selected.to?{kind:'rolling',days:90}:{kind:'fixed',from:data.period.from,to:data.period.to}};
+  const generated=Date.parse(data.generatedAt),now=Number.isFinite(generated)?()=>generated:Date.now;
+  const selected=requestedPeriod(message,{now}),monthWindow=/\b(?:last|past)\s+(\d+)\s+months?\b/i.exec(message),relative=/\b(?:last|past)\s+(\d+)\s+(days?|weeks?)\b/i.exec(message);
+  const matches=wording=>{const period=requestedPeriod(wording,{now});return period.from===data.period.from&&period.to===data.period.to;};
+  // A rolling definition is valid only if it reproduces the displayed period.
+  // A qualified endpoint such as yesterday must not be discarded on save.
+  let period={kind:'fixed',from:data.period.from,to:data.period.to};
+  if(monthWindow&&matches(monthWindow[0]))period={kind:'months',months:Number(monthWindow[1])};
+  else if(relative&&matches(relative[0]))period={kind:'rolling',days:Number(relative[1])*(relative[2].toLowerCase().startsWith('week')?7:1)};
+  else if(!selected.from&&!selected.to&&matches('past 90 days'))period={kind:'rolling',days:90};
+  return {scope:data.scopeType==='all'?'all':'company',company:data.scopeType==='all'?'':data.company,period};
 }
 function assistantResult(data,viewDefinition){
   const actions=[]; // The assistant renders the returned dashboard directly in chat.

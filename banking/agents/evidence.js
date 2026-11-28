@@ -59,6 +59,14 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const cited = [...plain.matchAll(/\[(E\d+)\]/g)].map(match => match[1]), valid = new Set(evidence.map(e => e.id));
   if (requireCitations && (!cited.length || cited.some(id => !valid.has(id)))) return 'The interpretation must cite evidence retrieved in this run.';
   let qualitative = plain.replace(/\[E\d+\]/g, '').replace(/^\s*\d+[.)]\s+/gm, '');
+  const openedViews=results.filter(r=>r.tool==='open_saved_dashboard'&&r.value.view&&r.value.period).map(r=>r.value.view);
+  const savedViews=results.filter(r=>r.tool==='save_company_dashboard'&&r.value.saved).map(r=>r.value.view).filter(Boolean);
+  const titles=(openedViews.length?openedViews:savedViews.length?savedViews:results.filter(r=>r.tool==='list_saved_dashboards').flatMap(r=>r.value.views||[])).map(view=>view.title).filter(title=>typeof title==='string').map(title=>title.normalize('NFKC').replace(/[*_`]/g,'').replace(/[\u2018\u2019]/g,"'").toLowerCase());
+  const caption=/(?:["\u201c]([^"\u201d]+)["\u201d]|'(.+?)')(\s+(?:chart|dashboard|view)\b)/gi;
+  if(openedViews.length&&[...qualitative.matchAll(caption)].some(match=>!titles.includes((match[1]||match[2]).toLowerCase())))return 'The chart title differs from the view actually opened. Refer to the selected chart instead of altering its name.';
+  // Exact quoted saved-chart titles are labels, not financial values. Only
+  // captions naming retrieved views are exempt; other numbers remain screened.
+  qualitative=qualitative.replace(caption,(whole,double,single,noun)=>titles.includes((double||single).toLowerCase())?'[verified chart label]'+noun:whole);
   // Verified report scope is not an invented financial value. Amounts, counts
   // and dates outside the retrieved scope still pass the checks below.
   const periods=results.filter(r=>['get_accounts','get_finance_report','search_transactions','get_company_activity','open_saved_dashboard'].includes(r.tool)).map(r=>r.value?.period).filter(Boolean);
@@ -100,6 +108,8 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   if (staffActionClaim && !results.some(r=>r.tool==='flag_transaction_for_review' && r.value.reviewRequested)) return 'A staff notification or investigation was claimed without a successful permitted review receipt.';
   if(/\b(?:I|we)\s+(?:(?:have|successfully|just|now)\s+)*(?:saved|bookmarked)\b|\b(?:dashboard|view)\s+(?:(?:has|have|been|was|is|now|successfully|privately)\s+){0,5}(?:saved|bookmarked)\b|^\s*(?:saved|bookmarked)\b/i.test(plain) && !results.some(r=>r.tool==='save_company_dashboard' && r.value.saved))return 'A saved dashboard was claimed without a successful save receipt.';
   if(/\b(?:your|the|this)\s+saved\s+(?:dashboard|view|chart)\s+(?:shows|covers|has|is|presents|uses|includes)\b/i.test(plain)&&!results.some(r=>r.tool==='save_company_dashboard'&&r.value.saved||r.tool==='open_saved_dashboard'&&r.value.view||r.tool==='list_saved_dashboards'&&r.value.views?.length))return 'A generated chart is not a saved dashboard. Describe it as the current chart unless saved-view evidence was retrieved.';
+  const chartRetrieved=openedViews.length||savedViews.length||results.some(r=>r.tool==='get_company_activity'&&r.value.period&&r.value.status==='ready');
+  if(results.some(r=>['list_saved_dashboards','open_saved_dashboard'].includes(r.tool))&&!chartRetrieved&&/\b(?:I|we)(?:'ve| have)?\s+(?:re)?opened\b|^\s*(?:re)?opened\b|\b(?:chart|dashboard|view)\s+(?:is(?: now)? open|(?:has been|was|is now)\s+(?:re)?opened)\b/i.test(plain))return 'A saved-chart list or unresolved selection does not open a dashboard. Ask the user to choose an available view; do not claim that it opened.';
   const investigations=results.filter(r=>r.tool==='investigate_transaction').map(r=>r.value);
   if(report?.humanReview)investigations.push(report);
   const openHumanReview=investigations.some(r=>r.humanReview?.open) || results.some(r=>r.tool==='analyze_market_transactions' && r.value?.transactions?.some(t=>t.humanReview?.open));

@@ -57,6 +57,19 @@ function requestedPeriod(message,{now=Date.now}={}){
   // not shorthand calendar dates or the endpoints of a date range.
   message=message.replace(/(?:\bSGD\s*|S\$\s*|\$\s*)[-+]?\d[\d,.]*/gi,'[amount]').replace(/\b\d{10}\b/g,'[account]');
   const today=day(now()),year=Number(today.slice(0,4)),dates=explicitDates(message,year);
+  const relatives=[...message.matchAll(/\b(?:today|yesterday|tomorrow|(?:this|current|last|previous|next)\s+(?:week|month|quarter)|(?:last|past)\s+\d+\s+(?:days?|weeks?|months?))\b/gi)];
+  if(relatives.length){
+    const endpoints=[...dates.map(date=>({...date,kind:'date'})),...relatives.map(match=>({kind:'relative',index:match.index,end:match.index+match[0].length,text:match[0]}))].sort((a,b)=>a.index-b.index);
+    const joins=endpoints.slice(1).map((last,index)=>message.slice(endpoints[index].end,last.index).trim());
+    if(joins.some(join=>/^or$/i.test(join)))throw fail();
+    if(joins.some(join=>/^(?:to|through|until|and|[-\u2013\u2014])$/i.test(join))){
+      if(endpoints.length!==2)throw fail();
+      const [first,last]=endpoints;
+      const from=first.kind==='date'?first.value:requestedPeriod(first.text,{now}).from;
+      const to=last.kind==='date'?last.value:requestedPeriod(last.text,{now}).to;
+      dateRange(new URLSearchParams({from,to}));return {from,to};
+    }
+  }
   if(dates.length){
     if(dates.length>2)throw fail();
     let from=dates[0].value,to=dates[1]?.value;
@@ -82,6 +95,7 @@ function requestedPeriod(message,{now=Date.now}={}){
   // Never turn an incomplete or misspelled explicit range into a default month.
   if(/\b(?:from|between)\b[\s\S]*\b(?:to|and|until|through)\b[\s\S]*(?:\bdate\b|\d)|\b(?:start|end)\s*date\b|\b\d{1,4}[-/\.]\d{1,2}(?:[-/\.]\d{1,4})?\b/i.test(message))throw fail();
   const relative=/\b(?:last|past)\s+(\d+)\s+(days?|weeks?|months?)\b/i.exec(message);
+  if(!relative&&/\b(?:last|past|previous)\s+[-+]?\d\S*\s+(?:days?|weeks?|months?)\b/i.test(message))throw fail();
   if(relative){
     const count=Number(relative[1]),unit=relative[2].toLowerCase();
     if(unit.startsWith('month')){

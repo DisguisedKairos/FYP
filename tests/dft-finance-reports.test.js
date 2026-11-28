@@ -31,6 +31,18 @@ test('Currency values and account numbers never become calendar dates in a natur
  assert.deepEqual(requestedPeriod('Show transactions in account 1099100101 between 2026-10-01 and 2026-10-31 for SGD 10.00',{now}),{from:'2026-10-01',to:'2026-10-31'});
  assert.throws(()=>requestedPeriod('Show transactions from 1 to date',{now}),e=>e.status===400);
 });
+
+test('Relative reporting ranges keep both endpoints and reject alternative dates',()=>{
+ const now=()=>Date.parse('2026-11-28T04:00:00Z');
+ for(const wording of ['between yesterday and today','from yesterday to today'])assert.deepEqual(requestedPeriod(wording,{now}),{from:'2026-11-27',to:'2026-11-28'});
+ assert.deepEqual(requestedPeriod('from last month to today',{now}),{from:'2026-10-01',to:'2026-11-28'});
+ assert.deepEqual(requestedPeriod('from last week through yesterday',{now}),{from:'2026-11-16',to:'2026-11-27'});
+ assert.deepEqual(requestedPeriod('from 2026-11-01 to yesterday',{now}),{from:'2026-11-01',to:'2026-11-27'});
+ assert.deepEqual(requestedPeriod('between yesterday and 2026-11-28',{now}),{from:'2026-11-27',to:'2026-11-28'});
+ for(const wording of ['today or yesterday','from today to yesterday','from yesterday to tomorrow','last -3 days','past -2 months'])assert.throws(()=>requestedPeriod(wording,{now}),e=>e.status===400,wording);
+ const boundary=()=>Date.parse('2026-12-31T16:30:00Z');
+ assert.deepEqual(requestedPeriod('from last month to today',{now:boundary}),{from:'2026-12-01',to:'2027-01-01'});
+});
 test('Named quarters and month-only date clarifications never silently use a default period',()=>{
  const now=()=>Date.parse('2026-11-28T04:00:00Z');
  for(const wording of ['Q3 2026','the third quarter of 2026','3rd quarter 2026'])assert.deepEqual(requestedPeriod(wording,{now}),{from:'2026-07-01',to:'2026-09-30'});

@@ -104,6 +104,17 @@ test('Generated charts cannot be described as saved without retrieved saved-view
  assert.equal(narrativeIssue('You have no saved dashboards [E1].',null,{...options,results:[{tool:'list_saved_dashboards',value:{views:[]}}]}),null);
 });
 
+test('Saved-chart lists cannot support opening claims and exact caption labels cannot become financial values',()=>{
+ const listed={tool:'list_saved_dashboards',value:{views:[{id:'owned',title:'Operations 2025'}]}},options={evidence,requireCitations:true};
+ for(const result of [listed,{tool:'open_saved_dashboard',value:{selectionRequired:true,views:listed.value.views}}])for(const reply of ['I opened the selected chart [E1].','I\'ve reopened your chart [E1].','Your chart is open [E1].'])assert.match(narrativeIssue(reply,null,{...options,results:[result]}),/does not open/);
+ assert.equal(narrativeIssue('Please choose an available view from your saved charts [E1].',null,{...options,results:[listed]}),null);
+ const opened={tool:'open_saved_dashboard',value:{view:listed.value.views[0],period:{from:'2026-10-01',to:'2026-10-31'}}};
+ assert.equal(narrativeIssue('Your “Operations 2025” chart is open [E1].',null,{...options,results:[opened]}),null);
+ for(const title of ['Supplier’s 2025','Operations_2025'])assert.equal(narrativeIssue('Your “'+title+'” chart is open [E1].',null,{...options,results:[{...opened,value:{...opened.value,view:{id:'owned',title}}}]}),null);
+ assert.match(narrativeIssue('Your “Operations years” chart is open [E1].',null,{...options,results:[opened]}),/title differs/);
+ assert.match(narrativeIssue('Your “Operations 2025” chart has a balance of SGD 2025 [E1].',null,{...options,results:[opened]}),/Numerical/);
+});
+
 pg('Malformed model captions are corrected without exposing discarded formatting instructions',async t=>{
  const f=await fixture(t,{http:false}),user=await actor(f.db),before=await balances(f.db);let calls=0;
  const broken='The account details are shown below [E1]. ]} This is JSON mode exact. Ensure no numeric.';

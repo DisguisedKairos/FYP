@@ -8,6 +8,17 @@ const {narrativeIssue}=require('../banking/agents/evidence');
 const pg=(name,work)=>test(name,{skip:!process.env.TEST_DATABASE_URL},work);
 const definition={scope:'all',company:'',period:{kind:'rolling',days:90}};
 
+pg('Saving a relative range ending yesterday preserves the displayed dates when reopened later',async t=>{
+ const now=()=>Date.parse('2026-11-28T04:00:00Z'),f=await fixture(t,{http:false,now}),user=(await f.db.query("SELECT * FROM users WHERE email='alex@greenlink.demo'")).rows[0];
+ const activity=require('../banking/company-activity');
+ const chart=await activity.assistantDashboard(f.db,user,{},'Graph activity from the past three months through yesterday.',{now});
+ assert.equal(chart.period.from,'2026-09-01');assert.equal(chart.period.to,'2026-11-27');
+ assert.deepEqual(chart.viewDefinition.period,{kind:'fixed',from:'2026-09-01',to:'2026-11-27'});
+ const saved=await views.save(f.db,user,{definition:chart.viewDefinition},{now});
+ const later=await views.detail(f.db,user,saved.view.id,{now:()=>now()+86400000});
+ assert.equal(later.dashboard.period.from,chart.period.from);assert.equal(later.dashboard.period.to,chart.period.to);assert.deepEqual(later.dashboard.totals,chart.totals);
+});
+
 test('An explicit inline chart type overrides preferences without changing saved defaults',()=>{
  assert.equal(views.messageOptions('Show my activity as a bar graph.',{chartType:'line'}).presentation.chartType,'bar');
  assert.equal(views.messageOptions('Use a line chart for my transactions.',{chartType:'bar'}).presentation.chartType,'line');
