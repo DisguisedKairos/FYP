@@ -15,6 +15,9 @@ async function balances(db) { return (await db.query('SELECT id,balance_cents FR
 
 const cases = [
   ['grounded qualitative explanation', 'Inspect the owned account evidence before authorizing a payment [E1].', context(), false],
+  ['Arabic numeral claim', 'Your balance is SGD ٩٩٩ [E1].', context(), true],
+  ['translated currency value', 'The payment of SGD दस is covered [E1].', context(), true],
+  ['non-Latin currency quantity', 'The amount is SGD 十 [E1].', context(), true],
   ['unfilled balance template', 'The opening balance was S$[opening balance] [E1].', context(), true],
   ['unfilled closing value', 'The closing value is [closing balance] [E1].', context(), true],
   ['unicode numeric claim', 'Your balance is SGD ９９９ [E1].', context(), true],

@@ -52,6 +52,22 @@ function issue(intent,results){
  return null;
 }
 function readContext(value){return Array.isArray(value)?[...new Set(value)].filter(name=>CONTEXT_TOOLS.includes(name)).slice(0,8):[];}
+function toolEvidence(step,value){
+ // Public reports place dated developments after profile/background paragraphs.
+ // Keep their bounded text; source annotation offsets are only needed by the UI.
+ for(const limit of [16000,8000,4000,2000,1000,500,200,100,40]){
+  let shortened=false;
+  const compact=(item,key)=>{
+   if(Array.isArray(item)){if(item.length>20)shortened=true;return item.slice(0,20).map(value=>compact(value));}
+   if(item&&typeof item==='object')return Object.fromEntries(Object.entries(item).filter(([name])=>!['actions','draft','nextSteps','annotations'].includes(name)).map(([name,value])=>[name,compact(value,name)]));
+   if(typeof item==='string'){const size=key==='text'?limit:Math.min(1200,limit);if(item.length>size)shortened=true;return item.slice(0,size);}
+   return item;
+  };
+  const data=compact(value),content=JSON.stringify({evidenceId:`E${step}`,data,...(shortened?{contextTruncated:true,contextNote:'Some long text or lists were shortened for model context. Do not infer omitted details. Full authoritative results remain in the application.'}:{})});
+  if(content.length<=18000)return content;
+ }
+ throw new HttpError(413,'The evidence exceeds the assistant context limit. Ask for a narrower report.');
+}
 const normalized=value=>value.replace(/[\u2018\u2019]/g,"'").replace(/[\u201c\u201d]/g,'"').replace(/\s+/g,' ').trim().toLowerCase();
 function actionRequested(message,{action,requestQuote,legacy=false}={}){
  const text=normalized(message);
@@ -103,6 +119,17 @@ function compatibleEnquiry(tool,previous){
  if(previous.period)return {...previous,tool,arguments:{}};
  return null;
 }
+function requestedSavedDashboard(message,listed,previous=[]){
+ const text=normalized(message),named=listed.filter(view=>text.includes(normalized(view.title)));
+ const words=['first','second','third','fourth','fifth','sixth','seventh','eighth','ninth','tenth'];
+ const ordinal=text.match(/\b(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|last|\d{1,2}(?:st|nd|rd|th))\s+(?:one|chart|dashboard|view)\b/);
+ const numbered=text.match(/\b(?:chart|dashboard|view)\s+(?:number\s*|#\s*)?(\d{1,2})\b/);
+ const choices=previous.length?previous:listed;
+ const position=ordinal?(ordinal[1]==='last'?choices.length:words.includes(ordinal[1])?words.indexOf(ordinal[1])+1:parseInt(ordinal[1],10)):numbered?Number(numbered[1]):null;
+ const selected=position===null?null:listed.find(view=>view.id===choices[position-1]?.id);
+ if(named.length>1||position!==null&&(!selected||named.length===1&&named[0].id!==selected.id))return null;
+ return named[0]||selected||null;
+}
 function resolveEnquiry(tool,args,message,previous,{now=Date.now}={}){
  const {reusePrevious,...current}=args;
  if(!reusePrevious)return {args:current,message};
@@ -116,4 +143,4 @@ function resolveEnquiry(tool,args,message,previous,{now=Date.now}={}){
  const readMessage=!period.from&&compatible.period?message+'\nFor the period '+compatible.period.from+' to '+compatible.period.to:message;
  return {args:resolved,message:readMessage,boundCompany:previous.arguments?.company,resumed:true};
 }
-module.exports={INSTRUCTIONS:INSTRUCTIONS+' '+SCOPE_INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,actionRequested,savedOptions,enquiryFor,resolveEnquiry,compatibleEnquiry,FILTERED_READS};
+module.exports={INSTRUCTIONS:INSTRUCTIONS+' '+SCOPE_INSTRUCTIONS,format,narrativeFormat,parse,parseNarrative,issue,readContext,toolEvidence,actionRequested,savedOptions,enquiryFor,resolveEnquiry,compatibleEnquiry,requestedSavedDashboard,FILTERED_READS};

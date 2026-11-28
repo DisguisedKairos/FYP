@@ -363,7 +363,7 @@ pg('A final wording repair remains available after the tool-correction rounds ar
   return {content:'Please specify the owned source account so the proposed payment can be checked [E2].'};
  });
  const r=await createAgents({db:f.db,model}).execute(user,'assistant',{message:'Can I afford SGD 10?'});
- assert.equal(calls,5);assert.equal(r.narrativeWithheld,undefined);assert.ok(r.items.some(i=>/source/i.test(i.title)));assert.doesNotMatch(r.reply,/SGD 10/);
+ assert.equal(calls,5);assert.equal(r.narrativeWithheld,undefined);assert.ok(r.paymentReadiness.missing.some(field=>/source/i.test(field)));assert.doesNotMatch(r.reply,/SGD 10/);
 });
 
 

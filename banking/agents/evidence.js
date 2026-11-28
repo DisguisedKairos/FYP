@@ -69,7 +69,7 @@ function narrativeIssue(reply, report, { results = [], evidence = [], requireCit
   const draftEvidence=results.findLast(r=>r.tool==='prepare_payment_draft')?.value;
   if(draftEvidence?.draft?.frequency==='once')qualitative=qualitative.replace(/\bone[ \u2010-\u2014-](?:off|time)\b/gi,'[nonrecurring]');
   if(!requireCitations)qualitative=qualitative.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, '');
-  if (/\d/.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead.';
+  if (/\p{N}/u.test(qualitative)||/\b(?:SGD|USD|EUR|MYR|AUD|GBP|CNY|HKD)\s+(?=\p{L})(?!\p{Script=Latin})/u.test(qualitative)) return 'Numerical AI claims must be read from authoritative tool facts instead. Keep currency values in the application cards rather than spelling or translating them in the narrative.';
   // An imperative choice or interrogative pronoun is not a numerical bank fact.
   // Keep quantities elsewhere (including later in the same sentence) screened.
   const quantities=qualitative.replace(/\b(?:(?:choose|select|pick|specify|provide|give|name|use)\s+(?:just\s+)?one|(?:which|each) one)\b/gi,'[choice]');
@@ -138,7 +138,7 @@ function relevanceIssue(message, results, intent) {
     const interpreted=require('./response').issue(intent,results);
     if(interpreted||intent.mode!=='banking_evidence')return interpreted;
     const chart=/\b(?:dashboard|chart|graph|visuali[sz]ation)\b/i.test(message)&&(/\b(?:transactions?|activity|inflows?|outflows?|cash[ -]?flow|money (?:in|out)|income|expenses?|payments?)\b/i.test(message)||intent.requiredTools.some(name=>['get_finance_report','search_transactions','get_accounts','get_company_activity'].includes(name)))&&!require('../dashboard-views').saveIntent(message)&&!/\b(?:saved|bookmarked)\b/i.test(message);
-    if(chart&&!tools.has('get_company_activity')&&!tools.has('open_saved_dashboard')&&!results.some(r=>r.tool==='save_company_dashboard'&&r.value?.saved))return 'Retrieve the requested owned dashboard/chart, not only a receipt list or written summary.';
+    if(chart&&!tools.has('get_company_activity')&&!tools.has('open_saved_dashboard')&&!results.some(r=>r.tool==='save_company_dashboard'&&r.value?.saved))return 'Call get_company_activity to render the requested owned graph or chart. Omit company for all counterparties, and reusePrevious only when compatible prior read filters were supplied. A finance report or receipt list alone does not render a chart.';
     if(!chart&&/\b(?:show|list|retrieve|find|search|get)\b[^.!?]*\b(?:my|our)\s+(?:recent\s+)?transactions?\b|\b(?:my|our)\s+transaction history\b/i.test(message)&&!tools.has('search_transactions'))return 'Retrieve the requested individual receipt list using search_transactions.';
     if(/\b(?:download(?:able)?|export|pdf|csv)\b/i.test(message)&&/\b(?:finance|financial)\s+(?:activity\s+)?reports?\b/i.test(message)&&!tools.has('get_finance_report'))return 'Generate the requested downloadable finance report; account balances do not provide that output.';
     const coverageRequest=obligationsOnly(message)&&/\b(?:cover|enough|sufficient|funding|shortfalls?|short|afford)\b/i.test(message)&&!DRAFT_INTENT.test(message);

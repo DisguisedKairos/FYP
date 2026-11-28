@@ -19,13 +19,52 @@ test('Compatible read conversions retain their date window and cannot discard se
  assert.equal(response.compatibleEnquiry('get_finance_report',{...report,tool:'get_company_activity',arguments:{company:'Harbour Supplies'}}),null);
 });
 
+test('Saved chart positions use the displayed order and cannot select deleted or conflicting views',()=>{
+ const first={id:'first-owned',title:'Suppliers'},second={id:'second-owned',title:'Receipts'},previous=[first,second],fresh=[second,first];
+ assert.equal(response.requestedSavedDashboard('Open the first one.',fresh,previous).id,first.id);
+ assert.equal(response.requestedSavedDashboard('Open dashboard number 2.',fresh,previous).id,second.id);
+ assert.equal(response.requestedSavedDashboard('Open the last chart.',fresh,previous).id,second.id);
+ assert.equal(response.requestedSavedDashboard('Open the first one.',[second],previous),null);
+ assert.equal(response.requestedSavedDashboard('Open the first one, Receipts.',fresh,previous),null);
+ assert.equal(response.requestedSavedDashboard('Open the third chart.',fresh,previous),null);
+ assert.equal(response.requestedSavedDashboard('Reopen Receipts.',fresh,previous).id,second.id);
+});
+
+test('Public research reaches the model beyond its opening paragraphs without cutting JSON or financial fields',()=>{
+ const text='Company background. '.repeat(100)+'\n\nRecent dated business news: the company announced a new trade settlement service.';
+ const report={kind:'company',parts:[{text,annotations:[{url:'https://company.example.org/news',start:1900,end:1910}]}],sources:[{title:'Company announcement',url:'https://company.example.org/news'}]};
+ const complete=JSON.parse(response.toolEvidence(1,report));assert.equal(complete.data.parts[0].text,text);assert.equal(complete.contextTruncated,undefined);assert.equal(complete.data.parts[0].annotations,undefined);assert.deepEqual(complete.data.sources,report.sources);
+ const large={reports:Array.from({length:12},()=>report),amountCents:123456,period:{from:'2026-10-01',to:'2026-10-31'},actions:[{type:'navigate'}]};
+ const serialized=response.toolEvidence(2,large),bounded=JSON.parse(serialized);
+ assert.ok(serialized.length<=18000);assert.equal(bounded.data.amountCents,123456);assert.deepEqual(bounded.data.period,large.period);assert.equal(bounded.data.actions,undefined);assert.equal(bounded.contextTruncated,true);assert.match(bounded.contextNote,/Do not infer omitted/);
+ assert.equal(large.reports[0].parts[0].text,text);
+});
+
+pg('A saved-chart ordinal follow-up reopens its owned view from the displayed list after a fresh listing',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),views=require('../banking/dashboard-views');
+ for(const [title,days] of [['Suppliers',30],['Receipts',60]])await views.save(f.db,user,{title,definition:{scope:'all',company:'',period:{kind:'rolling',days}}},{now});
+ let selectedId=null;
+ const agents=createAgents({db:f.db,now,model:provider(async messages=>{
+  const tools=messages.filter(m=>m.role==='tool');
+  if(!tools.length)return call('list_saved_dashboards');
+  if(!selectedId)return reply('list_saved_dashboards','Your saved charts are listed below [E1].');
+  if(tools.length===1)return call('open_saved_dashboard',{viewId:selectedId});
+  return reply('open_saved_dashboard','The selected saved chart has been reopened with fresh records [E2].');
+ })});
+ const listed=await agents.execute(user,'assistant',{message:'Show my saved charts.'});
+ const detail=await agents.detail(user,listed.runId);selectedId=detail.steps[0].result.views[0].id;
+ const opened=await agents.execute(user,'assistant',{message:'Open the first one.',previousRunId:listed.runId});
+ assert.equal(opened.narrativeWithheld,undefined,opened.narrativeIssue);assert.ok(opened.companyDashboard);
+ assert.equal((await agents.detail(user,opened.runId)).steps.find(s=>s.tool==='open_saved_dashboard').result.view.id,selectedId);
+});
+
 pg('A request for a money-in and money-out graph cannot be answered by a report without an actual chart',async t=>{
  const f=await fixture(t,{http:false,now}),user=await actor(f.db);let calls=0;
  const result=await createAgents({db:f.db,now,model:provider(async messages=>{
   calls++;
   if(calls===1)return call('get_finance_report');
   if(calls===2)return reply('get_finance_report','The requested bar graph compares recorded money in and money out [E1].');
-  if(calls===3){assert.match(messages.at(-1).content,/dashboard|chart/);return call('get_company_activity',{chartType:'bar'});}
+  if(calls===3){assert.match(messages.at(-1).content,/get_company_activity/);return call('get_company_activity',{chartType:'bar'});}
   return {content:'The requested comparison chart is shown below [E2].',intent:{mode:'banking_evidence',requiresResearch:false,requiredTools:['get_finance_report','get_company_activity']}};
  })}).execute(user,'assistant',{message:'Give me a bar graph comparing money in and money out over the past three months.'});
  assert.equal(result.narrativeWithheld,undefined,result.narrativeIssue);assert.ok(result.companyDashboard);assert.equal(result.companyDashboard.presentation.chartType,'bar');
@@ -78,6 +117,34 @@ pg('Completed funding checks support amount and deadline what-ifs without creati
  assert.deepEqual(date.actions,[]);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
  const stored=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[date.runId])).rows[0].context_json.lastFundingEnquiry;
  assert.deepEqual(Object.keys(stored).sort(),['amountCents','company','deadlineDate','flowMonth','requiresCompany','sourceAccountId']);
+});
+
+pg('Immediate funding questions and missing-source replies retain a fresh read-only scenario',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),source=(await f.db.query('SELECT id::text,number FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const before=(await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows;let selection={name:'check_payment_funds',args:{}};
+ const agents=createAgents({db:f.db,now,model:planner(()=>selection)});
+ const first=await agents.execute(user,'assistant',{message:'Can I afford SGD 10 from '+source.number+'?'});
+ assert.equal(first.paymentReadiness?.complete,true);assert.equal(first.paymentReadiness.deadline.date,'2026-11-28');
+ selection.args.reusePrevious=true;
+ const changed=await agents.execute(user,'assistant',{message:'What about SGD 20 instead?',previousRunId:first.runId});
+ assert.equal(changed.paymentReadiness.complete,true);assert.equal(changed.paymentReadiness.amountCents,2000);assert.equal(changed.paymentReadiness.source.id,source.id);
+ selection.args={};
+ const missing=await agents.execute(user,'assistant',{message:'Can I afford SGD 10?'});assert.equal(missing.paymentReadiness.complete,false);
+ selection.args.reusePrevious=true;
+ const filled=await agents.execute(user,'assistant',{message:source.number,previousRunId:missing.runId});
+ assert.equal(filled.paymentReadiness.complete,true);assert.equal(filled.paymentReadiness.amountCents,1000);assert.equal(filled.paymentReadiness.source.id,source.id);
+ assert.deepEqual(filled.actions,[]);assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
+});
+
+pg('Immediate affordability checks include schedules due later today without requiring a date phrase',async t=>{
+ const f=await fixture(t,{http:false,now}),user=await actor(f.db),source=(await f.db.query('SELECT id::text,number,balance_cents FROM accounts WHERE user_id=$1 ORDER BY id LIMIT 1',[user.id])).rows[0];
+ const amount=Number(source.balance_cents)-500,at='2026-11-28T05:00:00Z';
+ await f.db.query("INSERT INTO scheduled_payments(id,user_id,type,payload_json,amount_cents,frequency,status,next_run_at,scheduled_at,authorization_json) VALUES($1,$2,'bill',$3,$4,'once','active',$5,$5,'{}'::jsonb)",[randomUUID(),user.id,{fromId:source.id,billerId:'pub',reference:'DUE-TODAY',amountCents:amount},amount,at]);
+ const agents=createAgents({db:f.db,now,model:planner(()=>({name:'check_payment_funds',args:{}}))});
+ const result=await agents.execute(user,'assistant',{message:'Can I afford SGD 10 from '+source.number+'?'});
+ assert.equal(result.paymentReadiness.status,'needs_funding');assert.equal(result.paymentReadiness.scheduledCount,1);assert.equal(result.paymentReadiness.shortageCents,500);
+ assert.equal(result.fundingWarnings[0].shortageCents,500);assert.deepEqual(result.actions,[]);
+ assert.equal((await f.db.query('SELECT balance_cents FROM accounts WHERE id=$1',[source.id])).rows[0].balance_cents,source.balance_cents);
 });
 
 pg('An invalid report or company-chart period can be completed by replying with a month',async t=>{

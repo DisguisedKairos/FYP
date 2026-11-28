@@ -35,7 +35,7 @@ test('Named quarters and month-only date clarifications never silently use a def
  const now=()=>Date.parse('2026-11-28T04:00:00Z');
  for(const wording of ['Q3 2026','the third quarter of 2026','3rd quarter 2026'])assert.deepEqual(requestedPeriod(wording,{now}),{from:'2026-07-01',to:'2026-09-30'});
  assert.deepEqual(requestedPeriod('Q4 2026',{now}),{from:'2026-10-01',to:'2026-11-28'});
- assert.throws(()=>requestedPeriod('Q5 2026',{now}),e=>e.status===400);
+ for(const wording of ['Q5 2026','Q10 2026','Q10 2026 activity summary','for Q00','for Q12 instead'])assert.throws(()=>requestedPeriod(wording,{now}),e=>e.status===400,wording);
  for(const wording of ['October','October please','1 to 25 October 2026','Q3 2026','the third quarter of 2026'])assert.equal(require('../banking/assistant-period').isDateReply(wording),true);
  assert.equal(require('../banking/assistant-period').isDateReply('October Trading Ltd.'),false);
  assert.deepEqual(requestedPeriod('Show payments to Q3 Logistics',{now}),{});

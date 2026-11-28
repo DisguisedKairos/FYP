@@ -117,7 +117,7 @@ function requestedPeriod(message,{now=Date.now}={}){
     const y=Number(match[2]||match[4]||year),from=format(y,(number-1)*3+1,1),end=new Date(Date.UTC(y,number*3,0)).toISOString().slice(0,10);
     return {from,to:from<=today&&today<=end?today:end};
   }
-  if([...message.matchAll(/\bQ\d(?:\s+\d{4})?\b/gi)].some(quarterContext))throw fail();
+  if([...message.matchAll(/\bQ\d+(?:\s+(\d{4}))?\b/gi)].some(match=>match[1]||quarterContext(match)))throw fail();
   const month=candidates.find(m=>m[2]||/\b(?:in|for|during|month of)\s*$/i.test(message.slice(0,m.index))||/^\s*(?:instead(?:\s*,?\s*please)?|please)?[\s.!?]*$/i.test(message.slice(m.index+m[0].length)));
   if(month){
     if(/\b(?:last|previous|next)\s*$/i.test(message.slice(0,month.index))||new RegExp('\\b(?:from|between)\\s+(?:'+MONTHS+')\\b','i').test(message))throw fail();

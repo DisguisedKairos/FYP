@@ -201,7 +201,7 @@ pg('Skipped affordability and partial draft tools receive one bounded corrective
   if(target==='prepare_payment_draft'){
    const context=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[result.runId])).rows[0].context_json;
    assert.equal(context.pendingDraft.kind,'transfer');assert.equal(context.pendingDraft.amount,undefined);
-  }else assert.ok(result.items.some(item=>/source/.test(item.title)));
+  }else assert.ok(result.paymentReadiness.missing.some(field=>/source/.test(field)));
  }
  assert.deepEqual((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows,before);
 });

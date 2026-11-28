@@ -10,7 +10,10 @@ test('Insufficient payment funds appear as an explicit chat warning with exact s
   await ask(page,'Transfer SGD '+amount+' from '+source.number+' to 1020002001');
   const text=await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-funding-warning").textContent');assert.match(text,/Insufficient funds for this payment draft/);assert.match(text,/Available now/);assert.match(text,/Funding shortfall.*0\.01/s);
   assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),1);assert.equal(JSON.stringify((await f.db.query('SELECT id,balance_cents FROM accounts ORDER BY id')).rows),before);
-  await ask(page,'Can I afford SGD '+amount+' from '+source.number+'?');assert.match(await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-funding-warning").textContent'),/Funding shortfall.*0\.01/s);assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),0);
+  await ask(page,'Can I afford SGD '+amount+' from '+source.number+'?');
+  const plan=await page.evaluate('document.querySelector(".from-assistant:last-child .assistant-payment-plan").textContent');
+  assert.match(plan,/More settled funds are needed/);assert.match(plan,/Current source balance/);assert.match(plan,/Additional settled funds needed.*0\.01/s);assert.ok(plan.includes(source.number));
+  assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child .payment-plan-status.needs-attention").length'),1);assert.equal(await page.evaluate('document.querySelectorAll(".from-assistant:last-child [data-assistant-action]").length'),0);
   await page.click('[data-action=assistant-clear]');assert.equal(await page.evaluate('document.querySelectorAll(".assistant-message").length'),0);assert.deepEqual(page.errors,[]);
 });
 test('Balance and finance-report replies show scheduled shortfall warnings on desktop without a separate view',async t=>{
