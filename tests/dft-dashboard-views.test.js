@@ -173,7 +173,14 @@ pg('Saving a displayed chat selection validates its owned definition instead of 
  for(const invalid of [{...selection,userId:users.jamie.id},{...selection,company:'Meridian Logistics Pte. Ltd.'}]){
   await assert.rejects(agents.execute(users.alex,'assistant',{message:'Save this dashboard',previousRunId:shown.runId,dashboardDefinition:invalid}),error=>[400,409].includes(error.status));
  }
- await assert.rejects(agents.execute(users.alex,'assistant',{message:'What is my balance?',dashboardDefinition:selection}),error=>error.status===400);
+ const balances={mode:'openai',model:'controlled-selected-context',inspect:async()=>({available:true}),chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'Your permitted account balances are shown below [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_accounts',arguments:{}}}]}};
+ const unrelated=await createAgents({db:f.db,model:balances}).execute(users.alex,'assistant',{message:'What is my balance?',dashboardDefinition:selection});
+ assert.deepEqual(unrelated.steps.map(s=>s.tool),['get_accounts']);assert.equal(unrelated.companyDashboard,undefined,'Displayed context must not request another chart or grant save permission.');
+ const retained=(await f.db.query('SELECT context_json FROM agent_runs WHERE id=$1',[unrelated.runId])).rows[0].context_json;
+ assert.deepEqual(retained.lastCompanyDashboard,selection,'An unrelated answer must not erase the displayed chart selection.');
+ const read={...balances,chat:async messages=>messages.some(m=>m.role==='tool')?{role:'assistant',content:'The selected company activity is shown below [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'get_company_activity',arguments:{reusePrevious:true}}}]}};
+ const changed=await createAgents({db:f.db,model:read}).execute(users.alex,'assistant',{message:'Show the same company for October 2026 instead.',previousRunId:shown.runId,dashboardDefinition:selection});
+ assert.equal(changed.companyDashboard.data.company,selection.company);assert.equal(changed.companyDashboard.data.period.from,'2026-10-01');assert.equal(changed.companyDashboard.data.period.to,'2026-10-31');
  assert.equal((await views.list(f.db,users.alex)).length,1);
  assert.deepEqual(await financial(f.db),before);
 });

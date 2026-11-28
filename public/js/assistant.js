@@ -11,7 +11,6 @@ import { state, api, esc, icon, money, sameId, pages, allAccounts, emptyFilters,
 import { openScheduleDraft } from './services.js';
 let controller,generation=0,nextMessageId=0;
 let requestedOpen=new URLSearchParams(location.search).get('chat')==='open';
-const dashboardFollowup=/^\s*(?:(?:please|can you|could you|yes)[,\s]+)*(?:save|bookmark|keep|add|pin)\s+(?:(?:it|this|that)(?:\s+(?:dashboard|view|chart))?|(?:the|my)\s+(?:dashboard|view|chart)|chart)(?=\s|[.!?]|$)/i;
 const SAFE_SECURITY_HELP = /^(?:(?:how (?:do|can) i|where can i) (?:change|reset) my password|how (?:do|can) i (?:enable|disable) (?:mfa|two-factor authentication)|how (?:do|can) i use recovery codes|test mfa\/recovery and password change\/session revocation through profile & security)[.!?]*$/i;
 function credentialText(message){
   // Keep this scanner-only normalization aligned with the server. Send the
@@ -144,7 +143,7 @@ function renderThread() {
     }
   }
   document.querySelector('#assistant-response-status').textContent=t.busy?(/\b(?:public|market|news|research|sanctions?|compliance|regulatory)\b/i.test(t.retryMessage)?'Checking the requested public sources...':/\b(?:company|business) profile\b/i.test(t.retryMessage)?'Analyzing your company profile and permitted activity...':'Looking at your account information...'):'';
-  document.querySelector('#assistant-error').innerHTML=t.error?esc(t.error)+' <button type="button" class="text-button" data-action="assistant-retry">Try again</button>':'';
+  document.querySelector('#assistant-error').innerHTML=t.error?esc(t.error)+(t.retryMessage?' <button type="button" class="text-button" data-action="assistant-retry">Try again</button>':''):'';
   document.querySelector('#assistant-suggestions').innerHTML=suggestionHtml();
   const form=document.querySelector('#assistant-form');
   form.setAttribute('aria-busy',String(t.busy)); form.querySelector('button[type="submit"]').disabled=t.busy;
@@ -166,27 +165,27 @@ export async function sendAssistant(message,{retry=false}={}) {
   if(t.busy || !state.user || state.signingOut)return;
   const text=String(message ?? '').trim();
   if(!text)return;
-  if(text.length>1000){t.error='Keep your message to 1,000 characters or fewer.';renderThread();return;}
+  if(text.length>1000){t.retryMessage='';t.error='Keep your message to 1,000 characters or fewer.';renderThread();return;}
   // Never collect a current password or an authorization field through chat.
   if(/\b(password|passcode|otp|pin|cvv|secret|api[ -]?key|access[ -]?token)\b|\b[A-Za-z]{5,40}123!|\bsk-[A-Za-z0-9_-]{8,}/i.test(credentialText(text)) && !SAFE_SECURITY_HELP.test(text)) {
     t.input='';const input=document.querySelector('#assistant-message');if(input)input.value='';
-    t.error='Please keep passwords and security codes out of chat. Enter your password only in the payment review form.';renderThread();return;
+    t.retryMessage='';t.error='Please keep passwords and security codes out of chat. Enter your password only in the payment review form.';renderThread();return;
   }
-  if(dashboardFollowup.test(text)&&t.dashboardSelectionPending){t.error='Wait for the selected dashboard to finish loading before saving it.';renderThread();return;}
+  if(t.dashboardSelectionPending){t.retryMessage='';t.error='Wait for the selected dashboard to finish loading before sending your message.';renderThread();return;}
   const request=++generation,userId=state.user.id,selectionVersion=t.dashboardSelectionVersion||0;
   const evidenceDisplay=requestedEvidenceDisplay(text);
   if(evidenceDisplay!==undefined)t.evidenceExpanded=evidenceDisplay;
   controller?.abort(); controller=new AbortController();
   if(!retry)t.messages.push({id:++nextMessageId,role:'user',text,createdAt:new Date().toISOString()});
-  t.busy=true;t.error='';t.retryMessage=text;t.input='';
-  const input=document.querySelector('#assistant-message');if(input)input.value='';
+  t.busy=true;t.error='';t.retryMessage=text;
+  if(!retry){t.input='';const input=document.querySelector('#assistant-message');if(input)input.value='';}
   renderThread();
   try {
-    const result=await api('/agents/assistant',{message:text,...(t.previousRunId?{previousRunId:t.previousRunId}:{}),...(dashboardFollowup.test(text)&&t.activeDashboardDefinition?{dashboardDefinition:t.activeDashboardDefinition}:{})},'POST',{signal:controller.signal,timeoutMs:90000});
+    const result=await api('/agents/assistant',{message:text,...(t.previousRunId?{previousRunId:t.previousRunId}:{}),...(t.activeDashboardDefinition?{dashboardDefinition:t.activeDashboardDefinition}:{})},'POST',{signal:controller.signal,timeoutMs:90000});
     if(request!==generation || state.assistant!==t || !state.user || state.signingOut || !sameId(state.user.id,userId))return;
     if(result.sensitiveInput){const submitted=[...t.messages].reverse().find(message=>message.role==='user');if(submitted)submitted.text='[Sensitive message removed]';}
     t.previousRunId=result.runId || null;
-    if((t.dashboardSelectionVersion||0)===selectionVersion){t.activeDashboardDefinition=result.companyDashboard?.definition||null;t.dashboardSelectionVersion=selectionVersion+1;t.dashboardSelectionPending=false;}
+    if((t.dashboardSelectionVersion||0)===selectionVersion){if(result.companyDashboard)t.activeDashboardDefinition=result.companyDashboard.definition||null;t.dashboardSelectionVersion=selectionVersion+1;t.dashboardSelectionPending=false;}
     t.messages.push({id:++nextMessageId,role:'assistant',createdAt:new Date().toISOString(),auditRunId:result.runId,evidenceReferences:Array.isArray(result.evidenceReferences)?result.evidenceReferences:[],evidenceExpanded:t.evidenceExpanded===true,publicResearch:result.publicResearch||null,newsInsights:result.newsInsights||null,counterpartyScan:result.counterpartyScan||null,counterpartyRisk:result.counterpartyRisk||null,paymentReadiness:result.paymentReadiness||null,financeReport:result.financeReport||null,fundingWarnings:Array.isArray(result.fundingWarnings)?result.fundingWarnings:[],dashboard:result.companyDashboard || null,savedDashboards:Array.isArray(result.savedDashboards)?result.savedDashboards:null,text:String(result.reply || 'Please choose one of the suggested banking tasks.').replace(/[ \t]*\[E\d+\]/g,'').trim(),items:[...(Array.isArray(result.items)?result.items:[]),...(result.engine && !result.companyDashboard && !Array.isArray(result.savedDashboards)?[{title:result.engine==='openai'?'OpenAI assistant':'Historical AI assistant',subtitle:result.answerContext==='general_banking'?'General banking explanation; no account records checked.':result.clarification?'Help only; no banking records retrieved.':(result.steps || []).map(s=>s.tool.replace(/_/g,' ')).join(' > ')}]:[])],actions:Array.isArray(result.actions)?result.actions.filter(action=>['navigate','draft_transfer','draft_payment','draft_schedule'].includes(action.type)):[],suggestions:Array.isArray(result.suggestions)?result.suggestions.filter(value=>typeof value==='string'):[]});
     t.retryMessage='';
     if(!t.open)t.unread=true;

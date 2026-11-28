@@ -17,7 +17,7 @@ function model(){return {mode:'openai',model:'controlled-chat-dashboard',inspect
  return {role:'assistant',content:(calls.some(row=>row.tool_name==='save_company_dashboard')?'Your dashboard is saved and shown here in chat':calls.at(-1)?.tool_name==='list_saved_dashboards'?'Choose a saved dashboard below':'Review the retrieved activity here in chat')+' [E'+calls.length+'].'};
 }};}
 async function login(page,email){await page.waitFor('!!document.querySelector("#email")');await page.fill('#email',email);await page.fill('#password','Greenlink123!');await page.click('#auth-form button[type=submit]');await page.waitFor('!!document.querySelector(".app-shell")');}
-async function open(t,width=1280){const f=await fixture(t,{agentModel:model()}),page=await launchChrome(t,{width,height:1000});await page.navigate(f.baseUrl+'/login');await login(page,'alex@greenlink.demo');return {f,page};}
+async function open(t,width=1280,agentModel=model()){const f=await fixture(t,{agentModel}),page=await launchChrome(t,{width,height:1000});await page.navigate(f.baseUrl+'/login');await login(page,'alex@greenlink.demo');return {f,page};}
 async function chat(page){if(!await page.evaluate('!!document.querySelector("#assistant-popup:not([hidden])")'))await page.click('[data-action="assistant-toggle"]');}
 async function ask(page,text){await chat(page);const count=await page.evaluate('document.querySelectorAll(".from-assistant").length');await page.fill('#assistant-message',text);await page.click('#assistant-form button[type=submit]');await page.waitFor('document.querySelectorAll(".from-assistant").length>'+count+' && !document.querySelector("#assistant-form button[type=submit]").disabled');}
 async function logout(page){await page.click('[data-action="assistant-close"]');await page.click('[data-action="logout"]');await page.waitFor('!!document.querySelector("#auth-form")');}
@@ -171,8 +171,11 @@ test('Save follow-ups wait for the selected chart instead of saving an earlier d
  await ask(page,'Show my company transaction dashboard');
  await page.evaluate('window.pendingChartFetch=window.fetch;window.fetch=async(...args)=>{const response=await window.pendingChartFetch(...args);if(String(args[0]).includes("/company-activity?"))await new Promise(resolve=>window.releaseSelectedChart=resolve);return response;};');
  await page.click('[data-message-id="'+first+'"] [data-dashboard-command="refresh"]');await page.waitFor('!!window.releaseSelectedChart');
- await page.fill('#assistant-message','Save this dashboard');await page.click('#assistant-form button[type=submit]');
- await page.waitFor('document.querySelector("#assistant-root").textContent.includes("Wait for the selected dashboard")');
+ for(const request of ['Save this dashboard','Would you keep the selected visualization for later?']){
+  await page.fill('#assistant-message',request);await page.click('#assistant-form button[type=submit]');
+  await page.waitFor('document.querySelector("#assistant-root").textContent.includes("Wait for the selected dashboard")');
+  assert.equal(await page.evaluate('!!document.querySelector("[data-action=assistant-retry]")'),false,'A pending selection is validation feedback, not a failed request to retry.');
+ }
  assert.equal(Number((await f.db.query('SELECT count(*) FROM saved_dashboard_views')).rows[0].count),0);
  await page.evaluate('window.releaseSelectedChart();window.fetch=window.pendingChartFetch;');
  await page.waitFor("import('/js/core.js').then(m=>!m.state.assistant.dashboardSelectionPending)");
@@ -189,6 +192,26 @@ test('Saving an older chart with its button makes it the target for a later save
  await page.click('[data-message-id="'+first+'"] [data-dashboard-command="save"]');
  await page.waitFor('!!document.querySelector(\'[data-message-id="'+first+'"] .assistant-saved-notice\')');
  await ask(page,'Save this dashboard');
+ const stored=(await f.db.query('SELECT config_json FROM saved_dashboard_views')).rows;
+ assert.equal(stored.length,1);assert.equal(stored[0].config_json.company,'Harbour Supplies Pte. Ltd.');
+ assert.deepEqual(page.errors,[]);
+});
+
+test('Natural chart follow-ups save the selected company rather than the last generated chart',async t=>{
+ const agentModel=model(),originalChat=agentModel.chat;
+ agentModel.chat=async messages=>{
+  const text=messages.find(row=>row.role==='user').content;
+  if(text!=='Would you keep the selected visualization for later?')return originalChat(messages);
+  return messages.some(row=>row.role==='tool')?{role:'assistant',content:'Your selected dashboard is saved for later [E1].'}:{role:'assistant',content:'',tool_calls:[{function:{name:'save_company_dashboard',arguments:{requestQuote:text}}}]};
+ };
+ const {f,page}=await open(t,1280,agentModel);
+ await ask(page,'Show a dashboard with Harbour Supplies');
+ const first=await page.evaluate('document.querySelector(".from-assistant:last-child").dataset.messageId');
+ await ask(page,'Show my company transaction dashboard');
+ await page.click('[data-message-id="'+first+'"] [data-dashboard-command="refresh"]');
+ await page.waitFor('document.querySelector(\'[data-assistant-dashboard="'+first+'"]\').getAttribute("aria-busy")==="false"');
+ await ask(page,'What is my balance?');
+ await ask(page,'Would you keep the selected visualization for later?');
  const stored=(await f.db.query('SELECT config_json FROM saved_dashboard_views')).rows;
  assert.equal(stored.length,1);assert.equal(stored[0].config_json.company,'Harbour Supplies Pte. Ltd.');
  assert.deepEqual(page.errors,[]);

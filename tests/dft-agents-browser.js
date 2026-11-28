@@ -180,6 +180,22 @@ async function pausePopupReply(page){
  await page.evaluate(`const popupFetch=window.fetch;window.fetch=async(...args)=>{const response=await popupFetch(...args);if(String(args[0])==='/api/agents/assistant'){window.fetch=popupFetch;const body=await response.text();await new Promise(resolve=>window.releasePopupReply=resolve);return new Response(body,{status:response.status,headers:response.headers});}return response;};`);
 }
 
+test('Retrying an assistant request preserves the next unsent question',async t=>{
+ const {page}=await open(t,1280,'jamie@greenlink.demo');
+ await page.click('[data-action="assistant-toggle"]');
+ await page.evaluate(`const original=window.fetch;window.fetch=(...args)=>{if(String(args[0])==='/api/agents/assistant'){window.fetch=original;return Promise.resolve(new Response(JSON.stringify({error:'Temporary assistant outage.'}),{status:503,headers:{'Content-Type':'application/json'}}));}return original(...args);};`);
+ await page.fill('#assistant-message','What is my balance?');await page.click('#assistant-form button[type=submit]');
+ await page.waitFor('!!document.querySelector("[data-action=assistant-retry]")');
+ const draft='What scheduled payments are due this month?';await page.fill('#assistant-message',draft);
+ await page.click('[data-action="assistant-retry"]');
+ await page.waitFor('!!document.querySelector(".from-assistant") && !document.querySelector("#assistant-form button[type=submit]").disabled');
+ assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),draft);
+ await page.click('[data-action="assistant-close"]');await page.click('[data-action="assistant-toggle"]');
+ assert.equal(await page.evaluate('document.querySelector("#assistant-message").value'),draft);
+ assert.equal(await page.evaluate('document.querySelectorAll(".from-user").length'),1);
+ assert.deepEqual(page.errors,[]);
+});
+
 test('Assistant timestamps use Singapore time and survive retries, reopening and viewport changes',async t=>{
  const {page}=await open(t,1280,'jamie@greenlink.demo');
  await page.send('Emulation.setTimezoneOverride',{timezoneId:'America/Los_Angeles'});
